@@ -54,3 +54,13 @@ async def set_status(session: AsyncSession, tenant_id: str, status: TenantStatus
     tenant.status = status
     await session.flush()
     return tenant
+
+
+async def update_config(session: AsyncSession, tenant_id: str, config: dict) -> Tenant:
+    """Replace a tenant's configuration space (branding / attendance / kiosk)."""
+    tenant = await get_tenant(session, tenant_id)
+    if tenant is None:
+        raise TenantError("Tenant not found")
+    tenant.config = config
+    await session.flush()
+    return tenant

@@ -39,11 +39,11 @@ class TenantStatus(str, enum.Enum):
 
 
 class Role(str, enum.Enum):
-    super_admin = "super_admin"      # platform level
-    tenant_admin = "tenant_admin"    # tenant level
-    supervisor = "supervisor"        # tenant level (Supervisor/HR)
-    end_user = "end_user"            # tenant level
-    kiosk = "kiosk"                  # tenant level (device account)
+    super_admin = "super_admin"  # platform level
+    tenant_admin = "tenant_admin"  # tenant level
+    supervisor = "supervisor"  # tenant level (Supervisor/HR)
+    end_user = "end_user"  # tenant level
+    kiosk = "kiosk"  # tenant level (device account)
 
 
 class AttendanceType(str, enum.Enum):

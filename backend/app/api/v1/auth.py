@@ -25,13 +25,19 @@ async def login(
         )
     except auth_service.AuthError as exc:
         await audit_service.record(
-            session, action="login.failed", actor=payload.username,
-            tenant_id=None, detail={"tenant_slug": payload.tenant_slug},
+            session,
+            action="login.failed",
+            actor=payload.username,
+            tenant_id=None,
+            detail={"tenant_slug": payload.tenant_slug},
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
     await audit_service.record(
-        session, action="login.success", actor=payload.username,
-        tenant_id=None, detail={"tenant_slug": payload.tenant_slug},
+        session,
+        action="login.success",
+        actor=payload.username,
+        tenant_id=None,
+        detail={"tenant_slug": payload.tenant_slug},
     )
     return Envelope(data=tokens)

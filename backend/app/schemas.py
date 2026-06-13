@@ -60,6 +60,35 @@ class TenantOut(BaseModel):
     created_at: datetime
 
 
+# --- Tenant configuration space (TENANT-2): branding, attendance, kiosk prefs ---
+class BrandingConfig(BaseModel):
+    display_name: str | None = None
+    logo_url: str | None = None
+    primary_color: str | None = Field(default=None, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+class AttendanceDefaults(BaseModel):
+    """Skeleton attendance rules — data, not code (PRD: per-tenant rules)."""
+
+    grace_minutes: int = Field(default=0, ge=0, le=180)
+    workday_start: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    workday_end: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    timezone: str = "Asia/Jakarta"
+
+
+class KioskPrefs(BaseModel):
+    require_liveness: bool = True
+    allow_self_enrollment: bool = False
+
+
+class TenantConfig(BaseModel):
+    """Per-tenant config space. Stored in tenants.config (JSONB)."""
+
+    branding: BrandingConfig = Field(default_factory=BrandingConfig)
+    attendance: AttendanceDefaults = Field(default_factory=AttendanceDefaults)
+    kiosk: KioskPrefs = Field(default_factory=KioskPrefs)
+
+
 # --------------------------------------------------------------------------- #
 # User
 # --------------------------------------------------------------------------- #

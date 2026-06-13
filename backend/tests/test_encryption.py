@@ -24,8 +24,11 @@ async def _admin_headers(client: AsyncClient) -> str:
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
-            "name": "Sekolah Enc", "slug": "sekolah-enc", "admin_username": "admin",
-            "admin_password": "adminpass123", "admin_full_name": "Admin Enc",
+            "name": "Sekolah Enc",
+            "slug": "sekolah-enc",
+            "admin_username": "admin",
+            "admin_password": "adminpass123",
+            "admin_full_name": "Admin Enc",
         },
     )
     admin = await _token(
@@ -53,8 +56,10 @@ async def test_external_id_ciphertext_at_rest_plaintext_via_api(client: AsyncCli
     async with SessionFactory() as s:
         await _set_tenant(s, None)
         raw = (
-            await s.execute(text("SELECT external_id, external_id_hash FROM users WHERE id = :i"),
-                            {"i": user_id})
+            await s.execute(
+                text("SELECT external_id, external_id_hash FROM users WHERE id = :i"),
+                {"i": user_id},
+            )
         ).one()
         raw_external_id, raw_hash = raw
         assert raw_external_id != nik, "external_id must NOT be stored in plaintext"

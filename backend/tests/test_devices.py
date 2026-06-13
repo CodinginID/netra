@@ -22,8 +22,11 @@ async def _onboard_tenant_admin(client: AsyncClient) -> dict[str, str]:
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
-            "name": "Sekolah Kiosk", "slug": "sekolah-kiosk", "admin_username": "admin",
-            "admin_password": "adminpass123", "admin_full_name": "Admin Kiosk",
+            "name": "Sekolah Kiosk",
+            "slug": "sekolah-kiosk",
+            "admin_username": "admin",
+            "admin_password": "adminpass123",
+            "admin_full_name": "Admin Kiosk",
         },
     )
     assert resp.status_code == 201, resp.text
@@ -79,10 +82,7 @@ async def test_device_revoke(client: AsyncClient, super_admin):
 
         from app.models import AuditLog
 
-        actions = {
-            a.action
-            for a in (await s.execute(select(AuditLog))).scalars()
-        }
+        actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "device.registered" in actions
         assert "device.revoked" in actions
 

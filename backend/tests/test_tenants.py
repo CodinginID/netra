@@ -25,8 +25,11 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
         "/api/v1/tenants",
         headers=oheaders,
         json={
-            "name": "Sekolah Susp", "slug": "sekolah-susp", "admin_username": "admin",
-            "admin_password": "adminpass123", "admin_full_name": "Admin Susp",
+            "name": "Sekolah Susp",
+            "slug": "sekolah-susp",
+            "admin_username": "admin",
+            "admin_password": "adminpass123",
+            "admin_full_name": "Admin Susp",
         },
     )
     assert reg.status_code == 201, reg.text
@@ -76,3 +79,99 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
             json={"username": "admin", "password": "adminpass123", "tenant_slug": "sekolah-susp"},
         )
     ).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin):
+    """TENANT-2: tenant admin reads + updates own config space."""
+    owner = await _token(client, username="owner", password="ownerpass123")
+    reg = await client.post(
+        "/api/v1/tenants",
+        headers={"Authorization": f"Bearer {owner}"},
+        json={
+            "name": "Sekolah Cfg",
+            "slug": "sekolah-cfg",
+            "admin_username": "cfgadmin",
+            "admin_password": "adminpass123",
+            "admin_full_name": "Cfg Admin",
+        },
+    )
+    assert reg.status_code == 201, reg.text
+
+    admin = await _token(
+        client, username="cfgadmin", password="adminpass123", tenant_slug="sekolah-cfg"
+    )
+    aheaders = {"Authorization": f"Bearer {admin}"}
+
+    # Defaults on a fresh tenant.
+    got = await client.get("/api/v1/tenants/me/config", headers=aheaders)
+    assert got.status_code == 200, got.text
+    assert got.json()["data"]["attendance"]["timezone"] == "Asia/Jakarta"
+
+    # Update branding + attendance defaults.
+    new_cfg = {
+        "branding": {"display_name": "SD Maju", "primary_color": "#1a56db"},
+        "attendance": {"grace_minutes": 15, "workday_start": "07:30", "workday_end": "15:00"},
+        "kiosk": {"require_liveness": True, "allow_self_enrollment": False},
+    }
+    put = await client.put("/api/v1/tenants/me/config", headers=aheaders, json=new_cfg)
+    assert put.status_code == 200, put.text
+    assert put.json()["data"]["attendance"]["grace_minutes"] == 15
+
+    # Persisted: read back.
+    again = await client.get("/api/v1/tenants/me/config", headers=aheaders)
+    assert again.json()["data"]["branding"]["primary_color"] == "#1a56db"
+
+    # Audit row written.
+    async with SessionFactory() as s:
+        await _set_tenant(s, None)
+        actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
+        assert "tenant.config.updated" in actions
+
+    # Invalid color rejected (422).
+    bad = await client.put(
+        "/api/v1/tenants/me/config",
+        headers=aheaders,
+        json={"branding": {"primary_color": "notacolor"}},
+    )
+    assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_end_user_cannot_update_config(client: AsyncClient, super_admin):
+    """RBAC: a non-admin tenant user is forbidden from the config endpoints."""
+    owner = await _token(client, username="owner", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+    reg = await client.post(
+        "/api/v1/tenants",
+        headers=oheaders,
+        json={
+            "name": "Sekolah RBAC",
+            "slug": "sekolah-rbac",
+            "admin_username": "rbacadmin",
+            "admin_password": "adminpass123",
+            "admin_full_name": "RBAC Admin",
+        },
+    )
+    assert reg.status_code == 201, reg.text
+    admin = await _token(
+        client, username="rbacadmin", password="adminpass123", tenant_slug="sekolah-rbac"
+    )
+    cu = await client.post(
+        "/api/v1/users",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={
+            "full_name": "Budi",
+            "role": "end_user",
+            "username": "budi",
+            "password": "budipass123",
+        },
+    )
+    assert cu.status_code == 201, cu.text
+    eu = await _token(client, username="budi", password="budipass123", tenant_slug="sekolah-rbac")
+    resp = await client.put(
+        "/api/v1/tenants/me/config",
+        headers={"Authorization": f"Bearer {eu}"},
+        json={"branding": {"display_name": "hack"}},
+    )
+    assert resp.status_code == 403

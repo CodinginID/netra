@@ -40,7 +40,10 @@ async def grant_consent(
     session.add(consent)
     await session.flush()
     await audit_service.record(
-        session, action="consent.granted" if payload.granted else "consent.revoked",
-        actor=principal.subject, tenant_id=user.tenant_id, detail={"user_id": user.id},
+        session,
+        action="consent.granted" if payload.granted else "consent.revoked",
+        actor=principal.subject,
+        tenant_id=user.tenant_id,
+        detail={"user_id": user.id},
     )
     return Envelope(data=ConsentOut.model_validate(consent))

@@ -35,9 +35,7 @@ async def test_login_success_super_admin(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient, super_admin):
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": "owner", "password": "wrong"}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"username": "owner", "password": "wrong"})
     assert resp.status_code == 401
     assert resp.json()["error"] == "Invalid credentials"
 
@@ -98,8 +96,11 @@ async def test_rbac_end_user_cannot_create_tenant(client: AsyncClient, super_adm
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "name": "Tenant Org", "slug": "t-org", "admin_username": "tadmin",
-            "admin_password": "tapass123", "admin_full_name": "Tenant Admin",
+            "name": "Tenant Org",
+            "slug": "t-org",
+            "admin_username": "tadmin",
+            "admin_password": "tapass123",
+            "admin_full_name": "Tenant Admin",
         },
     )
     admin_token = await _token(client, username="tadmin", password="tapass123", tenant_slug="t-org")
@@ -115,8 +116,11 @@ async def test_rbac_end_user_cannot_create_tenant(client: AsyncClient, super_adm
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {eu_token}"},
         json={
-            "name": "Tenant X", "slug": "x-org", "admin_username": "xadmin",
-            "admin_password": "xpass1234", "admin_full_name": "Admin X",
+            "name": "Tenant X",
+            "slug": "x-org",
+            "admin_username": "xadmin",
+            "admin_password": "xpass1234",
+            "admin_full_name": "Admin X",
         },
     )
     assert resp.status_code == 403

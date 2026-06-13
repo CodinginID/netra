@@ -44,8 +44,11 @@ async def create_user(
             detail="username or external_id already exists in this tenant",
         ) from exc
     await audit_service.record(
-        session, action="user.created", actor=principal.subject,
-        tenant_id=principal.tenant_id, detail={"user_id": user.id, "role": user.role.value},
+        session,
+        action="user.created",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"user_id": user.id, "role": user.role.value},
     )
     return Envelope(data=UserOut.model_validate(user))
 

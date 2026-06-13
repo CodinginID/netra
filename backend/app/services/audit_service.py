@@ -15,7 +15,5 @@ async def record(
     tenant_id: str | None,
     detail: dict | None = None,
 ) -> None:
-    session.add(
-        AuditLog(action=action, actor=actor, tenant_id=tenant_id, detail=detail or {})
-    )
+    session.add(AuditLog(action=action, actor=actor, tenant_id=tenant_id, detail=detail or {}))
     await session.flush()

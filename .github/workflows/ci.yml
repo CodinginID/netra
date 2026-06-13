@@ -53,6 +53,9 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check .
 
+      - name: Format check (black)
+        run: uv run black --check .
+
       - name: Type-check (mypy)
         run: uv run mypy app
 
@@ -68,8 +71,6 @@ jobs:
   frontend:
     name: Frontend (build)
     runs-on: ubuntu-latest
-    # ui/ is still scaffolding — don't fail the pipeline if it isn't ready yet
-    continue-on-error: true
 
     defaults:
       run:

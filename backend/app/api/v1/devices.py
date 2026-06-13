@@ -41,8 +41,11 @@ async def register_device(
     session.add(device)
     await session.flush()
     await audit_service.record(
-        session, action="device.registered", actor=principal.subject,
-        tenant_id=principal.tenant_id, detail={"device_id": device.id, "name": device.name},
+        session,
+        action="device.registered",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"device_id": device.id, "name": device.name},
     )
     out = DeviceRegistered.model_validate(
         {**DeviceOut.model_validate(device).model_dump(), "token": token}
@@ -75,7 +78,10 @@ async def revoke_device(
     device.status = DeviceStatus.revoked
     await session.flush()
     await audit_service.record(
-        session, action="device.revoked", actor=principal.subject,
-        tenant_id=device.tenant_id, detail={"device_id": device.id},
+        session,
+        action="device.revoked",
+        actor=principal.subject,
+        tenant_id=device.tenant_id,
+        detail={"device_id": device.id},
     )
     return Envelope(data=DeviceOut.model_validate(device))
