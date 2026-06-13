@@ -1,0 +1,135 @@
+"""Pydantic schemas for request/response payloads."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Generic, TypeVar
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.models import DeviceStatus, Role, TenantStatus
+
+T = TypeVar("T")
+
+
+# --------------------------------------------------------------------------- #
+# Response envelope
+# --------------------------------------------------------------------------- #
+class Envelope(BaseModel, Generic[T]):
+    """Consistent success envelope: {"data": ..., "error": null}."""
+
+    data: T | None = None
+    error: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Auth
+# --------------------------------------------------------------------------- #
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    tenant_slug: str | None = None  # required for tenant users; omit for super admin
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    role: Role
+
+
+# --------------------------------------------------------------------------- #
+# Tenant
+# --------------------------------------------------------------------------- #
+class TenantCreate(BaseModel):
+    name: str = Field(min_length=2)
+    slug: str = Field(min_length=2, pattern=r"^[a-z0-9-]+$")
+    admin_username: str = Field(min_length=3)
+    admin_password: str = Field(min_length=8)
+    admin_full_name: str = Field(min_length=2)
+
+
+class TenantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    slug: str
+    status: TenantStatus
+    config: dict
+    created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# User
+# --------------------------------------------------------------------------- #
+class UserCreate(BaseModel):
+    full_name: str = Field(min_length=2)
+    role: Role = Role.end_user
+    username: str | None = None
+    email: EmailStr | None = None
+    external_id: str | None = None  # NIS/NIM/NIK
+    password: str | None = Field(default=None, min_length=8)
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    tenant_id: str | None
+    full_name: str
+    role: Role
+    username: str | None
+    email: str | None
+    external_id: str | None
+    is_active: bool
+    enrolled: bool
+    created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Consent (UU PDP)
+# --------------------------------------------------------------------------- #
+class ConsentRequest(BaseModel):
+    user_id: str
+    granted: bool = True
+    purpose: str = "biometric_attendance"
+    guardian_name: str | None = None
+
+
+class ConsentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    granted: bool
+    purpose: str
+    granted_at: datetime | None
+    guardian_name: str | None
+
+
+# --------------------------------------------------------------------------- #
+# Device (kiosk) — AUTH-5
+# --------------------------------------------------------------------------- #
+class DeviceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class DeviceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    status: DeviceStatus
+    last_seen_at: datetime | None
+    created_at: datetime
+
+
+class DeviceRegistered(DeviceOut):
+    """Returned ONCE on registration — carries the plaintext token.
+
+    The token is never persisted in plaintext (only its hash is stored), so it
+    can never be retrieved again. The kiosk must capture it now.
+    """
+
+    token: str

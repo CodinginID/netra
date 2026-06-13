@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: netra-postgres
+    environment:
+      POSTGRES_USER: netra
+      POSTGRES_PASSWORD: netra
+      POSTGRES_DB: netra
+    ports:
+      - "5436:5432"
+    volumes:
+      - netra_pgdata:/var/lib/postgresql/data
+      # Belt-and-suspenders: create the least-privilege netra_app role on a
+      # fresh volume. Alembic migration b69335609137 is the source of truth.
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/10-init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: netra-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://netra_app:netra_app@postgres:5432/netra
+      # Superuser DSN used only by Alembic migrations (CREATE ROLE / GRANT).
+      DATABASE_ADMIN_URL: postgresql+asyncpg://netra:netra@postgres:5432/netra
+      ENVIRONMENT: development
+      SECRET_KEY: dev_only_change_me_min_32_chars_long_secret
+    ports:
+      - "8000:8000"
+    profiles: ["full"]  # `docker compose --profile full up` to run backend too
+
+volumes:
+  netra_pgdata:
