@@ -59,9 +59,12 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:7002", "http://localhost:3000"]
     )
 
-    # --- Face recognition engine (Phase 3+; declared now for completeness) ---
+    # --- Face recognition engine ---
     embedding_dim: int = 512  # InsightFace ArcFace buffalo_s
-    match_threshold: float = 0.45  # cosine similarity default; per-tenant override later
+    match_threshold: float = 0.45  # min cosine similarity to accept a 1:N identify
+    # "fake" => deterministic numpy engine (dev/test, no ML deps).
+    # "insightface" => real buffalo_s via onnxruntime (install the `recognition` extra).
+    face_engine: str = Field(default="fake")
 
     @property
     def is_production(self) -> bool:

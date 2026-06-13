@@ -143,3 +143,18 @@ async def get_device_principal(
 
     tenant_id_ctx.set(tenant_id)
     return Principal(subject=device_id, role=Role.kiosk, tenant_id=tenant_id)
+
+
+async def get_device_db(
+    principal: Principal = Depends(get_device_principal),
+) -> AsyncIterator[AsyncSession]:
+    """Tenant-bound (RLS-scoped) session for an authenticated kiosk device."""
+    tenant_id_ctx.set(principal.tenant_id)
+    async with SessionFactory() as session:
+        await _set_tenant(session, principal.tenant_id)
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

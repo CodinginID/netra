@@ -1,0 +1,87 @@
+"""Enrollment & 1:N identification — the core of face-recognition attendance.
+
+Tenant isolation is enforced by RLS on ``face_embeddings`` (the caller's session
+is already tenant-bound), so a similarity search can never match another
+tenant's faces even though the query carries no explicit tenant filter.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.models import Consent, FaceEmbedding, User
+from app.services.face import FaceEngine, get_face_engine
+
+
+class RecognitionError(Exception):
+    pass
+
+
+class ConsentRequiredError(RecognitionError):
+    """Enrollment attempted before the subject granted biometric consent (UU PDP)."""
+
+
+@dataclass
+class Match:
+    user_id: str
+    similarity: float
+
+
+async def _has_consent(session: AsyncSession, user_id: str) -> bool:
+    row = await session.execute(
+        select(Consent.id).where(Consent.user_id == user_id, Consent.granted.is_(True)).limit(1)
+    )
+    return row.scalar_one_or_none() is not None
+
+
+async def enroll(
+    session: AsyncSession,
+    tenant_id: str,
+    user_id: str,
+    image: bytes,
+    *,
+    engine: FaceEngine | None = None,
+) -> FaceEmbedding:
+    """Compute and store a face embedding for ``user_id``. Requires consent."""
+    if not await _has_consent(session, user_id):
+        raise ConsentRequiredError("biometric consent not granted for this user")
+
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise RecognitionError("user not found")
+
+    vector = (engine or get_face_engine()).embed(image)
+    embedding = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
+    session.add(embedding)
+    user.enrolled = True
+    await session.flush()
+    return embedding
+
+
+async def identify(
+    session: AsyncSession,
+    image: bytes,
+    *,
+    threshold: float | None = None,
+    engine: FaceEngine | None = None,
+) -> Match | None:
+    """1:N search: return the best match above ``threshold`` cosine similarity."""
+    query_vec = (engine or get_face_engine()).embed(image)
+    min_sim = settings.match_threshold if threshold is None else threshold
+
+    distance = FaceEmbedding.vector.cosine_distance(query_vec).label("distance")
+    row = (
+        await session.execute(select(FaceEmbedding.user_id, distance).order_by(distance).limit(1))
+    ).first()
+    if row is None:
+        return None
+
+    user_id, dist = row
+    similarity = 1.0 - float(dist)
+    if similarity < min_sim:
+        return None
+    return Match(user_id=user_id, similarity=similarity)

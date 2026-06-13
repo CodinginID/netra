@@ -7,7 +7,13 @@ from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import DeviceStatus, Role, TenantStatus
+from app.models import (
+    AttendanceStatus,
+    AttendanceType,
+    DeviceStatus,
+    Role,
+    TenantStatus,
+)
 
 T = TypeVar("T")
 
@@ -162,3 +168,57 @@ class DeviceRegistered(DeviceOut):
     """
 
     token: str
+
+
+# --------------------------------------------------------------------------- #
+# Schedules (attendance rules)
+# --------------------------------------------------------------------------- #
+class ScheduleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    rules: dict = Field(default_factory=dict)  # e.g. {"workday_start": "08:00", ...}
+    grace_minutes: int = Field(default=0, ge=0, le=240)
+    geofence: dict | None = None
+    is_default: bool = False
+
+
+class ScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    rules: dict
+    grace_minutes: int
+    geofence: dict | None
+    is_default: bool
+    created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Enrollment & attendance (core face-recognition loop)
+# --------------------------------------------------------------------------- #
+class EnrollmentResult(BaseModel):
+    user_id: str
+    embedding_id: str
+    enrolled: bool = True
+
+
+class AttendanceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    type: AttendanceType
+    status: AttendanceStatus
+    occurred_at: datetime
+    liveness_score: float | None
+    device_id: str | None
+    created_at: datetime
+
+
+class AttendanceResult(BaseModel):
+    """Returned to a kiosk after a successful check-in / check-out."""
+
+    user_id: str
+    full_name: str
+    similarity: float
+    attendance: AttendanceOut

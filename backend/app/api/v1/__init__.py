@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, consent, devices, health, tenants, users
+from app.api.v1 import (
+    attendance,
+    auth,
+    consent,
+    devices,
+    enrollment,
+    health,
+    schedules,
+    tenants,
+    users,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -13,3 +23,6 @@ api_router.include_router(tenants.router)
 api_router.include_router(users.router)
 api_router.include_router(consent.router)
 api_router.include_router(devices.router)
+api_router.include_router(schedules.router)
+api_router.include_router(enrollment.router)
+api_router.include_router(attendance.router)

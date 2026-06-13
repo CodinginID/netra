@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg>=0.30",
     "cryptography>=43",
     "fastapi>=0.115",
+    "numpy>=2.0",
     "passlib[argon2]>=1.7.4",
     "pgvector>=0.3.6",
     "pydantic-settings>=2.6",
@@ -18,6 +19,16 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.4",
     "uvicorn[standard]>=0.32",
+]
+
+[project.optional-dependencies]
+# Real face-recognition engine (InsightFace buffalo_s via ONNX Runtime, CPU).
+# Not needed for tests/dev (FACE_ENGINE=fake). Install: `uv sync --extra recognition`
+recognition = [
+    "insightface>=0.7.3",
+    "onnxruntime>=1.19",
+    "opencv-python-headless>=4.10",
+    "pillow>=10.4",
 ]
 
 [dependency-groups]
