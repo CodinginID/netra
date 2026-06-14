@@ -1,4 +1,8 @@
-"""Attendance check-in / check-out via face recognition (kiosk) + reporting."""
+"""Attendance check-in / check-out via face recognition (kiosk) + reporting.
+
+Pipeline per punch: liveness (server-side anti-spoofing) -> 1:N identify ->
+geofence enforcement -> record with schedule-derived status -> webhook dispatch.
+"""
 
 from __future__ import annotations
 
@@ -15,10 +19,19 @@ from app.api.deps import (
     get_device_principal,
     require_staff,
 )
+from app.core.config import settings
 from app.models import AttendanceType, User
-from app.schemas import AttendanceOut, AttendanceResult, Envelope
-from app.services import attendance_service, audit_service, recognition_service, schedule_service
+from app.schemas import AttendanceOut, AttendanceResult, Envelope, TenantConfig
+from app.services import (
+    attendance_service,
+    audit_service,
+    recognition_service,
+    schedule_service,
+    tenant_service,
+    webhook_service,
+)
 from app.services.face import NoFaceDetectedError
+from app.services.liveness import LivenessError, get_liveness_engine
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -27,7 +40,8 @@ async def _capture(
     att_type: AttendanceType,
     image: UploadFile,
     occurred_at: datetime | None,
-    liveness_score: float | None,
+    lat: float | None,
+    lng: float | None,
     principal: Principal,
     session: AsyncSession,
 ) -> Envelope[AttendanceResult]:
@@ -36,8 +50,27 @@ async def _capture(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
         )
     image_bytes = await image.read()
+
+    # 1. Liveness — scored server-side; gated by the tenant's kiosk prefs.
     try:
-        match = await recognition_service.identify(session, image_bytes)
+        liveness = get_liveness_engine().score(image_bytes)
+    except LivenessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    tenant = await tenant_service.get_tenant(session, principal.tenant_id)
+    cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
+    if cfg.kiosk.require_liveness and liveness < settings.liveness_threshold:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"liveness check failed (score {liveness:.2f})",
+        )
+
+    # 2. Identify (1:N, tenant-isolated by RLS; per-tenant threshold if set).
+    try:
+        match = await recognition_service.identify(
+            session, image_bytes, threshold=cfg.recognition.match_threshold
+        )
     except NoFaceDetectedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -52,6 +85,17 @@ async def _capture(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     schedule = await schedule_service.get_default_schedule(session)
+
+    # 3. Geofence enforcement (if the schedule defines one).
+    location = {"lat": lat, "lng": lng} if lat is not None and lng is not None else None
+    try:
+        attendance_service.enforce_geofence(schedule, location)
+    except attendance_service.GeofenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    # 4. Record.
     rec = await attendance_service.record(
         session,
         principal.tenant_id,
@@ -59,7 +103,8 @@ async def _capture(
         att_type=att_type,
         occurred_at=occurred_at or datetime.now(UTC),
         schedule=schedule,
-        liveness_score=liveness_score,
+        location=location,
+        liveness_score=liveness,
         device_id=principal.subject,
     )
     await audit_service.record(
@@ -69,6 +114,22 @@ async def _capture(
         tenant_id=principal.tenant_id,
         detail={"user_id": match.user_id, "status": rec.status.value},
     )
+
+    # 5. Fire-and-forget webhook dispatch to the tenant's subscribers.
+    await webhook_service.dispatch(
+        session,
+        principal.tenant_id,
+        event=f"attendance.{att_type.value}",
+        payload={
+            "user_id": match.user_id,
+            "full_name": user.full_name,
+            "type": att_type.value,
+            "status": rec.status.value,
+            "occurred_at": rec.occurred_at.isoformat(),
+            "liveness_score": liveness,
+        },
+    )
+
     return Envelope(
         data=AttendanceResult(
             user_id=match.user_id,
@@ -83,25 +144,25 @@ async def _capture(
 async def check_in(
     image: UploadFile = File(...),
     occurred_at: datetime | None = Form(default=None),
-    liveness_score: float | None = Form(default=None),
+    lat: float | None = Form(default=None),
+    lng: float | None = Form(default=None),
     principal: Principal = Depends(get_device_principal),
     session: AsyncSession = Depends(get_device_db),
 ) -> Envelope[AttendanceResult]:
-    return await _capture(
-        AttendanceType.check_in, image, occurred_at, liveness_score, principal, session
-    )
+    return await _capture(AttendanceType.check_in, image, occurred_at, lat, lng, principal, session)
 
 
 @router.post("/checkout", response_model=Envelope[AttendanceResult])
 async def check_out(
     image: UploadFile = File(...),
     occurred_at: datetime | None = Form(default=None),
-    liveness_score: float | None = Form(default=None),
+    lat: float | None = Form(default=None),
+    lng: float | None = Form(default=None),
     principal: Principal = Depends(get_device_principal),
     session: AsyncSession = Depends(get_device_db),
 ) -> Envelope[AttendanceResult]:
     return await _capture(
-        AttendanceType.check_out, image, occurred_at, liveness_score, principal, session
+        AttendanceType.check_out, image, occurred_at, lat, lng, principal, session
     )
 
 

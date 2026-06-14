@@ -87,12 +87,18 @@ class KioskPrefs(BaseModel):
     allow_self_enrollment: bool = False
 
 
+class RecognitionConfig(BaseModel):
+    # Per-tenant override of the global match threshold (None => use the default).
+    match_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class TenantConfig(BaseModel):
     """Per-tenant config space. Stored in tenants.config (JSONB)."""
 
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     attendance: AttendanceDefaults = Field(default_factory=AttendanceDefaults)
     kiosk: KioskPrefs = Field(default_factory=KioskPrefs)
+    recognition: RecognitionConfig = Field(default_factory=RecognitionConfig)
 
 
 # --------------------------------------------------------------------------- #
@@ -222,3 +228,31 @@ class AttendanceResult(BaseModel):
     full_name: str
     similarity: float
     attendance: AttendanceOut
+
+
+# --------------------------------------------------------------------------- #
+# Webhooks
+# --------------------------------------------------------------------------- #
+class WebhookCreate(BaseModel):
+    url: str = Field(min_length=1, max_length=1024)
+    events: list[str] = Field(min_length=1)  # e.g. ["attendance.check_in"]
+
+
+class WebhookOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    url: str
+    events: list[str]
+    is_enabled: bool
+    created_at: datetime
+
+
+class WebhookRegistered(WebhookOut):
+    """Returned ONCE on registration — carries the plaintext signing secret.
+
+    Only the secret is needed by the subscriber to verify HMAC signatures; it is
+    stored server-side but never returned again after creation.
+    """
+
+    secret: str

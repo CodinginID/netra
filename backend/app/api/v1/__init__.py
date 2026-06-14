@@ -11,9 +11,11 @@ from app.api.v1 import (
     devices,
     enrollment,
     health,
+    reports,
     schedules,
     tenants,
     users,
+    webhooks,
 )
 
 api_router = APIRouter()
@@ -26,3 +28,5 @@ api_router.include_router(devices.router)
 api_router.include_router(schedules.router)
 api_router.include_router(enrollment.router)
 api_router.include_router(attendance.router)
+api_router.include_router(reports.router)
+api_router.include_router(webhooks.router)

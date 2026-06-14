@@ -265,6 +265,22 @@ class Consent(Base, TimestampMixin):
     guardian_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # for minors
 
 
+class WebhookEndpoint(Base, TimestampMixin):
+    """Tenant-registered HTTP subscriber for attendance events (HMAC-signed)."""
+
+    __tablename__ = "webhook_endpoints"
+    __table_args__ = (Index("ix_webhook_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    secret: Mapped[str] = mapped_column(String(255), nullable=False)  # HMAC signing key
+    events: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)  # subscribed events
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
 # Tables that carry tenant_id and must be protected by RLS policies.
 TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "users",
@@ -274,4 +290,5 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "devices",
     "sso_connections",
     "consents",
+    "webhook_endpoints",
 )

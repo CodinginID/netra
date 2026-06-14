@@ -9,12 +9,44 @@ skeleton — DST/timezone normalization is a later refinement.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AttendanceRecord, AttendanceStatus, AttendanceType, Schedule
+
+
+class GeofenceError(Exception):
+    """Raised when a check-in is outside a geofenced schedule's allowed area."""
+
+
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance in metres."""
+    r = 6_371_000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def enforce_geofence(schedule: Schedule | None, location: dict | None) -> None:
+    """If the schedule defines a geofence, require the punch to be inside it.
+
+    geofence shape: ``{"lat": float, "lng": float, "radius_m": float}``.
+    """
+    if schedule is None or not schedule.geofence:
+        return
+    gf = schedule.geofence
+    if not location or location.get("lat") is None or location.get("lng") is None:
+        raise GeofenceError("location required for a geofenced schedule")
+    dist = _haversine_m(
+        float(gf["lat"]), float(gf["lng"]), float(location["lat"]), float(location["lng"])
+    )
+    if dist > float(gf.get("radius_m", 0)):
+        raise GeofenceError(f"outside geofence ({int(dist)}m > {int(gf['radius_m'])}m)")
 
 
 def _parse_hhmm(value: str | None) -> time | None:
@@ -37,6 +69,11 @@ def compute_status(
 
     rules = schedule.rules or {}
     now_t = occurred_at.time()
+
+    # Holiday: no late / early-leave penalty on configured non-working days.
+    holidays = rules.get("holidays") or []
+    if occurred_at.date().isoformat() in holidays:
+        return AttendanceStatus.on_time
 
     if att_type == AttendanceType.check_in:
         start = _parse_hhmm(rules.get("workday_start"))

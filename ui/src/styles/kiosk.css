@@ -1,0 +1,335 @@
+/* Kiosk check-in screen styles */
+.kiosk-page {
+  min-height: 100vh;
+  background: #0f172a;
+  color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2rem 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.kiosk-header {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.kiosk-brand {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: -0.5px;
+}
+
+.kiosk-setup-btn {
+  background: none;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.kiosk-setup-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+}
+
+/* Setup panel */
+.kiosk-setup-panel {
+  width: 100%;
+  max-width: 480px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.kiosk-setup-panel h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.kiosk-setup-panel p {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.kiosk-token-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.kiosk-token-input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #f1f5f9;
+  font-size: 0.9rem;
+  outline: none;
+  font-family: monospace;
+  transition: border-color 0.15s;
+}
+
+.kiosk-token-input:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+.kiosk-token-save-btn {
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.625rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.kiosk-token-save-btn:hover {
+  background: #1648c0;
+}
+
+.kiosk-token-status {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.kiosk-token-status.ok {
+  color: #4ade80;
+}
+
+.kiosk-token-status.missing {
+  color: #f87171;
+}
+
+/* Camera area */
+.kiosk-camera-area {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.kiosk-camera-wrapper {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border: 2px solid #1e293b;
+}
+
+.kiosk-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1); /* mirror for selfie feel */
+}
+
+.kiosk-canvas {
+  display: none;
+}
+
+.kiosk-camera-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #64748b;
+  background: #1e293b;
+  min-height: 300px;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.kiosk-camera-placeholder-icon {
+  font-size: 3.5rem;
+}
+
+.kiosk-camera-placeholder p {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* Action buttons */
+.kiosk-actions {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+}
+
+.kiosk-btn {
+  flex: 1;
+  padding: 1.1rem 1rem;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.08s;
+  letter-spacing: -0.3px;
+}
+
+.kiosk-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.kiosk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kiosk-btn-checkin {
+  background: #16a34a;
+  color: #fff;
+}
+
+.kiosk-btn-checkin:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.kiosk-btn-checkout {
+  background: #dc2626;
+  color: #fff;
+}
+
+.kiosk-btn-checkout:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* Result overlay */
+.kiosk-result-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+
+.kiosk-result-overlay.success {
+  background: rgba(22, 163, 74, 0.92);
+}
+
+.kiosk-result-overlay.error {
+  background: rgba(220, 38, 38, 0.92);
+}
+
+.kiosk-result-icon {
+  font-size: 4rem;
+}
+
+.kiosk-result-name {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.kiosk-result-status {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: capitalize;
+}
+
+.kiosk-result-error-msg {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.kiosk-processing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 10px;
+}
+
+.kiosk-processing-icon {
+  font-size: 3rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.kiosk-processing p {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+/* Status bar */
+.kiosk-status-bar {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #475569;
+  padding: 0 0.25rem;
+}
+
+.kiosk-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+}
+
+.kiosk-status-dot.green {
+  background: #4ade80;
+}
+
+.kiosk-status-dot.red {
+  background: #f87171;
+}
+
+.kiosk-no-token-warning {
+  width: 100%;
+  max-width: 560px;
+  background: #7c2d12;
+  border: 1px solid #c2410c;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: #fed7aa;
+  font-size: 0.875rem;
+  text-align: center;
+}

@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # "insightface" => real buffalo_s via onnxruntime (install the `recognition` extra).
     face_engine: str = Field(default="fake")
 
+    # --- Liveness / anti-spoofing ---
+    # "fake" => deterministic (dev/test). "silentface" => Silent-Face (recognition extra).
+    liveness_engine: str = Field(default="fake")
+    liveness_threshold: float = Field(default=0.5)  # min score to accept as live
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

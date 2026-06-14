@@ -3,6 +3,7 @@ import { DashboardLayout } from '@/components/DashboardLayout'
 
 const NAV_ITEMS = [
   { label: 'Users', to: '/tenant/users' },
+  { label: 'Enrollment', to: '/tenant/enrollment' },
   { label: 'Devices', to: '/tenant/devices' },
   { label: 'Schedules', to: '/tenant/schedules' },
   { label: 'Attendance', to: '/tenant/attendance' },

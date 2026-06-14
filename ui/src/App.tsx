@@ -11,9 +11,13 @@ import {
   TenantAdminIndex,
 } from '@/pages/tenant-admin/TenantAdminDashboard'
 import { UsersPage } from '@/pages/tenant-admin/UsersPage'
+import { EnrollmentPage } from '@/pages/tenant-admin/EnrollmentPage'
 import { DevicesPage } from '@/pages/tenant-admin/DevicesPage'
 import { SchedulesPage } from '@/pages/tenant-admin/SchedulesPage'
 import { AttendancePage } from '@/pages/tenant-admin/AttendancePage'
+
+// Kiosk (public — device token auth)
+import { KioskPage } from '@/pages/kiosk/KioskPage'
 
 // Super Admin
 import {
@@ -29,6 +33,7 @@ export default function App() {
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
+        <Route path="/kiosk" element={<KioskPage />} />
 
         {/* Root redirect */}
         <Route path="/" element={<RootRedirect />} />
@@ -44,6 +49,7 @@ export default function App() {
         >
           <Route index element={<TenantAdminIndex />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="enrollment" element={<EnrollmentPage />} />
           <Route path="devices" element={<DevicesPage />} />
           <Route path="schedules" element={<SchedulesPage />} />
           <Route path="attendance" element={<AttendancePage />} />
