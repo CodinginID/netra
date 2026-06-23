@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     app_name: str = "netra"
     environment: str = Field(default="development")  # development | staging | production
     debug: bool = Field(default=True)
+    log_json: bool = Field(default=True, description="Emit JSON log lines (set false for pretty dev console)")
     api_v1_prefix: str = "/api/v1"
 
     # --- Database ---
@@ -56,7 +57,11 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:7002", "http://localhost:3000"]
+        default_factory=lambda: [
+            "http://localhost:5173",  # Vite dev server (default)
+            "http://localhost:7002",
+            "http://localhost:3000",
+        ]
     )
 
     # --- Face recognition engine ---
@@ -70,6 +75,13 @@ class Settings(BaseSettings):
     # "fake" => deterministic (dev/test). "silentface" => Silent-Face (recognition extra).
     liveness_engine: str = Field(default="fake")
     liveness_threshold: float = Field(default=0.5)  # min score to accept as live
+    # Path to the MiniFASNetV2 ONNX weights. Auto-downloaded from HuggingFace on first use.
+    silentface_model_path: str = Field(default="models/silentface.onnx")
+
+    # Root directory for InsightFace model files (buffalo_s). InsightFace will look
+    # for models under <insightface_model_root>/models/buffalo_s/*.onnx.
+    # In Docker, set to /app/models/insightface (model baked in at build time).
+    insightface_model_root: str = Field(default="")
 
     @property
     def is_production(self) -> bool:

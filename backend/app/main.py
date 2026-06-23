@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
 
-configure_logging(debug=settings.debug)
+configure_logging(debug=settings.debug, json_logs=settings.log_json)
 log = get_logger("netra")
 
 
@@ -48,13 +48,27 @@ def create_app() -> FastAPI:
 
     # --- Standardized error envelope ---
     @app.exception_handler(StarletteHTTPException)
-    async def http_exc_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def http_exc_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        if exc.status_code == 422:
+            log.warning(
+                "http_422_error",
+                method=request.method,
+                path=str(request.url.path),
+                detail=exc.detail,
+            )
         return JSONResponse(
             status_code=exc.status_code, content={"data": None, "error": exc.detail}
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        log.warning(
+            "request_validation_error",
+            method=request.method,
+            path=str(request.url.path),
+            content_type=request.headers.get("content-type"),
+            errors=exc.errors(),
+        )
         return JSONResponse(
             status_code=422,
             content={"data": None, "error": "validation_error", "detail": exc.errors()},

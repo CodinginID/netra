@@ -38,6 +38,7 @@ docker ps --filter name=netra-postgres # pastikan "healthy"
 ### 1.2 Backend
 ```bash
 cd backend
+cp .env.example .env                    # buat file env (edit jika perlu — lihat §1.3 untuk CORS)
 uv sync                                 # install dependency (engine = fake, tanpa ML)
 uv run alembic upgrade head             # buat skema + role netra_app + RLS
 

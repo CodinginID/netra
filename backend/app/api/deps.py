@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,7 +68,24 @@ async def get_principal(authorization: str | None = Header(default=None)) -> Pri
     )
 
 
-async def get_db(principal: Principal = Depends(get_principal)) -> AsyncIterator[AsyncSession]:
+async def get_effective_principal(
+    request: Request,
+    principal: Principal = Depends(get_principal),
+) -> Principal:
+    """Allow super_admin to scope requests to a specific tenant via X-Tenant-Id header."""
+    if principal.role == Role.super_admin and principal.tenant_id is None:
+        tenant_id = request.headers.get("x-tenant-id")
+        if tenant_id:
+            return Principal(
+                subject=principal.subject,
+                role=principal.role,
+                tenant_id=tenant_id,
+                external_id=principal.external_id,
+            )
+    return principal
+
+
+async def get_db(principal: Principal = Depends(get_effective_principal)) -> AsyncIterator[AsyncSession]:
     """Tenant-bound DB session for the authenticated principal (RLS-scoped)."""
     tenant_id_ctx.set(principal.tenant_id)
     async with SessionFactory() as session:
@@ -96,7 +113,7 @@ async def get_db_unscoped() -> AsyncIterator[AsyncSession]:
 def require_roles(*roles: Role):
     """Dependency factory enforcing the principal holds one of ``roles``."""
 
-    async def _checker(principal: Principal = Depends(get_principal)) -> Principal:
+    async def _checker(principal: Principal = Depends(get_effective_principal)) -> Principal:
         if principal.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

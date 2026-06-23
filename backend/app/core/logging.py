@@ -22,8 +22,12 @@ def _inject_context(_: object, __: str, event_dict: dict) -> dict:
     return event_dict
 
 
-def configure_logging(*, debug: bool = False) -> None:
-    """Configure structlog to emit JSON (prod) or pretty console (dev)."""
+def configure_logging(*, debug: bool = False, json_logs: bool = True) -> None:
+    """Configure structlog to emit JSON or pretty console output.
+
+    json_logs=True  → always JSON (default; good for prod + log aggregators).
+    json_logs=False → pretty ConsoleRenderer in debug, JSON in production.
+    """
     logging.basicConfig(format="%(message)s", level=logging.DEBUG if debug else logging.INFO)
 
     processors: list = [
@@ -32,10 +36,10 @@ def configure_logging(*, debug: bool = False) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         _inject_context,
     ]
-    if debug:
-        processors.append(structlog.dev.ConsoleRenderer())
-    else:
+    if json_logs or not debug:
         processors.append(structlog.processors.JSONRenderer())
+    else:
+        processors.append(structlog.dev.ConsoleRenderer())
 
     structlog.configure(
         processors=processors,

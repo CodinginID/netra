@@ -1,13 +1,20 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 export type AttendanceAction = 'checkin' | 'checkout'
+
+export interface AttendanceOut {
+  id: string
+  user_id: string
+  type: 'check_in' | 'check_out'
+  status: 'on_time' | 'late' | 'early_leave'
+  occurred_at: string
+}
 
 export interface AttendanceResult {
   user_id: string
   full_name: string
-  status: 'on_time' | 'late' | 'early_leave'
-  action: AttendanceAction
-  timestamp: string
+  similarity: number
+  attendance: AttendanceOut
 }
 
 export async function postAttendance(
@@ -34,11 +41,45 @@ export async function postAttendance(
   if (res.status === 404) {
     throw new KioskError('not_recognized', json.detail ?? 'Wajah tidak dikenali')
   }
+  if (res.status === 409) {
+    throw new KioskError('duplicate', json.detail ?? 'Absensi sudah tercatat hari ini')
+  }
   if (res.status === 422) {
-    throw new KioskError('liveness_failed', json.detail ?? 'Liveness gagal')
+    throw new KioskError('liveness_failed', json.error ?? json.detail ?? 'Liveness gagal')
   }
   if (!res.ok) {
-    throw new KioskError('server_error', json.detail ?? json.error ?? `Server error (${res.status})`)
+    throw new KioskError('server_error', json.error ?? json.detail ?? `Server error (${res.status})`)
+  }
+
+  return json.data ?? json
+}
+
+export async function postAutoAttendance(
+  deviceToken: string,
+  imageBlob: Blob,
+): Promise<AttendanceResult> {
+  const form = new FormData()
+  form.append('image', imageBlob, 'frame.jpg')
+
+  const res = await fetch(`${API_BASE}/attendance/auto`, {
+    method: 'POST',
+    headers: { 'X-Device-Token': deviceToken },
+    body: form,
+  })
+
+  const json = await res.json().catch(() => ({}))
+
+  if (res.status === 404) {
+    throw new KioskError('not_recognized', json.detail ?? 'Wajah tidak dikenali')
+  }
+  if (res.status === 409) {
+    throw new KioskError('duplicate', json.detail ?? 'Absensi sudah tercatat hari ini')
+  }
+  if (res.status === 422) {
+    throw new KioskError('liveness_failed', json.error ?? json.detail ?? 'Liveness gagal')
+  }
+  if (!res.ok) {
+    throw new KioskError('server_error', json.error ?? json.detail ?? `Server error (${res.status})`)
   }
 
   return json.data ?? json
@@ -46,7 +87,7 @@ export async function postAttendance(
 
 export class KioskError extends Error {
   constructor(
-    public readonly code: 'not_recognized' | 'liveness_failed' | 'server_error',
+    public readonly code: 'not_recognized' | 'liveness_failed' | 'duplicate' | 'server_error',
     message: string
   ) {
     super(message)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -60,6 +60,43 @@ async def enroll(
     user.enrolled = True
     await session.flush()
     return embedding
+
+
+async def enroll_multi(
+    session: AsyncSession,
+    tenant_id: str,
+    user_id: str,
+    images: list[bytes],
+    *,
+    engine: FaceEngine | None = None,
+) -> list[FaceEmbedding]:
+    """Enroll 1–N face images, replacing all previous embeddings for the user.
+
+    Requires consent. Typical use: active enrollment with front, left, right angles.
+    """
+    if not images:
+        raise RecognitionError("at least one image is required")
+    if not await _has_consent(session, user_id):
+        raise ConsentRequiredError("biometric consent not granted for this user")
+
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise RecognitionError("user not found")
+
+    # Replace all previous embeddings for this user (re-enroll = fresh start)
+    await session.execute(delete(FaceEmbedding).where(FaceEmbedding.user_id == user_id))
+
+    eng = engine or get_face_engine()
+    embeddings: list[FaceEmbedding] = []
+    for img in images:
+        vector = eng.embed(img)
+        emb = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
+        session.add(emb)
+        embeddings.append(emb)
+
+    user.enrolled = True
+    await session.flush()
+    return embeddings
 
 
 async def identify(

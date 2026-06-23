@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -44,6 +44,14 @@ class TokenResponse(BaseModel):
     role: Role
 
 
+class UsernameCheckRequest(BaseModel):
+    username: str = Field(min_length=1)
+
+
+class UsernameCheckResponse(BaseModel):
+    exists: bool
+
+
 # --------------------------------------------------------------------------- #
 # Tenant
 # --------------------------------------------------------------------------- #
@@ -53,6 +61,7 @@ class TenantCreate(BaseModel):
     admin_username: str = Field(min_length=3)
     admin_password: str = Field(min_length=8)
     admin_full_name: str = Field(min_length=2)
+    config: "TenantConfig | None" = None
 
 
 class TenantOut(BaseModel):
@@ -92,9 +101,14 @@ class RecognitionConfig(BaseModel):
     match_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class VerticalConfig(BaseModel):
+    mode: Literal["company", "school", "university"] = "company"
+
+
 class TenantConfig(BaseModel):
     """Per-tenant config space. Stored in tenants.config (JSONB)."""
 
+    vertical: VerticalConfig = Field(default_factory=VerticalConfig)
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     attendance: AttendanceDefaults = Field(default_factory=AttendanceDefaults)
     kiosk: KioskPrefs = Field(default_factory=KioskPrefs)
@@ -111,6 +125,13 @@ class UserCreate(BaseModel):
     email: EmailStr | None = None
     external_id: str | None = None  # NIS/NIM/NIK
     password: str | None = Field(default=None, min_length=8)
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2)
+    role: Role | None = None
+    username: str | None = None
+    is_active: bool | None = None
 
 
 class UserOut(BaseModel):

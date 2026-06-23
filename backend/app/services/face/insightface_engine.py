@@ -35,7 +35,10 @@ class InsightFaceEngine:
                 "InsightFace not installed. Run `uv sync --extra recognition` "
                 "or set FACE_ENGINE=fake."
             ) from exc
-        app = FaceAnalysis(name="buffalo_s", providers=["CPUExecutionProvider"])
+        root_kwargs = {}
+        if settings.insightface_model_root:
+            root_kwargs["root"] = settings.insightface_model_root
+        app = FaceAnalysis(name="buffalo_s", providers=["CPUExecutionProvider"], **root_kwargs)
         app.prepare(ctx_id=-1, det_size=(640, 640))
         self._app = app
         return app

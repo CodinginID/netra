@@ -47,6 +47,9 @@ build/
 ui/dist/
 ui/.vite/
 
+# ── ML Models (downloaded at build time, not committed) ───────────────────────
+backend/models/
+
 # ── Claude / AI tooling ────────────────────────────────────────────────────────
 .claude-flow/
 
@@ -59,3 +62,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+graphify-out/
+__pycache__
+.claude
+.qwen
+.claude-flow

@@ -1,0 +1,250 @@
+/* Self-enrollment flow — used by SelfEnrollPage */
+.selfenroll-title {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.selfenroll-steps {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.selfenroll-step {
+  font-size: 0.78rem;
+  color: #475569;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.selfenroll-step.active {
+  color: #6ee7e7;
+  border-color: rgba(13, 148, 136, 0.4);
+  background: rgba(13, 148, 136, 0.12);
+}
+
+.selfenroll-step.done {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.selfenroll-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.selfenroll-hint {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.selfenroll-upload {
+  width: 100%;
+  text-align: center;
+  padding: 0.7rem;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.selfenroll-upload:hover {
+  border-color: rgba(13, 148, 136, 0.4);
+  color: #e2e8f0;
+}
+
+.selfenroll-preview-sm {
+  aspect-ratio: 4 / 3;
+  max-width: 240px;
+}
+
+.selfenroll-consent {
+  width: 100%;
+  background: #1e293b;
+  border: 1px solid rgba(107, 216, 203, 0.15);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.selfenroll-consent-text {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.65;
+}
+
+.selfenroll-consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.selfenroll-consent-check input {
+  margin-top: 0.2rem;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #0d9488;
+  cursor: pointer;
+}
+
+/* ── Active capture: phase progress dots ── */
+.selfenroll-phase-dots {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.selfenroll-phase-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.selfenroll-phase-dot.active {
+  background: #0d9488;
+  border-color: #0d9488;
+  box-shadow: 0 0 6px rgba(13,148,136,0.6);
+}
+
+.selfenroll-phase-dot.done {
+  background: #34d399;
+  border-color: #34d399;
+}
+
+/* ── Phase instruction overlay ── */
+.selfenroll-phase-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.6) 80%, transparent 100%);
+  padding: 1.5rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.selfenroll-phase-overlay--dim {
+  background: linear-gradient(to top, rgba(15,23,42,0.7) 0%, transparent 100%);
+}
+
+.selfenroll-phase-label {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.selfenroll-arrow {
+  font-size: 1.4rem;
+  color: #6ee7e7;
+}
+
+.selfenroll-phase-hint {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.selfenroll-phase-num {
+  font-size: 0.72rem;
+  color: rgba(107,216,203,0.55);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+/* ── Countdown bar ── */
+.selfenroll-countdown-wrap {
+  width: 100%;
+  max-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.selfenroll-countdown-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.selfenroll-countdown-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0d9488, #6ee7e7);
+  border-radius: 99px;
+  transition: width 0.9s linear;
+}
+
+.selfenroll-countdown-num {
+  font-size: 0.78rem;
+  color: #6ee7e7;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 1.6rem;
+  text-align: right;
+}
+
+/* ── Preview thumbnails (3 angles) ── */
+.selfenroll-previews {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  width: 100%;
+}
+
+.selfenroll-previews--sm .selfenroll-preview-thumb img {
+  max-height: 90px;
+}
+
+.selfenroll-preview-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1;
+  max-width: 160px;
+}
+
+.selfenroll-preview-thumb img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1.5px solid rgba(107,216,203,0.3);
+}
+
+.selfenroll-preview-thumb span {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+}

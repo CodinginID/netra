@@ -59,6 +59,33 @@ def _parse_hhmm(value: str | None) -> time | None:
         return None
 
 
+def _compute_session_status(
+    rules: dict,
+    grace_minutes: int,
+    att_type: AttendanceType,
+    now_t: time,
+) -> AttendanceStatus:
+    """Status for session-based schedules (school / university periods)."""
+    sessions = rules.get("sessions") or []
+    if not sessions:
+        return AttendanceStatus.on_time
+    now_m = now_t.hour * 60 + now_t.minute
+
+    if att_type == AttendanceType.check_in:
+        first_start = _parse_hhmm(sessions[0].get("start"))
+        if first_start is None:
+            return AttendanceStatus.on_time
+        cutoff = first_start.hour * 60 + first_start.minute + grace_minutes
+        return AttendanceStatus.late if now_m > cutoff else AttendanceStatus.on_time
+
+    # check_out: compare against last session end
+    last_end = _parse_hhmm(sessions[-1].get("end"))
+    if last_end is None:
+        return AttendanceStatus.on_time
+    end_m = last_end.hour * 60 + last_end.minute
+    return AttendanceStatus.early_leave if now_m < end_m else AttendanceStatus.on_time
+
+
 def compute_status(
     schedule: Schedule | None,
     att_type: AttendanceType,
@@ -75,11 +102,15 @@ def compute_status(
     if occurred_at.date().isoformat() in holidays:
         return AttendanceStatus.on_time
 
+    # Session-based schedule (school / university periods)
+    if rules.get("type") == "session":
+        return _compute_session_status(rules, schedule.grace_minutes or 0, att_type, now_t)
+
+    # Shift-based (default)
     if att_type == AttendanceType.check_in:
         start = _parse_hhmm(rules.get("workday_start"))
         if start is None:
             return AttendanceStatus.on_time
-        # Allowed grace after start.
         grace_minutes = schedule.grace_minutes or 0
         cutoff_minutes = start.hour * 60 + start.minute + grace_minutes
         actual_minutes = now_t.hour * 60 + now_t.minute

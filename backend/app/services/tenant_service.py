@@ -17,7 +17,8 @@ class TenantError(Exception):
 
 async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
     """Create a tenant + its first Tenant Admin (onboarding)."""
-    tenant = Tenant(name=payload.name, slug=payload.slug, status=TenantStatus.active, config={})
+    config = payload.config.model_dump() if payload.config is not None else {}
+    tenant = Tenant(name=payload.name, slug=payload.slug, status=TenantStatus.active, config=config)
     session.add(tenant)
     try:
         await session.flush()

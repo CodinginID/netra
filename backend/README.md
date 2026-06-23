@@ -81,7 +81,7 @@ DATABASE_URL=postgresql+asyncpg://netra:netra@localhost:5436/netra \
 ```bash
 DATABASE_URL=postgresql+asyncpg://netra_app:netra_app@localhost:5436/netra \
   SECRET_KEY=dev_only_change_me_min_32_chars_long_secret \
-  uv run uvicorn app.main:app --reload
+  uv run uvicorn app.main:app --reload --reload-dir app
 ```
 
 The API is available at `http://localhost:8000`.  Interactive docs at `/docs`.
