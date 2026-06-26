@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
-import { listAttendance, listUsers } from '@/api/adminApi'
-
-interface LateArrival {
-  id: string
-  name: string
-  time: string
-}
+import { useAttendance, useUsers } from '@/hooks/useApiQueries'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -16,42 +10,22 @@ function today(): string {
 export function NotificationBell() {
   const token = useAuthStore((s) => s.accessToken)
   const [open, setOpen] = useState(false)
-  const [late, setLate] = useState<LateArrival[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
+  const todayDate = today()
 
-  useEffect(() => {
-    if (!token) return
-    let cancelled = false
+  const { data: attendanceData } = useAttendance({ from: todayDate, to: todayDate, limit: 1000 })
+  const { data: usersData } = useUsers({ limit: 1000 })
 
-    async function load() {
-      try {
-        const date = today()
-        const [attendance, users] = await Promise.all([
-          listAttendance(token!, { from: date, to: date }),
-          listUsers(token!),
-        ])
-        if (cancelled) return
-        const names = new Map(users.map((u) => [u.id, u.full_name || u.username || u.id]))
-        const rows = attendance
-          .filter((a) => a.status === 'late' && a.type === 'check_in')
-          .map((a) => ({
-            id: a.id,
-            name: names.get(a.user_id) ?? a.user_id,
-            time: new Date(a.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          }))
-        setLate(rows)
-      } catch {
-        /* network/auth errors — keep last known state */
-      }
-    }
-
-    load()
-    const interval = setInterval(load, 60_000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [token])
+  // Compute late arrivals from query data
+  const attendance = attendanceData?.items ?? []
+  const users = usersData?.items ?? []
+  const late = attendance
+    .filter((a) => a.status === 'late' && a.type === 'check_in')
+    .map((a) => ({
+      id: a.id,
+      name: users.find((u) => u.id === a.user_id)?.full_name ?? a.user_id,
+      time: new Date(a.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }))
 
   useEffect(() => {
     if (!open) return
@@ -74,7 +48,7 @@ export function NotificationBell() {
         aria-label={`${late.length} late check-ins today`}
       >
         <Bell size={18} />
-        {late.length > 0 && <span className="notif-badge">{late.length > 99 ? '99+' : late.length}</span>}
+        {late.length > 0 && <span className="notif-badge" aria-live="polite">{late.length > 99 ? '99+' : late.length}</span>}
       </button>
 
       {open && (

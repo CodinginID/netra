@@ -10,10 +10,14 @@ import {
   AlertCircle,
   XCircle,
   UserCheck,
+  Trash2,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { dailyReport, listUsers, listAttendance } from '@/api/adminApi'
+import { dailyReport } from '@/api/adminApi'
+import { useAttendance, useDailyReport, useUsers, useOnboardingStatus } from '@/hooks/useApiQueries'
 import { useAuthStore } from '@/store/authStore'
+import { OnboardingWizard } from '@/components/OnboardingWizard'
+import { OnboardingBanner } from '@/components/OnboardingBanner'
 
 const NAV_ITEMS = [
   { label: 'Pengguna', to: '/tenant/users', icon: Users },
@@ -21,6 +25,7 @@ const NAV_ITEMS = [
   { label: 'Perangkat', to: '/tenant/devices', icon: Monitor },
   { label: 'Jadwal', to: '/tenant/schedules', icon: CalendarDays },
   { label: 'Kehadiran', to: '/tenant/attendance', icon: ClipboardList },
+  { label: 'Tempat Sampah', to: '/tenant/trash', icon: Trash2 },
 ]
 
 export function TenantAdminDashboard() {
@@ -94,96 +99,136 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
   )
 }
 
+function TrendBadge({ delta }: { delta: number | null }) {
+  if (delta === null) {
+    return <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)' }}>—</span>
+  }
+  const rounded = Math.round(Math.abs(delta))
+  if (rounded === 0) {
+    return <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)' }}>— 0%</span>
+  }
+  const up = delta > 0
+  return (
+    <span style={{ fontSize: 12, fontWeight: 600, color: up ? '#16a34a' : '#d97706' }}>
+      {up ? '↑' : '↓'} {rounded}%
+    </span>
+  )
+}
+
 export function TenantAdminHomePage() {
   const token = useAuthStore((s) => s.accessToken)
-  const [stats, setStats] = useState<StatCard[] | null>(null)
-  const [rate, setRate] = useState(0)
-  const [recent, setRecent] = useState<RecentItem[]>([])
+  const [showWizard, setShowWizard] = useState(false)
+  const [showBanner, setShowBanner] = useState(false)
+  const today = todayString()
+
+  // React Query hooks
+  const { data: attendanceData, isLoading: attLoading } = useAttendance({
+    page: 1, limit: 100, from: today, to: today,
+  })
+  const { data: reportData } = useDailyReport(today)
+  const { data: usersData } = useUsers({ page: 1, limit: 1000 })
+  const { data: onboardingData } = useOnboardingStatus()
+
+  const attendance = attendanceData?.items ?? []
+  const report = reportData
+  const users = usersData?.items ?? []
+
+  // Onboarding banner
+  useEffect(() => {
+    if (onboardingData && !onboardingData.completed) {
+      setShowBanner(true)
+    }
+  }, [onboardingData])
+
+  // 7-day trend (kept as useEffect — 7 separate API calls)
   const [trend, setTrend] = useState<TrendPoint[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [trendDelta, setTrendDelta] = useState<{ hadir: number | null; terlambat: number | null }>({
+    hadir: null,
+    terlambat: null,
+  })
 
   useEffect(() => {
     if (!token) return
     let active = true
-    const load = async () => {
-      try {
-        const today = todayString()
-        const [recap, users, attendance] = await Promise.all([
-          dailyReport(token, today),
-          listUsers(token),
-          listAttendance(token, { from: today, to: today }),
-        ])
-        if (!active) return
-
-        const enrolled = users.filter((u) => u.enrolled).length
-        const absent = Math.max(enrolled - recap.check_in, 0)
-        const attendanceRate = enrolled > 0 ? Math.round((recap.check_in / enrolled) * 100) : 0
-
-        // "Sedang di kantor": latest record per-user is check_in (open check-in, no check-out after)
-        const latestByUser = new Map<string, (typeof attendance)[0]>()
-        for (const rec of attendance) {
-          const prev = latestByUser.get(rec.user_id)
-          if (!prev || new Date(rec.occurred_at) > new Date(prev.occurred_at)) {
-            latestByUser.set(rec.user_id, rec)
-          }
+    const past7 = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() - (6 - i))
+      return d.toISOString().slice(0, 10)
+    })
+    Promise.all(
+      past7.map(async (day) => {
+        try {
+          const r = await dailyReport(token, day)
+          return { day, check_in: r.check_in, late: r.late }
+        } catch {
+          return { day, check_in: 0, late: 0 }
         }
-        const inOffice = [...latestByUser.values()].filter((r) => r.type === 'check_in').length
-
-        const userMap = new Map(users.map((u) => [u.id, u.full_name]))
-        const sorted = [...attendance].sort(
-          (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
-        )
-        const recentItems: RecentItem[] = sorted.slice(0, 5).map((a) => ({
-          name: userMap.get(a.user_id) ?? a.user_id.slice(0, 8),
-          action: a.type === 'check_in' ? 'Check In' : 'Check Out',
-          time: new Date(a.occurred_at).toLocaleTimeString('id-ID', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          isCheckIn: a.type === 'check_in',
-        }))
-
-        setRate(attendanceRate)
-        setRecent(recentItems)
-
-        // Fetch last 7 days trend
-        const past7 = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date()
-          d.setDate(d.getDate() - (6 - i))
-          return d.toISOString().slice(0, 10)
+      }),
+    ).then((data) => {
+      if (!active) return
+      setTrend(data)
+      if (data.length >= 2) {
+        const last = data[data.length - 1]
+        const prev = data[data.length - 2]
+        setTrendDelta({
+          hadir: ((last.check_in - prev.check_in) / Math.max(prev.check_in, 1)) * 100,
+          terlambat: ((last.late - prev.late) / Math.max(prev.late, 1)) * 100,
         })
-        const trendData = await Promise.all(
-          past7.map(async (day) => {
-            try {
-              const r = await dailyReport(token, day)
-              return { day, check_in: r.check_in, late: r.late }
-            } catch {
-              return { day, check_in: 0, late: 0 }
-            }
-          }),
-        )
-        if (!active) return
-        setTrend(trendData)
-        setStats([
-          { label: 'Hadir', value: recap.check_in, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
-          { label: 'Di Kantor', value: inOffice, Icon: UserCheck, fg: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
-          { label: 'Terlambat', value: recap.late, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
-          { label: 'Tidak Hadir', value: absent, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
-        ])
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : 'Gagal memuat data')
       }
-    }
-    void load()
-    const interval = setInterval(() => { void load() }, 60_000)
-    return () => {
-      active = false
-      clearInterval(interval)
-    }
+    })
+    return () => { active = false }
   }, [token])
+
+  // Derived stats from query data
+  const enrolled = users.filter((u) => u.enrolled).length
+  const absent = Math.max(enrolled - (report?.check_in ?? 0), 0)
+  const rate = enrolled > 0 ? Math.round(((report?.check_in ?? 0) / enrolled) * 100) : 0
+
+  const latestByUser = new Map<string, typeof attendance[0]>()
+  for (const rec of attendance) {
+    const prev = latestByUser.get(rec.user_id)
+    if (!prev || new Date(rec.occurred_at) > new Date(prev.occurred_at)) {
+      latestByUser.set(rec.user_id, rec)
+    }
+  }
+  const inOfficeCount = [...latestByUser.values()].filter((r) => r.type === 'check_in').length
+
+  const userMap = new Map(users.map((u) => [u.id, u.full_name]))
+  const sorted = [...attendance].sort(
+    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
+  )
+  const recent: RecentItem[] = sorted.slice(0, 5).map((a) => ({
+    name: userMap.get(a.user_id) ?? a.user_id.slice(0, 8),
+    action: a.type === 'check_in' ? 'Check In' : 'Check Out',
+    time: new Date(a.occurred_at).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    isCheckIn: a.type === 'check_in',
+  }))
+
+  const stats: StatCard[] = [
+    { label: 'Hadir', value: report?.check_in ?? 0, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
+    { label: 'Di Kantor', value: inOfficeCount, Icon: UserCheck, fg: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
+    { label: 'Terlambat', value: report?.late ?? 0, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+    { label: 'Tidak Hadir', value: absent, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+  ]
 
   return (
     <div>
+      {showBanner && (
+        <OnboardingBanner
+          onOpenWizard={() => setShowWizard(true)}
+          onDismiss={() => setShowBanner(false)}
+        />
+      )}
+      {showWizard && (
+        <OnboardingWizard
+          onClose={() => setShowWizard(false)}
+          onComplete={() => { setShowWizard(false); setShowBanner(false) }}
+        />
+      )}
+
       <div className="page-header">
         <div>
           <h2>Absensi Hari Ini</h2>
@@ -195,9 +240,10 @@ export function TenantAdminHomePage() {
         </span>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
-
       <div
+        role="region"
+        aria-label="Statistik kehadiran hari ini"
+        aria-live="polite"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -205,7 +251,7 @@ export function TenantAdminHomePage() {
           marginBottom: 24,
         }}
       >
-        {stats === null
+        {attLoading
           ? [0, 1, 2, 3].map((i) => (
               <div key={i} className="stat-card">
                 <div className="skeleton" style={{ width: 46, height: 46, borderRadius: 10, flexShrink: 0 }} />
@@ -222,6 +268,16 @@ export function TenantAdminHomePage() {
                 </div>
                 <div>
                   <div className="stat-value">{value}</div>
+                  {label === 'Hadir' && (
+                    <div style={{ marginTop: 2 }}>
+                      <TrendBadge delta={trendDelta.hadir} />
+                    </div>
+                  )}
+                  {label === 'Terlambat' && (
+                    <div style={{ marginTop: 2 }}>
+                      <TrendBadge delta={trendDelta.terlambat} />
+                    </div>
+                  )}
                   <div className="stat-label">{label}</div>
                 </div>
               </div>
@@ -257,21 +313,21 @@ export function TenantAdminHomePage() {
         </div>
       )}
 
-      <div className="data-card">
+      <div className="data-card" aria-live="polite">
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
             Aktivitas Terbaru
           </h3>
         </div>
 
-        {stats === null && [0, 1, 2].map((i) => (
+        {attLoading && [0, 1, 2].map((i) => (
           <div key={i} className="activity-row">
             <div className="skeleton skeleton-text" style={{ width: '40%' }} />
             <div className="skeleton skeleton-text" style={{ width: '20%' }} />
           </div>
         ))}
 
-        {stats !== null && recent.length === 0 && (
+        {!attLoading && recent.length === 0 && (
           <div className="empty-state">Belum ada aktivitas hari ini</div>
         )}
 

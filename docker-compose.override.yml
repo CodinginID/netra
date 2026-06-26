@@ -1,0 +1,32 @@
+# Dev override — auto-loaded by `docker-compose up` (no -f needed).
+# Mounts the backend source over the baked image code and runs uvicorn with
+# --reload, so ordinary Python code changes hot-reload WITHOUT a rebuild.
+#
+# Rebuild (`docker-compose build backend`) is still required only when:
+#   - dependencies change (pyproject.toml / uv.lock), or
+#   - bundled ML models change.
+# DB schema changes still need migrations run from the host:
+#   cd backend && .venv/bin/alembic upgrade head
+services:
+  backend:
+    # Overlay host source over the image's baked /app/app. The .venv (deps) and
+    # /app/models (ML models) stay from the image — only code is live-mounted.
+    volumes:
+      - ./backend/app:/app/app
+    environment:
+      # macOS/Windows Docker bind mounts don't propagate inotify events across
+      # the VM boundary, so WatchFiles never sees edits. Force polling so
+      # --reload reliably detects host changes (slightly higher idle CPU).
+      WATCHFILES_FORCE_POLLING: "true"
+    command:
+      - python
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app

@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 type ToastType = 'success' | 'error' | 'info'
-interface ToastItem { id: number; msg: string; type: ToastType }
-interface ToastCtx { show: (msg: string, type?: ToastType) => void }
+interface ToastAction { label: string; onClick: () => void }
+interface ToastItem { id: number; msg: string; type: ToastType; action?: ToastAction }
+interface ToastCtx { show: (msg: string, type?: ToastType, action?: ToastAction) => void }
 
 const Ctx = createContext<ToastCtx>({ show: () => {} })
 
@@ -26,14 +27,16 @@ const ICONS: Record<ToastType, string> = {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  const show = useCallback((msg: string, type: ToastType = 'info') => {
+  const show = useCallback((msg: string, type: ToastType = 'info', action?: ToastAction) => {
     const id = Date.now()
-    setToasts((prev) => [...prev, { id, msg, type }])
+    setToasts((prev) => [...prev, { id, msg, type, action }])
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000)
   }, [])
 
   const portal = createPortal(
     <div
+      role="status"
+      aria-live="polite"
       style={{
         position: 'fixed',
         top: 24,
@@ -52,6 +55,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {toasts.map((t) => (
         <div
           key={t.id}
+          role={t.type === 'error' ? 'alert' : undefined}
+          aria-live={t.type === 'error' ? 'assertive' : undefined}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -85,7 +90,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             {ICONS[t.type]}
           </span>
-          {t.msg}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+            {t.msg}
+            {t.action && (
+              <button
+                className="toast-action-btn"
+                onClick={() => {
+                  t.action!.onClick()
+                  setToasts((prev) => prev.filter((x) => x.id !== t.id))
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
+          </span>
         </div>
       ))}
     </div>,

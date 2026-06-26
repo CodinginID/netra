@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react'
-import { CalendarDays, Plus, Clock, Edit2, Trash2, X } from 'lucide-react'
-import { useAuthStore } from '@/store/authStore'
+import { useState } from 'react'
+import { Plus, Clock, Edit2, Trash2, X } from 'lucide-react'
+import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
+import { useModalA11y } from '@/hooks/useModalA11y'
 import {
-  listSchedules,
-  createSchedule,
-  updateSchedule,
-  deleteSchedule,
   type ScheduleOut,
   type ScheduleCreate,
   type SessionRule,
   type ScheduleRules,
 } from '@/api/adminApi'
+import { Pagination } from '@/components/Pagination'
+import { useSchedules } from '@/hooks/useApiQueries'
+import { useCreateSchedule, useUpdateSchedule, useDeleteSchedule, useRestoreSchedule } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -74,12 +74,12 @@ function ScheduleFormFields({
         <div className="session-list">
           {sessions.map((s, i) => (
             <div key={i} className="session-row">
-              <input className="field-input" placeholder="Nama sesi" value={s.name} onChange={(e) => updateSession(i, 'name', e.target.value)} required />
-              <input className="field-input" type="time" value={s.start} onChange={(e) => updateSession(i, 'start', e.target.value)} required />
+              <input className="field-input" placeholder="Nama sesi" value={s.name} onChange={(e) => updateSession(i, 'name', e.target.value)} required aria-label={`Nama sesi ${i + 1}`} />
+              <input className="field-input" type="time" value={s.start} onChange={(e) => updateSession(i, 'start', e.target.value)} required aria-label={`Waktu mulai sesi ${i + 1}`} />
               <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>–</span>
-              <input className="field-input" type="time" value={s.end} onChange={(e) => updateSession(i, 'end', e.target.value)} required />
+              <input className="field-input" type="time" value={s.end} onChange={(e) => updateSession(i, 'end', e.target.value)} required aria-label={`Waktu selesai sesi ${i + 1}`} />
               {sessions.length > 1 && (
-                <button type="button" className="btn-icon btn-icon-danger" onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
+                <button type="button" className="btn-icon btn-icon-danger" aria-label="Hapus sesi" onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
                   <X size={14} />
                 </button>
               )}
@@ -141,6 +141,7 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   const [workdayEnd, setWorkdayEnd] = useState(schedule.rules.workday_end ?? '17:00')
   const [graceMinutes, setGraceMinutes] = useState(schedule.grace_minutes)
   const [sessions, setSessions] = useState<SessionRule[]>(schedule.rules.sessions ?? [DEFAULT_SESSION])
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -151,12 +152,12 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Edit Jadwal</h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field"><label>Nama Jadwal</label>
-            <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} required />
+          <div className="field"><label htmlFor="edit-schedule-name">Nama Jadwal</label>
+            <input id="edit-schedule-name" className="field-input" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <ScheduleFormFields {...{ scheduleType, setScheduleType, workdayStart, setWorkdayStart, workdayEnd, setWorkdayEnd, graceMinutes, setGraceMinutes, sessions, setSessions }} />
           <div className="modal-footer">
@@ -175,11 +176,12 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
   onClose: () => void
   loading: boolean
 }) {
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Hapus Jadwal</h3>
-        <p className="confirm-text">Yakin ingin menghapus jadwal <strong style={{ color: 'var(--color-text)' }}>{schedule.name}</strong>? Tindakan ini tidak dapat dibatalkan.</p>
+        <p className="confirm-text">Yakin hapus jadwal <strong style={{ color: 'var(--color-text)' }}>{schedule.name}</strong>? Data dapat dipulihkan dalam 30 hari.</p>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Batal</button>
           <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>{loading ? 'Menghapus...' : 'Hapus'}</button>
@@ -190,83 +192,69 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
 }
 
 export function SchedulesPage() {
-  const token = useAuthStore((s) => s.accessToken)
   const { show } = useToast()
-  const [schedules, setSchedules] = useState<ScheduleOut[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
   const [showForm, setShowForm] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [editTarget, setEditTarget] = useState<ScheduleOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduleOut | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [editSubmitting, setEditSubmitting] = useState(false)
 
-  async function loadSchedules(authToken: string) {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await listSchedules(authToken)
-      setSchedules(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat jadwal')
-    } finally {
-      setLoading(false)
-    }
+  const { data: paginatedSchedules, isLoading, error } = useSchedules({ page, limit })
+  const schedules = paginatedSchedules?.items ?? []
+  const total = paginatedSchedules?.total ?? 0
+  const pages = paginatedSchedules?.pages ?? 0
+
+  const createMutation = useCreateSchedule(() => {
+    setShowForm(false)
+    show('Jadwal berhasil disimpan', 'success')
+  })
+
+  const updateMutation = useUpdateSchedule(() => {
+    setEditTarget(null)
+    show('Jadwal berhasil diperbarui', 'success')
+  })
+
+  const deleteMutation = useDeleteSchedule()
+  const restoreMutation = useRestoreSchedule()
+
+  function handleCreate(payload: { name: string; rules: ScheduleRules; grace_minutes: number }) {
+    createMutation.mutate(payload, {
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal menyimpan jadwal', 'error')
+      },
+    })
   }
 
-  useEffect(() => {
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    void loadSchedules(token)
-  }, [token])
-
-  async function handleCreate(payload: { name: string; rules: ScheduleRules; grace_minutes: number }) {
-    if (!token) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await createSchedule(token, payload)
-      setShowForm(false)
-      show('Jadwal berhasil disimpan', 'success')
-      await loadSchedules(token)
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal menyimpan jadwal', 'error')
-    } finally {
-      setSubmitting(false)
-    }
+  function handleEdit(payload: Partial<ScheduleCreate>) {
+    if (!editTarget) return
+    updateMutation.mutate({ scheduleId: editTarget.id, payload }, {
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal memperbarui jadwal', 'error')
+      },
+    })
   }
 
-  async function handleEdit(payload: Partial<ScheduleCreate>) {
-    if (!token || !editTarget) return
-    setEditSubmitting(true)
-    try {
-      const updated = await updateSchedule(token, editTarget.id, payload)
-      setSchedules((prev) => prev.map((s) => s.id === updated.id ? updated : s))
-      setEditTarget(null)
-      show('Jadwal berhasil diperbarui', 'success')
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal memperbarui jadwal', 'error')
-    } finally {
-      setEditSubmitting(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!token || !deleteTarget) return
-    setDeleting(true)
-    try {
-      await deleteSchedule(token, deleteTarget.id)
-      setSchedules((prev) => prev.filter((s) => s.id !== deleteTarget.id))
-      setDeleteTarget(null)
-      show('Jadwal berhasil dihapus', 'success')
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal menghapus jadwal', 'error')
-    } finally {
-      setDeleting(false)
-    }
+  function handleDelete() {
+    if (!deleteTarget) return
+    const deletedSchedule = { ...deleteTarget }
+    deleteMutation.mutate(deletedSchedule.id, {
+      onSuccess: () => {
+        setDeleteTarget(null)
+        show(`${deletedSchedule.name} berhasil dihapus`, 'success', {
+          label: 'Undo',
+          onClick: () => {
+            restoreMutation.mutate(deletedSchedule.id, {
+              onError: () => {
+                show('Gagal membatalkan penghapusan', 'error')
+              },
+            })
+          },
+        })
+      },
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal menghapus jadwal', 'error')
+      },
+    })
   }
 
   return (
@@ -280,17 +268,17 @@ export function SchedulesPage() {
         )}
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error.message}</div>}
 
       {showForm && (
         <ScheduleForm
           onSubmit={handleCreate}
           onCancel={() => setShowForm(false)}
-          submitting={submitting}
+          submitting={createMutation.isPending}
         />
       )}
 
-      {loading && (
+      {isLoading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3].map((i) => (
             <div
@@ -307,19 +295,22 @@ export function SchedulesPage() {
         </div>
       )}
 
-      {!loading && schedules.length === 0 && (
+      {!isLoading && schedules.length === 0 && (
         <div className="data-card">
-          <div className="empty-state">
-            <CalendarDays size={40} color="var(--color-text-muted)" style={{ marginBottom: 12 }} />
-            <p style={{ margin: 0, fontWeight: 500 }}>Belum ada jadwal</p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-              Klik "Tambah Jadwal" di atas untuk membuat jadwal kerja pertama.
-            </p>
-          </div>
+          <EmptyState
+            icon="calendar"
+            title="Belum ada jadwal"
+            description="Buat jadwal kehadiran default untuk tenant Anda"
+            action={
+              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                Tambah Jadwal
+              </button>
+            }
+          />
         </div>
       )}
 
-      {!loading && schedules.length > 0 && (
+      {!isLoading && schedules.length > 0 && (
         <div>
           {schedules.map((s) => (
             <div key={s.id} className="data-card schedule-row">
@@ -351,15 +342,16 @@ export function SchedulesPage() {
               </div>
 
               <div className="schedule-row-actions">
-                <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => setEditTarget(s)}>
+                <button className="btn btn-ghost btn-sm" title="Edit" aria-label="Ubah jadwal" onClick={() => setEditTarget(s)}>
                   <Edit2 size={16} />
                 </button>
-                <button className="btn btn-danger btn-sm" title="Hapus" onClick={() => setDeleteTarget(s)}>
+                <button className="btn btn-danger btn-sm" title="Hapus" aria-label="Hapus jadwal" onClick={() => setDeleteTarget(s)}>
                   <Trash2 size={16} />
                 </button>
               </div>
             </div>
           ))}
+          <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         </div>
       )}
 
@@ -368,7 +360,7 @@ export function SchedulesPage() {
           schedule={editTarget}
           onSubmit={handleEdit}
           onClose={() => setEditTarget(null)}
-          submitting={editSubmitting}
+          submitting={updateMutation.isPending}
         />
       )}
       {deleteTarget && (
@@ -376,7 +368,7 @@ export function SchedulesPage() {
           schedule={deleteTarget}
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
-          loading={deleting}
+          loading={deleteMutation.isPending}
         />
       )}
     </div>

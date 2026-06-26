@@ -37,6 +37,9 @@ jobs:
       # App URL — used by pytest (netra_app role, RLS enforced)
       DATABASE_URL: postgresql+asyncpg://netra_app:netra_app@localhost:5432/netra
       SECRET_KEY: ci_only_secret_key_32_chars_long_xx
+      # CI Postgres is an ephemeral throwaway service container, so allow the
+      # test suite to TRUNCATE it. Local dev DBs are protected by the same guard.
+      NETRA_ALLOW_TEST_DB_WIPE: "1"
 
     steps:
       - name: Checkout

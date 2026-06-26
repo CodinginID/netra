@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react'
-import { checkUsernameApi, loginApi } from '@/api/authApi'
+import { Eye, EyeOff, Lock, Mail, ArrowRight, ArrowLeft } from 'lucide-react'
+import { checkEmailApi, loginApi } from '@/api/authApi'
 import { useAuthStore } from '@/store/authStore'
 import '@/styles/auth.css'
 
@@ -13,13 +13,12 @@ export function LoginPage() {
   const setTokens = useAuthStore((s) => s.setTokens)
 
   const [step, setStep] = useState<1 | 2>(1)
-  const [username, setUsername] = useState('')
-  const [tenantSlug, setTenantSlug] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanState, setScanState] = useState<ScanState>('idle')
-  const [checkingUsername, setCheckingUsername] = useState(false)
+  const [checkingEmail, setCheckingEmail] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
   const from = (location.state as { from?: Location })?.from?.pathname ?? '/'
@@ -27,22 +26,23 @@ export function LoginPage() {
 
   async function handleContinue(e: FormEvent) {
     e.preventDefault()
-    if (!username.trim()) return
+    const value = email.trim().toLowerCase()
+    if (!value) return
     setError(null)
-    setCheckingUsername(true)
+    setCheckingEmail(true)
     try {
-      const exists = await checkUsernameApi(username.trim())
+      const exists = await checkEmailApi(value)
       if (!exists) {
-        setError('Username not found. Please check and try again.')
+        setError('Email not found. Please check and try again.')
         cardRef.current?.classList.add('shake')
         setTimeout(() => cardRef.current?.classList.remove('shake'), 600)
         return
       }
       setStep(2)
     } catch {
-      setError('Could not verify username. Please try again.')
+      setError('Could not verify email. Please try again.')
     } finally {
-      setCheckingUsername(false)
+      setCheckingEmail(false)
     }
   }
 
@@ -58,7 +58,7 @@ export function LoginPage() {
     setScanState('scanning')
 
     try {
-      const tokens = await loginApi({ username: username.trim(), password, tenant_slug: tenantSlug.trim() || undefined })
+      const tokens = await loginApi({ email: email.trim().toLowerCase(), password })
       setScanState('verified')
       await new Promise((r) => setTimeout(r, 900))
       setTokens(tokens.access_token, tokens.refresh_token, tokens.role)
@@ -97,50 +97,28 @@ export function LoginPage() {
           {step === 1 ? (
             <form onSubmit={handleContinue} className="auth-form" key="step-1">
               <div className="form-group">
-                <label htmlFor="username">Username</label>
+                <label htmlFor="email">Email</label>
                 <div className="input-icon-wrapper">
-                  <User className="input-icon" size={18} />
+                  <Mail className="input-icon" size={18} />
                   <input
-                    id="username"
-                    type="text"
+                    id="email"
+                    type="email"
                     className="input-with-icon"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
-                    autoComplete="username"
-                    placeholder="Enter your username"
+                    autoComplete="email"
+                    placeholder="you@organization.com"
                     autoFocus
-                    disabled={checkingUsername}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="tenant-slug">
-                  Organization Slug
-                  <span style={{ fontWeight: 400, color: 'var(--color-text-muted, #888)', marginLeft: 6, fontSize: '0.75rem' }}>
-                    optional
-                  </span>
-                </label>
-                <div className="input-icon-wrapper">
-                  <Lock className="input-icon" size={18} style={{ opacity: 0.45 }} />
-                  <input
-                    id="tenant-slug"
-                    type="text"
-                    className="input-with-icon"
-                    value={tenantSlug}
-                    onChange={(e) => setTenantSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    autoComplete="organization"
-                    placeholder="your-org (leave blank for admin)"
-                    disabled={checkingUsername}
+                    disabled={checkingEmail}
                   />
                 </div>
               </div>
 
               {error && <p className="auth-error">{error}</p>}
 
-              <button type="submit" className="btn-primary" disabled={checkingUsername}>
-                {checkingUsername
+              <button type="submit" className="btn-primary" disabled={checkingEmail}>
+                {checkingEmail
                   ? <><span className="btn-spinner" aria-hidden /> Checking...</>
                   : <>Continue <ArrowRight size={18} /></>}
               </button>
@@ -148,8 +126,8 @@ export function LoginPage() {
           ) : (
             <form onSubmit={handleSignIn} className="auth-form auth-step-2" key="step-2">
               <button type="button" className="auth-username-chip" onClick={handleBack}>
-                <User size={14} />
-                <span>{username}</span>
+                <Mail size={14} />
+                <span>{email}</span>
                 <ArrowLeft size={13} />
               </button>
 
@@ -173,7 +151,7 @@ export function LoginPage() {
                     type="button"
                     className="input-trailing-btn"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
