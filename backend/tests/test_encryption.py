@@ -19,21 +19,19 @@ async def _token(client: AsyncClient, **payload) -> str:
 
 
 async def _admin_headers(client: AsyncClient) -> str:
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     await client.post(
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
             "name": "Sekolah Enc",
             "slug": "sekolah-enc",
-            "admin_username": "admin",
+            "admin_email": "admin@sekolah-enc.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin Enc",
         },
     )
-    admin = await _token(
-        client, username="admin", password="adminpass123", tenant_slug="sekolah-enc"
-    )
+    admin = await _token(client, email="admin@sekolah-enc.app", password="adminpass123")
     return f"Bearer {admin}"
 
 

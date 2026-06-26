@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models import (
     AttendanceStatus,
@@ -29,12 +29,26 @@ class Envelope(BaseModel, Generic[T]):
 
 
 # --------------------------------------------------------------------------- #
+# Pagination
+# --------------------------------------------------------------------------- #
+class PageData(BaseModel, Generic[T]):
+    """Paginated response data: {"items": [...], "total": N, "page": 1, "limit": 20, "pages": 5}."""
+
+    items: list[T]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+# --------------------------------------------------------------------------- #
 # Auth
 # --------------------------------------------------------------------------- #
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1)
+    # Email is the global login identifier for staff. tenant_id is derived from the
+    # matched user and baked into the JWT — no slug needed.
+    email: EmailStr
     password: str = Field(min_length=1)
-    tenant_slug: str | None = None  # required for tenant users; omit for super admin
 
 
 class TokenResponse(BaseModel):
@@ -44,12 +58,21 @@ class TokenResponse(BaseModel):
     role: Role
 
 
-class UsernameCheckRequest(BaseModel):
-    username: str = Field(min_length=1)
+class EmailCheckRequest(BaseModel):
+    email: EmailStr
 
 
-class UsernameCheckResponse(BaseModel):
+class EmailCheckResponse(BaseModel):
     exists: bool
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
 
 
 # --------------------------------------------------------------------------- #
@@ -58,9 +81,11 @@ class UsernameCheckResponse(BaseModel):
 class TenantCreate(BaseModel):
     name: str = Field(min_length=2)
     slug: str = Field(min_length=2, pattern=r"^[a-z0-9-]+$")
-    admin_username: str = Field(min_length=3)
+    # The client's tenant admin logs in by email (global identifier).
+    admin_email: EmailStr
     admin_password: str = Field(min_length=8)
     admin_full_name: str = Field(min_length=2)
+    admin_username: str | None = Field(default=None, min_length=3)  # optional display handle
     config: "TenantConfig | None" = None
 
 
@@ -73,6 +98,7 @@ class TenantOut(BaseModel):
     status: TenantStatus
     config: dict
     created_at: datetime
+    onboarding_completed_at: datetime | None = None
 
 
 # --- Tenant configuration space (TENANT-2): branding, attendance, kiosk prefs ---
@@ -125,6 +151,25 @@ class UserCreate(BaseModel):
     email: EmailStr | None = None
     external_id: str | None = None  # NIS/NIM/NIK
     password: str | None = Field(default=None, min_length=8)
+
+    @model_validator(mode="after")
+    def _check_identity_by_role(self) -> UserCreate:
+        """Enforce the identity model:
+
+        - Staff (super_admin / tenant_admin / supervisor) log in by email, so
+          email + password are required.
+        - End users don't log in; they are matched to client systems by
+          external_id (NIS/NIM/NIK), so external_id is required.
+        """
+        staff = {Role.super_admin, Role.tenant_admin, Role.supervisor}
+        if self.role in staff:
+            if not self.email:
+                raise ValueError("email is required for staff accounts")
+            if not self.password:
+                raise ValueError("password is required for staff accounts")
+        elif self.role == Role.end_user and not self.external_id:
+            raise ValueError("external_id (NIS/NIM/NIK) is required for end users")
+        return self
 
 
 class UserUpdate(BaseModel):

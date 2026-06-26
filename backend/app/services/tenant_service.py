@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
 
     admin = User(
         tenant_id=tenant.id,
+        email=payload.admin_email,
         username=payload.admin_username,
         full_name=payload.admin_full_name,
         role=Role.tenant_admin,
@@ -34,13 +35,47 @@ async def create_tenant(session: AsyncSession, payload: TenantCreate) -> Tenant:
         is_active=True,
     )
     session.add(admin)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise TenantError(f"Email '{payload.admin_email}' is already registered") from exc
     return tenant
 
 
-async def list_tenants(session: AsyncSession) -> list[Tenant]:
-    result = await session.execute(select(Tenant).order_by(Tenant.created_at.desc()))
-    return list(result.scalars())
+async def list_tenants(
+    session: AsyncSession,
+    *,
+    page: int = 1,
+    limit: int = 20,
+    search: str | None = None,
+) -> dict:
+    """List tenants with pagination and optional search.
+
+    Returns a dict with keys: items, total, page, limit, pages.
+    """
+    base = select(Tenant).where(Tenant.deleted_at.is_(None))
+    if search:
+        search_pattern = f"%{search}%"
+        base = base.where(
+            or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern))
+        )
+
+    count_stmt = select(func.count(Tenant.id)).select_from(Tenant).where(Tenant.deleted_at.is_(None))
+    if search:
+        search_pattern = f"%{search}%"
+        count_stmt = count_stmt.where(
+            or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern))
+        )
+    total = (await session.execute(count_stmt)).scalar() or 0
+
+    offset = (page - 1) * limit
+    items_result = await session.execute(
+        base.order_by(Tenant.created_at.desc()).offset(offset).limit(limit)
+    )
+    items = list(items_result.scalars())
+    pages = (total + limit - 1) // limit if total > 0 else 0
+
+    return {"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
 
 
 async def get_tenant(session: AsyncSession, tenant_id: str) -> Tenant | None:

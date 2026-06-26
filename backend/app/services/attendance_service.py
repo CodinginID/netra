@@ -15,7 +15,11 @@ from datetime import datetime, time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.models import AttendanceRecord, AttendanceStatus, AttendanceType, Schedule
+from app.websocket import manager
+
+log = get_logger("netra.attendance")
 
 
 class GeofenceError(Exception):
@@ -129,6 +133,31 @@ def compute_status(
     )
 
 
+def _compute_late_minutes(
+    schedule: Schedule | None,
+    occurred_at: datetime,
+) -> int:
+    """Return how many minutes past the scheduled start the punch occurred."""
+    if schedule is None:
+        return 0
+    rules = schedule.rules or {}
+    if rules.get("type") == "session":
+        sessions = rules.get("sessions") or []
+        if not sessions:
+            return 0
+        first_start = _parse_hhmm(sessions[0].get("start"))
+        if first_start is None:
+            return 0
+        cutoff = first_start.hour * 60 + first_start.minute
+    else:
+        start = _parse_hhmm(rules.get("workday_start"))
+        if start is None:
+            return 0
+        cutoff = start.hour * 60 + start.minute
+    actual = occurred_at.hour * 60 + occurred_at.minute
+    return max(0, actual - cutoff)
+
+
 async def record(
     session: AsyncSession,
     tenant_id: str,
@@ -154,6 +183,43 @@ async def record(
     )
     session.add(rec)
     await session.flush()
+
+    # Publish WebSocket event (best-effort — must never break attendance recording)
+    try:
+        event = {
+            "type": "attendance.recorded",
+            "tenant_id": tenant_id,
+            "timestamp": rec.occurred_at.isoformat(),
+            "data": {
+                "user_id": user_id,
+                "att_type": att_type.value,
+                "status": status.value,
+                "occurred_at": rec.occurred_at.isoformat(),
+                "liveness_score": liveness_score,
+                "device_id": device_id,
+            },
+        }
+        await manager.broadcast(f"tenant:{tenant_id}", event)
+
+        if status == AttendanceStatus.late:
+            late_event = {
+                "type": "attendance.late",
+                "tenant_id": tenant_id,
+                "timestamp": rec.occurred_at.isoformat(),
+                "data": {
+                    "user_id": user_id,
+                    "att_type": att_type.value,
+                    "status": status.value,
+                    "occurred_at": rec.occurred_at.isoformat(),
+                    "liveness_score": liveness_score,
+                    "device_id": device_id,
+                    "late_minutes": _compute_late_minutes(schedule, occurred_at),
+                },
+            }
+            await manager.broadcast(f"tenant:{tenant_id}", late_event)
+    except Exception:
+        log.exception("attendance_event_publish_failed")
+
     return rec
 
 

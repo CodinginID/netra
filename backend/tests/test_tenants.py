@@ -18,7 +18,7 @@ async def _token(client: AsyncClient, **payload) -> str:
 
 @pytest.mark.asyncio
 async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     oheaders = {"Authorization": f"Bearer {owner}"}
 
     reg = await client.post(
@@ -27,7 +27,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
         json={
             "name": "Sekolah Susp",
             "slug": "sekolah-susp",
-            "admin_username": "admin",
+            "admin_email": "admin@sekolah-susp.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin Susp",
         },
@@ -39,7 +39,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
     assert (
         await client.post(
             "/api/v1/auth/login",
-            json={"username": "admin", "password": "adminpass123", "tenant_slug": "sekolah-susp"},
+            json={"email": "admin@sekolah-susp.app", "password": "adminpass123"},
         )
     ).status_code == 200
 
@@ -58,7 +58,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
     # Suspended tenant's user can no longer log in.
     blocked = await client.post(
         "/api/v1/auth/login",
-        json={"username": "admin", "password": "adminpass123", "tenant_slug": "sekolah-susp"},
+        json={"email": "admin@sekolah-susp.app", "password": "adminpass123"},
     )
     assert blocked.status_code == 401
     assert blocked.json()["error"] == "Tenant is suspended"
@@ -76,7 +76,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
     assert (
         await client.post(
             "/api/v1/auth/login",
-            json={"username": "admin", "password": "adminpass123", "tenant_slug": "sekolah-susp"},
+            json={"email": "admin@sekolah-susp.app", "password": "adminpass123"},
         )
     ).status_code == 200
 
@@ -84,14 +84,14 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
 @pytest.mark.asyncio
 async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin):
     """TENANT-2: tenant admin reads + updates own config space."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     reg = await client.post(
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
             "name": "Sekolah Cfg",
             "slug": "sekolah-cfg",
-            "admin_username": "cfgadmin",
+            "admin_email": "cfgadmin@sekolah-cfg.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Cfg Admin",
         },
@@ -99,7 +99,7 @@ async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin)
     assert reg.status_code == 201, reg.text
 
     admin = await _token(
-        client, username="cfgadmin", password="adminpass123", tenant_slug="sekolah-cfg"
+        client, email="cfgadmin@sekolah-cfg.app", password="adminpass123"
     )
     aheaders = {"Authorization": f"Bearer {admin}"}
 
@@ -138,9 +138,9 @@ async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin)
 
 
 @pytest.mark.asyncio
-async def test_end_user_cannot_update_config(client: AsyncClient, super_admin):
-    """RBAC: a non-admin tenant user is forbidden from the config endpoints."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+async def test_non_admin_cannot_update_config(client: AsyncClient, super_admin):
+    """RBAC: a non-admin staff user (supervisor) is forbidden from config endpoints."""
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     oheaders = {"Authorization": f"Bearer {owner}"}
     reg = await client.post(
         "/api/v1/tenants",
@@ -148,30 +148,28 @@ async def test_end_user_cannot_update_config(client: AsyncClient, super_admin):
         json={
             "name": "Sekolah RBAC",
             "slug": "sekolah-rbac",
-            "admin_username": "rbacadmin",
+            "admin_email": "rbacadmin@sekolah-rbac.app",
             "admin_password": "adminpass123",
             "admin_full_name": "RBAC Admin",
         },
     )
     assert reg.status_code == 201, reg.text
-    admin = await _token(
-        client, username="rbacadmin", password="adminpass123", tenant_slug="sekolah-rbac"
-    )
+    admin = await _token(client, email="rbacadmin@sekolah-rbac.app", password="adminpass123")
     cu = await client.post(
         "/api/v1/users",
         headers={"Authorization": f"Bearer {admin}"},
         json={
-            "full_name": "Budi",
-            "role": "end_user",
-            "username": "budi",
+            "full_name": "Budi Supervisor",
+            "role": "supervisor",
+            "email": "budi@sekolah-rbac.app",
             "password": "budipass123",
         },
     )
     assert cu.status_code == 201, cu.text
-    eu = await _token(client, username="budi", password="budipass123", tenant_slug="sekolah-rbac")
+    sup = await _token(client, email="budi@sekolah-rbac.app", password="budipass123")
     resp = await client.put(
         "/api/v1/tenants/me/config",
-        headers={"Authorization": f"Bearer {eu}"},
+        headers={"Authorization": f"Bearer {sup}"},
         json={"branding": {"display_name": "hack"}},
     )
     assert resp.status_code == 403

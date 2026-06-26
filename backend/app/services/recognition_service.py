@@ -13,8 +13,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.models import Consent, FaceEmbedding, User
 from app.services.face import FaceEngine, get_face_engine
+
+log = get_logger("netra.recognition")
 
 
 class RecognitionError(Exception):
@@ -59,6 +62,7 @@ async def enroll(
     session.add(embedding)
     user.enrolled = True
     await session.flush()
+    log.info("enroll_stored", user_id=user_id, tenant_id=tenant_id, dim=len(vector))
     return embedding
 
 
@@ -115,10 +119,22 @@ async def identify(
         await session.execute(select(FaceEmbedding.user_id, distance).order_by(distance).limit(1))
     ).first()
     if row is None:
+        # No enrolled faces visible to this (tenant-scoped) session at all.
+        log.info("identify_no_candidates", threshold=min_sim)
         return None
 
     user_id, dist = row
     similarity = 1.0 - float(dist)
-    if similarity < min_sim:
+    accepted = similarity >= min_sim
+    # Log the best candidate + its similarity even on rejection — essential for
+    # tuning the threshold and diagnosing "face not recognized".
+    log.info(
+        "identify_result",
+        best_user_id=user_id,
+        similarity=round(similarity, 4),
+        threshold=min_sim,
+        accepted=accepted,
+    )
+    if not accepted:
         return None
     return Match(user_id=user_id, similarity=similarity)

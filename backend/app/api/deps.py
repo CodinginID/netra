@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,19 @@ from app.core.logging import tenant_id_ctx
 from app.core.security import JWTError, decode_token, hash_device_token
 from app.db.session import SessionFactory, _set_tenant
 from app.models import Device, DeviceStatus, Role
+
+# Security schemes — registered with OpenAPI so Swagger UI renders an "Authorize"
+# button. auto_error=False lets us return our own 401 (instead of 403) and keep
+# the WWW-Authenticate header.
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    description="Paste the JWT access token from POST /auth/login (without the 'Bearer ' prefix).",
+)
+device_token_scheme = APIKeyHeader(
+    name="X-Device-Token",
+    auto_error=False,
+    description="Kiosk device token returned once when registering a device.",
+)
 
 
 @dataclass
@@ -30,19 +44,17 @@ class Principal:
         return self.role == Role.super_admin
 
 
-def _parse_bearer(authorization: str | None) -> str:
-    if not authorization or not authorization.lower().startswith("bearer "):
+async def get_principal(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> Principal:
+    """Decode JWT into a Principal. Raises 401 on any failure."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return authorization.split(" ", 1)[1].strip()
-
-
-async def get_principal(authorization: str | None = Header(default=None)) -> Principal:
-    """Decode JWT into a Principal. Raises 401 on any failure."""
-    token = _parse_bearer(authorization)
+    token = credentials.credentials
     try:
         claims = decode_token(token)
     except JWTError as exc:  # noqa: F841
@@ -131,7 +143,7 @@ require_staff = require_roles(Role.super_admin, Role.tenant_admin, Role.supervis
 
 
 async def get_device_principal(
-    x_device_token: str | None = Header(default=None),
+    x_device_token: str | None = Depends(device_token_scheme),
 ) -> Principal:
     """Authenticate a kiosk device via the ``X-Device-Token`` header.
 

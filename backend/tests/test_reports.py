@@ -32,14 +32,14 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         json={
             "name": f"Sekolah {slug}",
             "slug": slug,
-            "admin_username": f"admin-{slug}",
+            "admin_email": f"admin-{slug}@netra.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin",
         },
     )
     assert resp.status_code == 201, resp.text
     admin = await _token(
-        client, username=f"admin-{slug}", password="adminpass123", tenant_slug=slug
+        client, email=f"admin-{slug}@netra.app", password="adminpass123"
     )
     return {"Authorization": f"Bearer {admin}"}
 
@@ -96,7 +96,7 @@ async def _seed_record(
 
 @pytest.mark.asyncio
 async def test_daily_and_monthly_recap(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rep-a")
     tid = await _tenant_id("rep-a")
     alice = await _seed_user(tid, "Alice", "alice")
@@ -175,7 +175,7 @@ async def test_daily_and_monthly_recap(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_bad_date_params_return_422(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rep-bad")
 
     assert (
@@ -192,7 +192,7 @@ async def test_bad_date_params_return_422(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_csv_export(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rep-csv")
     tid = await _tenant_id("rep-csv")
     alice = await _seed_user(tid, "Alice", "alice")
@@ -232,7 +232,7 @@ async def test_csv_export(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_xlsx_export(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rep-xlsx")
     tid = await _tenant_id("rep-xlsx")
     alice = await _seed_user(tid, "Alice", "alice")
@@ -277,7 +277,7 @@ async def test_xlsx_export(client: AsyncClient, super_admin):
 @pytest.mark.asyncio
 async def test_reports_are_tenant_isolated(client: AsyncClient, super_admin):
     """Tenant B must never see tenant A's attendance in any report (RLS)."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     ohdr = {"Authorization": f"Bearer {owner}"}
 
     a_hdr = await _onboard(client, ohdr, "iso-rep-a")

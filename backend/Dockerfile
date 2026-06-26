@@ -10,9 +10,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install production deps including the ML recognition stack (onnxruntime, opencv, insightface).
+# These are now required dependencies (not optional) — uv sync installs them automatically.
 # insightface pulls in opencv-python (GUI, needs libxcb) as a transitive dep — uninstall it
 # immediately after sync so only opencv-python-headless (no X11 deps) remains.
-RUN uv sync --frozen --no-dev --no-install-project --extra recognition \
+RUN uv sync --frozen --no-dev --no-install-project \
  && uv pip uninstall --python .venv/bin/python opencv-python opencv-python-headless \
  && uv pip install --python .venv/bin/python "opencv-python-headless==4.13.0.92"
 

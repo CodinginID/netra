@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -235,8 +235,8 @@ async def auto_attend(
     session: AsyncSession = Depends(get_device_db),
 ) -> Envelope[AttendanceResult]:
     """Touchless attendance: auto-determines check-in vs check-out from today's DB history."""
-    log.debug(
-        "auto_attend_request",
+    log.info(
+        "auto_attend_incoming",
         image_filename=image.filename,
         image_content_type=image.content_type,
         occurred_at=str(occurred_at) if occurred_at else None,
@@ -252,13 +252,24 @@ async def auto_attend(
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
 
+    log.info(
+        "auto_attend_image_received",
+        image_bytes_len=len(image_bytes),
+        image_bytes_preview=image_bytes[:20].hex() if image_bytes else "empty",
+        liveness_engine=settings.liveness_engine,
+        require_liveness=cfg.kiosk.require_liveness,
+        liveness_threshold=settings.liveness_threshold,
+    )
+
     # 1. Liveness — only scored when the tenant requires it
     liveness = 0.0
     if cfg.kiosk.require_liveness:
         try:
             liveness = get_liveness_engine().score(image_bytes)
         except LivenessError as exc:
+            log.error("auto_attend_liveness_error", error=str(exc), error_type=type(exc).__name__)
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        log.info("auto_attend_liveness_score", score=liveness)
         if liveness < settings.liveness_threshold:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -333,11 +344,27 @@ async def auto_attend(
     )
 
 
-@router.get("", response_model=Envelope[list[AttendanceOut]])
+@router.get("", response_model=Envelope[dict])
 async def list_attendance(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=1000),
     user_id: str | None = None,
     _: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
-) -> Envelope[list[AttendanceOut]]:
-    records = await attendance_service.list_records(session, user_id=user_id)
-    return Envelope(data=[AttendanceOut.model_validate(r) for r in records])
+) -> Envelope[dict]:
+    base = select(AttendanceRecord)
+    if user_id is not None:
+        base = base.where(AttendanceRecord.user_id == user_id)
+
+    count_stmt = select(func.count(AttendanceRecord.id))
+    if user_id is not None:
+        count_stmt = count_stmt.where(AttendanceRecord.user_id == user_id)
+    total = (await session.execute(count_stmt)).scalar() or 0
+
+    offset = (page - 1) * limit
+    items_result = await session.execute(
+        base.order_by(AttendanceRecord.occurred_at.desc()).offset(offset).limit(limit)
+    )
+    items = [AttendanceOut.model_validate(r) for r in items_result.scalars()]
+    pages = (total + limit - 1) // limit if total > 0 else 0
+    return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})

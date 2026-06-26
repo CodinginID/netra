@@ -5,13 +5,19 @@ Requires prior biometric consent (UU PDP); enforced in the service layer.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_db, get_principal, require_staff
+from app.core.logging import get_logger
 from app.schemas import EnrollmentResult, Envelope
 from app.services import audit_service, recognition_service
 from app.services.face import NoFaceDetectedError
+from app.websocket import manager
+
+log = get_logger("netra.enrollment")
 
 router = APIRouter(prefix="/enrollment", tags=["enrollment"])
 
@@ -49,6 +55,24 @@ async def self_enroll_face(
         tenant_id=principal.tenant_id,
         detail={"user_id": user_id, "embedding_id": embedding.id},
     )
+
+    # Publish WebSocket event (best-effort)
+    try:
+        await manager.broadcast(
+            f"tenant:{principal.tenant_id}",
+            {
+                "type": "user.enrolled",
+                "tenant_id": principal.tenant_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "user_id": user_id,
+                    "angles_count": 1,
+                },
+            },
+        )
+    except Exception:
+        log.exception("enrollment_event_publish_failed")
+
     return Envelope(
         data=EnrollmentResult(user_id=user_id, embedding_id=embedding.id, enrolled=True)
     )
@@ -100,6 +124,24 @@ async def self_enroll_multi_angle(
         tenant_id=principal.tenant_id,
         detail={"user_id": user_id, "angle_count": len(embeddings)},
     )
+
+    # Publish WebSocket event (best-effort)
+    try:
+        await manager.broadcast(
+            f"tenant:{principal.tenant_id}",
+            {
+                "type": "user.enrolled",
+                "tenant_id": principal.tenant_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "user_id": user_id,
+                    "angles_count": len(embeddings),
+                },
+            },
+        )
+    except Exception:
+        log.exception("enrollment_event_publish_failed")
+
     return Envelope(
         data=EnrollmentResult(
             user_id=user_id,
@@ -148,6 +190,24 @@ async def enroll_face_multi(
         tenant_id=principal.tenant_id,
         detail={"user_id": user_id, "angle_count": len(embeddings)},
     )
+
+    # Publish WebSocket event (best-effort)
+    try:
+        await manager.broadcast(
+            f"tenant:{principal.tenant_id}",
+            {
+                "type": "user.enrolled",
+                "tenant_id": principal.tenant_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "user_id": user_id,
+                    "angles_count": len(embeddings),
+                },
+            },
+        )
+    except Exception:
+        log.exception("enrollment_event_publish_failed")
+
     return Envelope(
         data=EnrollmentResult(user_id=user_id, embedding_id=embeddings[0].id, enrolled=True)
     )
@@ -185,6 +245,24 @@ async def enroll_face(
         tenant_id=principal.tenant_id,
         detail={"user_id": user_id, "embedding_id": embedding.id},
     )
+
+    # Publish WebSocket event (best-effort)
+    try:
+        await manager.broadcast(
+            f"tenant:{principal.tenant_id}",
+            {
+                "type": "user.enrolled",
+                "tenant_id": principal.tenant_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "user_id": user_id,
+                    "angles_count": 1,
+                },
+            },
+        )
+    except Exception:
+        log.exception("enrollment_event_publish_failed")
+
     return Envelope(
         data=EnrollmentResult(user_id=user_id, embedding_id=embedding.id, enrolled=True)
     )

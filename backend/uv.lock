@@ -1048,10 +1048,14 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "insightface" },
     { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "opencv-python-headless" },
     { name = "openpyxl" },
     { name = "passlib", extra = ["argon2"] },
     { name = "pgvector" },
+    { name = "pillow" },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
     { name = "python-jose", extra = ["cryptography"] },
@@ -1059,14 +1063,7 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-recognition = [
-    { name = "insightface" },
-    { name = "onnxruntime" },
-    { name = "opencv-python-headless" },
-    { name = "pillow" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -1088,14 +1085,14 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "insightface", marker = "extra == 'recognition'", specifier = ">=0.7.3" },
+    { name = "insightface", specifier = ">=0.7.3" },
     { name = "numpy", specifier = ">=2.0" },
-    { name = "onnxruntime", marker = "extra == 'recognition'", specifier = ">=1.19" },
-    { name = "opencv-python-headless", marker = "extra == 'recognition'", specifier = ">=4.10" },
+    { name = "onnxruntime", specifier = ">=1.19" },
+    { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "passlib", extras = ["argon2"], specifier = ">=1.7.4" },
     { name = "pgvector", specifier = ">=0.3.6" },
-    { name = "pillow", marker = "extra == 'recognition'", specifier = ">=10.4" },
+    { name = "pillow", specifier = ">=10.4" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
@@ -1103,8 +1100,8 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "websockets", specifier = ">=14.0" },
 ]
-provides-extras = ["recognition"]
 
 [package.metadata.requires-dev]
 dev = [

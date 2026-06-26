@@ -76,6 +76,8 @@ class Tenant(Base, TimestampMixin):
     )
     # branding, attendance defaults, kiosk prefs, etc.
     config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     users: Mapped[list[User]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
@@ -90,6 +92,10 @@ class User(Base, TimestampMixin):
         # (non-deterministic) external_id ciphertext. See app/db/types.py.
         UniqueConstraint("tenant_id", "external_id_hash", name="uq_user_tenant_external"),
         UniqueConstraint("tenant_id", "username", name="uq_user_tenant_username"),
+        # Email is the GLOBAL login identifier for staff (super_admin / tenant_admin
+        # / supervisor). Stored lowercased so this plain unique is case-insensitive.
+        # NULL is allowed for end_users (multiple NULLs don't conflict in Postgres).
+        UniqueConstraint("email", name="uq_user_email"),
         Index("ix_users_tenant", "tenant_id"),
     )
 
@@ -115,6 +121,7 @@ class User(Base, TimestampMixin):
     sso_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     enrolled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
     embeddings: Mapped[list[FaceEmbedding]] = relationship(
@@ -126,6 +133,14 @@ class User(Base, TimestampMixin):
         """Keep the deterministic hash column in sync with external_id (OPS-5)."""
         self.external_id_hash = external_id_digest(value)
         return value
+
+    @validates("email")
+    def _normalize_email(self, _key: str, value: str | None) -> str | None:
+        """Lowercase + trim email so the global unique constraint is case-insensitive."""
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        return normalized or None
 
 
 class FaceEmbedding(Base, TimestampMixin):
@@ -166,6 +181,7 @@ class Schedule(Base, TimestampMixin):
     grace_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     geofence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AttendanceRecord(Base, TimestampMixin):
@@ -214,6 +230,7 @@ class Device(Base, TimestampMixin):
         Enum(DeviceStatus, name="device_status"), default=DeviceStatus.active, nullable=False
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SSOConnection(Base, TimestampMixin):
