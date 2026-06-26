@@ -9,12 +9,15 @@ import {
 } from '@/api/kioskApi'
 import { useToast } from '@/components/Toast'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
+import { useVoiceGuide } from '@/hooks/useVoiceGuide'
+import { useWebSocket } from '@/hooks/useWebSocket'
 import '@/styles/kiosk.css'
 
 type CameraState = 'idle' | 'active' | 'denied' | 'unavailable'
 type KioskStatus = 'idle' | 'processing' | 'success' | 'error'
 
 const RESET_DELAY_MS = 5500
+const SCAN_INTERVAL_MS = 2500
 
 interface ResultState {
   status: KioskStatus
@@ -52,6 +55,24 @@ export function KioskPage() {
   const [showSetup, setShowSetup] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [savedToken, setSavedToken] = useState('')
+  const [revokedRemotely, setRevokedRemotely] = useState(false)
+
+  // WebSocket: subscribe to device channel for remote commands
+  const { on: wsOn } = useWebSocket(null, { deviceToken: savedToken || null })
+  useEffect(() => {
+    if (!savedToken) return
+    return wsOn('device.revoked', () => {
+      setRevokedRemotely(true)
+      if (autoScanIntervalRef.current) {
+        clearInterval(autoScanIntervalRef.current)
+        autoScanIntervalRef.current = null
+      }
+      stopCamera()
+      setCameraState('unavailable')
+    })
+    // wsOn is stable; savedToken triggers re-register when token changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedToken, wsOn])
 
   // Camera
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -63,6 +84,23 @@ export function KioskPage() {
   // Result / processing
   const [resultState, setResultState] = useState<ResultState>({ status: 'idle' })
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Phase 6: scan countdown + offline detection
+  const [scanProgress, setScanProgress] = useState(0)
+  const [isOffline, setIsOffline] = useState(false)
+
+  // Phase 6: idle lock screen + voice mute
+  const [locked, setLocked] = useState(false)
+  const lastActivityRef = useRef(Date.now())
+  const [voiceMuted, setVoiceMuted] = useState(false)
+  const { speak, setEnabled: setVoiceEnabled } = useVoiceGuide()
+  useEffect(() => { setVoiceEnabled(!voiceMuted) }, [voiceMuted, setVoiceEnabled])
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (Date.now() - lastActivityRef.current > 5 * 60 * 1000) setLocked(true)
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Auto-scan (touchless mode)
   const autoScanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -128,6 +166,18 @@ export function KioskPage() {
     }
   }
 
+  // Attach the stream once the <video> is actually mounted. Setting srcObject
+  // inside startCamera() can run before the element renders (the element only
+  // appears when cameraState === 'active'), so do it here deterministically.
+  // This is also what lets the kiosk work immediately after pasting a token,
+  // without a full page reload.
+  useEffect(() => {
+    if (cameraState === 'active' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      void videoRef.current.play().catch(() => {})
+    }
+  }, [cameraState])
+
   function handleSaveToken() {
     const trimmed = tokenInput.trim()
     saveDeviceToken(trimmed)
@@ -187,16 +237,30 @@ export function KioskPage() {
 
     try {
       const result = await postAutoAttendance(tok, blob)
+      setIsOffline(false)
       const action = result.attendance.type === 'check_in' ? 'Check In' : 'Check Out'
       show(`${action} berhasil — ${result.full_name}`, 'success')
+      lastActivityRef.current = Date.now()
+      const name = result.full_name.split(' ')[0]
+      speak(result.attendance.type === 'check_in' ? `Check in berhasil, ${name}` : `Check out berhasil, ${name}`)
       setResultState({ status: 'success', result })
       cooldownUntilRef.current = Date.now() + 8000
       scheduleReset()
     } catch (err) {
+      const isNetworkErr =
+        (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) || !navigator.onLine
+      if (isNetworkErr) {
+        setIsOffline(true)
+        setResultState({ status: 'idle' })
+        cooldownUntilRef.current = Date.now() + 3000
+        return
+      }
       if (err instanceof KioskError && err.code === 'not_recognized') {
         // No face matched — silently reset and keep scanning
+        setIsOffline(false)
         setResultState({ status: 'idle' })
       } else {
+        setIsOffline(false)
         const code = err instanceof KioskError ? err.code : 'server_error'
         const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : 'Kesalahan server.')
         if (code !== 'not_recognized') show(msg, 'error')
@@ -205,17 +269,32 @@ export function KioskPage() {
         scheduleReset()
       }
     }
-  }, [show]) // show is stable from useCallback in ToastProvider
+  }, [show, speak]) // show and speak are stable from useCallback
 
   // Start/stop auto-scan interval when camera or token becomes available
   useEffect(() => {
     if (cameraState === 'active' && savedToken) {
-      autoScanIntervalRef.current = setInterval(() => { void autoScan() }, 2500)
+      autoScanIntervalRef.current = setInterval(() => { void autoScan() }, SCAN_INTERVAL_MS)
     } else {
       if (autoScanIntervalRef.current) { clearInterval(autoScanIntervalRef.current); autoScanIntervalRef.current = null }
     }
     return () => { if (autoScanIntervalRef.current) { clearInterval(autoScanIntervalRef.current); autoScanIntervalRef.current = null } }
   }, [cameraState, savedToken, autoScan])
+
+  // Countdown progress toward the next idle scan (0-100%)
+  const idleForCountdown =
+    cameraState === 'active' && !!savedToken && resultState.status === 'idle' && !revokedRemotely
+  useEffect(() => {
+    if (!idleForCountdown) {
+      setScanProgress(0)
+      return
+    }
+    const stepPct = (250 / SCAN_INTERVAL_MS) * 100
+    const id = setInterval(() => {
+      setScanProgress((prev) => (prev + stepPct >= 100 ? 0 : prev + stepPct))
+    }, 250)
+    return () => clearInterval(id)
+  }, [idleForCountdown])
 
   function handleFileAttendance(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -255,7 +334,7 @@ export function KioskPage() {
           <div className="kiosk-clock-time">{time}</div>
           <div className="kiosk-clock-date">{date}</div>
         </div>
-        <button className="kiosk-setup-btn" onClick={() => setShowSetup((v) => !v)} title="Setup">
+        <button className="kiosk-setup-btn" onClick={() => setShowSetup((v) => !v)} aria-label="Pengaturan" title="Setup">
           <Settings size={15} />
         </button>
       </div>
@@ -276,6 +355,7 @@ export function KioskPage() {
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder="Paste device token di sini…"
               spellCheck={false}
+              aria-label="Device token"
             />
             <button className="kiosk-token-save-btn" onClick={handleSaveToken}>
               Simpan
@@ -284,16 +364,38 @@ export function KioskPage() {
           <p className={`kiosk-token-status ${savedToken ? 'ok' : 'missing'}`}>
             {savedToken ? `Token aktif: ${savedToken.slice(0, 12)}…` : 'Belum ada token tersimpan'}
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setVoiceMuted((v) => !v)} aria-label={voiceMuted ? 'Aktifkan suara' : 'Matikan suara'}>{voiceMuted ? '🔇 Suara Mati' : '🔊 Suara Aktif'}</button>
+          </div>
         </div>
       )}
 
-      {!savedToken && !showSetup && (
+      {revokedRemotely && (
+        <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">
+          Perangkat ini telah dinonaktifkan oleh administrator. Hubungi admin untuk mengaktifkan kembali.
+        </div>
+      )}
+
+      {!savedToken && !showSetup && !revokedRemotely && (
         <div className="kiosk-no-token-warning">
           Device token belum dikonfigurasi. Tekan ⚙ Setup untuk mengatur.
         </div>
       )}
 
-      <div className="kiosk-camera-area">
+      {isOffline && (
+        <div className="kiosk-offline-banner" role="alert" aria-live="assertive">
+          ⚠ Server tidak dapat dijangkau — mode offline
+          <button onClick={() => { setIsOffline(false); void autoScan() }}>Coba lagi</button>
+        </div>
+      )}
+
+      {locked && (
+        <div className="kiosk-lock-screen" onClick={() => { setLocked(false); lastActivityRef.current = Date.now() }}>
+          <div className="kiosk-lock-content"><div className="kiosk-lock-icon">🔒</div><div className="kiosk-lock-text">Tap untuk mulai</div></div>
+        </div>
+      )}
+
+      <div className="kiosk-camera-area" aria-label="Area kamera untuk absensi wajah otomatis">
         {/* Camera / placeholder */}
         <div className="kiosk-camera-wrapper">
           {cameraState === 'active' ? (
@@ -363,7 +465,11 @@ export function KioskPage() {
 
           {/* Result overlay */}
           {showResult && (
-            <div className={`kiosk-result-overlay ${resultState.status === 'success' ? 'success' : 'error'}`}>
+            <div
+              className={`kiosk-result-overlay ${resultState.status === 'success' ? 'success' : 'error'}`}
+              role="alert"
+              aria-live="assertive"
+            >
               {resultState.status === 'success' && resultState.result ? (
                 <>
                   <div className="kiosk-result-type-badge">
@@ -390,6 +496,7 @@ export function KioskPage() {
               )}
             </div>
           )}
+
         </div>
 
 
@@ -421,6 +528,18 @@ export function KioskPage() {
             {savedToken ? 'Token aktif' : 'Token belum ada'}
           </span>
         </div>
+
+        {/* Countdown to next auto-scan — idle only */}
+        {idleForCountdown && (
+          <div className="kiosk-countdown">
+            <div className="kiosk-countdown-bar">
+              <div className="kiosk-countdown-fill" style={{ width: `${scanProgress}%` }} />
+            </div>
+            <span className="kiosk-countdown-label">
+              Scan dalam {Math.ceil((SCAN_INTERVAL_MS * (1 - scanProgress / 100)) / 1000)}s
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,10 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ToastProvider } from '@/components/Toast'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ProtectedRoute } from '@/router/ProtectedRoute'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RootRedirect } from '@/pages/RootRedirect'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ForbiddenPage } from '@/pages/ForbiddenPage'
+import { useWebSocketInvalidation } from '@/hooks/useWebSocketInvalidation'
 
 // Tenant Admin
 import {
@@ -16,6 +19,7 @@ import { EnrollmentPage } from '@/pages/tenant-admin/EnrollmentPage'
 import { DevicesPage } from '@/pages/tenant-admin/DevicesPage'
 import { SchedulesPage } from '@/pages/tenant-admin/SchedulesPage'
 import { AttendancePage } from '@/pages/tenant-admin/AttendancePage'
+import { TrashPage } from '@/pages/tenant-admin/TrashPage'
 
 // Kiosk (public — device token auth)
 import { KioskPage } from '@/pages/kiosk/KioskPage'
@@ -31,18 +35,32 @@ import { TenantsPage } from '@/pages/super-admin/TenantsPage'
 // Tenant Admin dashboard home
 import { TenantAdminHomePage } from '@/pages/tenant-admin/TenantAdminDashboard'
 
-export default function App() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+function AppRoutes() {
+  // Must run inside QueryClientProvider — it calls useQueryClient().
+  useWebSocketInvalidation()
+
   return (
     <ToastProvider>
       <BrowserRouter>
         <Routes>
         {/* Public */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/403" element={<ForbiddenPage />} />
-        <Route path="/attendance" element={<KioskPage />} />
+        <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
+        <Route path="/403" element={<ErrorBoundary><ForbiddenPage /></ErrorBoundary>} />
+        <Route path="/attendance" element={<ErrorBoundary><KioskPage /></ErrorBoundary>} />
 
         {/* Root redirect */}
-        <Route path="/" element={<RootRedirect />} />
+        <Route path="/" element={<ErrorBoundary><RootRedirect /></ErrorBoundary>} />
 
         {/* Tenant Admin routes */}
         <Route
@@ -54,12 +72,13 @@ export default function App() {
           }
         >
           <Route index element={<TenantAdminIndex />} />
-          <Route path="dashboard" element={<TenantAdminHomePage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="enrollment" element={<EnrollmentPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="schedules" element={<SchedulesPage />} />
-          <Route path="attendance" element={<AttendancePage />} />
+          <Route path="dashboard" element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
+          <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+          <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
+          <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
+          <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
+          <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+          <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 
         {/* Super Admin routes — tenant pages also rendered inside SuperAdminDashboard layout */}
@@ -72,19 +91,28 @@ export default function App() {
           }
         >
           <Route index element={<SuperAdminIndex />} />
-          <Route path="dashboard" element={<SuperAdminHomePage />} />
-          <Route path="tenants" element={<TenantsPage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="enrollment" element={<EnrollmentPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="schedules" element={<SchedulesPage />} />
-          <Route path="attendance" element={<AttendancePage />} />
+          <Route path="dashboard" element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
+          <Route path="tenants" element={<ErrorBoundary><TenantsPage /></ErrorBoundary>} />
+          <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+          <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
+          <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
+          <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
+          <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+          <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 
         {/* 404 */}
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="*" element={<ErrorBoundary><NotFoundPage /></ErrorBoundary>} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppRoutes />
+    </QueryClientProvider>
   )
 }

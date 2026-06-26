@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, LogOut, Menu, X } from 'lucide-react'
+import { Eye, LogOut, Menu, X, KeyRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { NotificationBell } from '@/components/NotificationBell'
+import { ChangePasswordModal } from '@/components/ChangePasswordModal'
 import '@/styles/layout.css'
 
 interface NavItem {
@@ -17,6 +18,8 @@ interface DashboardLayoutProps {
   title: string
   navItems: NavItem[]
   children: React.ReactNode
+  /** Optional element rendered in the topbar (e.g. tenant switcher for super admins). */
+  headerSlot?: React.ReactNode
 }
 
 function initials(name?: string | null, fallback?: string | null): string {
@@ -34,11 +37,12 @@ function roleLabel(role?: string | null): string {
   return role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-export function DashboardLayout({ title, navItems, children }: DashboardLayoutProps) {
+export function DashboardLayout({ title, navItems, children, headerSlot }: DashboardLayoutProps) {
   const { role, username, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showChangePw, setShowChangePw] = useState(false)
 
   // Derive active page label from current route
   const activeNav = navItems.find(
@@ -57,6 +61,9 @@ export function DashboardLayout({ title, navItems, children }: DashboardLayoutPr
 
   return (
     <div className={`layout${sidebarOpen ? ' sidebar-open' : ''}`}>
+      <a href="#main-content" className="skip-link">
+        Langsung ke konten utama
+      </a>
       <div className="sidebar-backdrop" onClick={closeSidebar} />
 
       <aside className="sidebar">
@@ -87,7 +94,7 @@ export function DashboardLayout({ title, navItems, children }: DashboardLayoutPr
                 <NavLink
                   to={item.to}
                   onClick={closeSidebar}
-                  className={({ isActive }) => (isActive ? 'active' : '')}
+                  className={({ isActive }) => `sidebar-nav-link${isActive ? ' active' : ''}`}
                 >
                   {item.icon && <item.icon size={16} />}
                   <span>{item.label}</span>
@@ -116,8 +123,17 @@ export function DashboardLayout({ title, navItems, children }: DashboardLayoutPr
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <span className="topbar-title">{pageTitle}</span>
+            {headerSlot}
           </div>
           <div className="topbar-user">
+            <button
+              className="btn-icon"
+              title="Ubah password"
+              aria-label="Ubah password"
+              onClick={() => setShowChangePw(true)}
+            >
+              <KeyRound size={18} />
+            </button>
             <NotificationBell />
             <div className="topbar-avatar">{initials(username, role)}</div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
@@ -131,8 +147,10 @@ export function DashboardLayout({ title, navItems, children }: DashboardLayoutPr
           </div>
         </header>
 
-        <main className="page-content" key={location.pathname}>{children}</main>
+        <main className="page-content" id="main-content" tabIndex={-1} key={location.pathname}>{children}</main>
       </div>
+
+      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
     </div>
   )
 }

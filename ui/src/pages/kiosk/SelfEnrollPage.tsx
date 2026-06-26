@@ -32,9 +32,8 @@ export function SelfEnrollPage() {
   const [busy, setBusy] = useState(false)
 
   // Login form
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [tenantSlug, setTenantSlug] = useState('')
 
   // Camera
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -151,9 +150,9 @@ export function SelfEnrollPage() {
     setError('')
     setBusy(true)
     try {
-      const tokens = await loginApi({ username: username.trim(), password, tenant_slug: tenantSlug.trim() || undefined })
+      const tokens = await loginApi({ email: email.trim().toLowerCase(), password })
       const userId = decodeSubject(tokens.access_token)
-      setSession({ token: tokens.access_token, userId, name: username.trim() })
+      setSession({ token: tokens.access_token, userId, name: email.trim() })
       setStep('capture')
       void startCamera()
     } catch (err) {
@@ -192,7 +191,7 @@ export function SelfEnrollPage() {
     previewUrls.forEach(URL.revokeObjectURL)
     stopCamera()
     setStep('login'); setSession(null)
-    setUsername(''); setPassword(''); setTenantSlug('')
+    setEmail(''); setPassword('')
     setCapturedBlobs([]); setPreviewUrls([])
     setCapturePhase(null); setConsentChecked(false)
     setDone(false); setError('')
@@ -213,7 +212,7 @@ export function SelfEnrollPage() {
         <span className="selfenroll-title">Pendaftaran Wajah Mandiri</span>
       </div>
 
-      <div className="kiosk-camera-area">
+      <div className="kiosk-camera-area" aria-label="Area kamera untuk pendaftaran wajah mandiri">
         {/* Step indicator */}
         <div className="selfenroll-steps">
           <span className={`selfenroll-step ${step === 'login' ? 'active' : 'done'}`}>1. Masuk</span>
@@ -221,18 +220,16 @@ export function SelfEnrollPage() {
           <span className={`selfenroll-step ${step === 'consent' ? 'active' : ''}`}>3. Persetujuan</span>
         </div>
 
-        {error && <div className="kiosk-no-token-warning">{error}</div>}
+        {error && <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">{error}</div>}
 
         {/* ── Step 1: Login ── */}
         {step === 'login' && (
           <form className="selfenroll-form" onSubmit={handleLogin}>
             <p className="selfenroll-hint">Masuk dengan akun Anda untuk mendaftarkan wajah secara mandiri.</p>
-            <input className="kiosk-token-input" type="text" placeholder="Username" value={username}
-              onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+            <input className="kiosk-token-input" type="email" placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)} autoComplete="email" required aria-label="Email" />
             <input className="kiosk-token-input" type="password" placeholder="Password" value={password}
-              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-            <input className="kiosk-token-input" type="text" placeholder="Kode institusi (tenant slug)"
-              value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} spellCheck={false} />
+              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required aria-label="Password" />
             <button className="kiosk-btn kiosk-btn-checkin" type="submit" disabled={busy}>
               {busy ? 'Memproses…' : 'Masuk'}
             </button>
@@ -375,7 +372,7 @@ export function SelfEnrollPage() {
         {/* ── Success ── */}
         {done && (
           <div className="kiosk-camera-wrapper">
-            <div className="kiosk-result-overlay success">
+            <div className="kiosk-result-overlay success" role="alert" aria-live="assertive">
               <span className="kiosk-result-icon">✅</span>
               <div className="kiosk-result-name">{session?.name}</div>
               <div className="kiosk-result-status">Wajah berhasil didaftarkan (3 sudut)</div>

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from app.core.security import hash_password
 from app.models import User
 from app.schemas import Envelope, UserCreate, UserOut, UserUpdate
 from app.services import audit_service
+from app.services.soft_delete import restore as soft_restore, soft_delete
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -53,14 +54,45 @@ async def create_user(
     return Envelope(data=UserOut.model_validate(user))
 
 
-@router.get("", response_model=Envelope[list[UserOut]])
+@router.get("", response_model=Envelope[dict])
 async def list_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=1000),
+    search: str | None = Query(None, description="Search by name or username"),
     _: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
-) -> Envelope[list[UserOut]]:
-    # RLS automatically restricts rows to the caller's tenant.
-    users = list((await session.execute(select(User).order_by(User.created_at.desc()))).scalars())
-    return Envelope(data=[UserOut.model_validate(u) for u in users])
+) -> Envelope[dict]:
+    base = select(User).where(User.deleted_at.is_(None))
+    if search:
+        search_pattern = f"%{search}%"
+        base = base.where(
+            or_(User.full_name.ilike(search_pattern), User.username.ilike(search_pattern))
+        )
+
+    # Count total
+    count_stmt = select(func.count(User.id)).select_from(User).where(User.deleted_at.is_(None))
+    if search:
+        search_pattern = f"%{search}%"
+        count_stmt = count_stmt.where(
+            or_(User.full_name.ilike(search_pattern), User.username.ilike(search_pattern))
+        )
+    total = (await session.execute(count_stmt)).scalar() or 0
+
+    # Paginate
+    offset = (page - 1) * limit
+    items_stmt = base.order_by(User.created_at.desc()).offset(offset).limit(limit)
+    items_result = await session.execute(items_stmt)
+    items = [UserOut.model_validate(u) for u in items_result.scalars()]
+
+    pages = (total + limit - 1) // limit if total > 0 else 0
+
+    return Envelope(data={
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    })
 
 
 @router.patch("/{user_id}", response_model=Envelope[UserOut])
@@ -107,7 +139,7 @@ async def delete_user(
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    await session.delete(user)
+    await soft_delete(session, User, user_id)
     await audit_service.record(
         session,
         action="user.deleted",
@@ -115,3 +147,38 @@ async def delete_user(
         tenant_id=principal.tenant_id,
         detail={"user_id": user_id},
     )
+
+
+@router.get("/trash", response_model=Envelope[list[UserOut]])
+async def list_deleted_users(
+    _: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[list[UserOut]]:
+    """List soft-deleted users (recycle bin)."""
+    result = await session.execute(
+        select(User).where(User.deleted_at.isnot(None)).order_by(User.deleted_at.desc())
+    )
+    return Envelope(data=[UserOut.model_validate(u) for u in result.scalars()])
+
+
+@router.post("/{user_id}/restore", response_model=Envelope[UserOut])
+async def restore_user(
+    user_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[UserOut]:
+    """Restore a soft-deleted user."""
+    restored = await soft_restore(session, User, user_id)
+    if not restored:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not deleted"
+        )
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
+    await audit_service.record(
+        session,
+        action="user.restored",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"user_id": user_id},
+    )
+    return Envelope(data=UserOut.model_validate(user))

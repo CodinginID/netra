@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Outlet, Navigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -10,11 +9,11 @@ import {
   Monitor,
   CalendarDays,
   ClipboardList,
+  Trash2,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { dailyReport, listTenants, listUsers } from '@/api/adminApi'
-import type { TenantOut } from '@/api/adminApi'
-import { useAuthStore } from '@/store/authStore'
+import { TenantSwitcher } from '@/components/TenantSwitcher'
+import { useTenants, useUsers, useDailyReport } from '@/hooks/useApiQueries'
 
 const NAV_ITEMS = [
   { label: 'Dasbor', to: '/admin/dashboard', icon: LayoutDashboard },
@@ -25,59 +24,12 @@ const NAV_ITEMS = [
   { label: 'Perangkat', to: '/admin/devices', icon: Monitor },
   { label: 'Jadwal', to: '/admin/schedules', icon: CalendarDays },
   { label: 'Kehadiran', to: '/admin/attendance', icon: ClipboardList },
+  { label: 'Tempat Sampah', to: '/admin/trash', icon: Trash2 },
 ]
-
-function TenantSelectorBanner() {
-  const role = useAuthStore((s) => s.role)
-  const token = useAuthStore((s) => s.accessToken)
-  const selectedTenantId = useAuthStore((s) => s.selectedTenantId)
-  const setSelectedTenantId = useAuthStore((s) => s.setSelectedTenantId)
-  const [tenants, setTenants] = useState<TenantOut[]>([])
-
-  useEffect(() => {
-    if (!token || role !== 'super_admin') return
-    let active = true
-    listTenants(token)
-      .then((data) => {
-        if (active) setTenants(data)
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [token, role])
-
-  if (role !== 'super_admin') return null
-
-  const selected = tenants.find((t) => t.id === selectedTenantId)
-
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value || null
-    setSelectedTenantId(id)
-  }
-
-  return (
-    <div className="tenant-banner">
-      <span style={{ fontWeight: 600 }}>Tenant:</span>
-      <select value={selectedTenantId ?? ''} onChange={handleChange}>
-        <option value="">-- Pilih Tenant --</option>
-        {tenants.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
-        ))}
-      </select>
-      {selected ? (
-        <span className="tenant-banner-badge--selected">Konteks: {selected.name}</span>
-      ) : (
-        <span className="tenant-banner-badge--empty">Pilih tenant untuk mengelola data</span>
-      )}
-    </div>
-  )
-}
 
 export function SuperAdminDashboard() {
   return (
-    <DashboardLayout title="Super Admin" navItems={NAV_ITEMS}>
-      <TenantSelectorBanner />
+    <DashboardLayout title="Super Admin" navItems={NAV_ITEMS} headerSlot={<TenantSwitcher />}>
       <Outlet />
     </DashboardLayout>
   )
@@ -101,47 +53,27 @@ function todayString(): string {
 }
 
 export function SuperAdminHomePage() {
-  const token = useAuthStore((s) => s.accessToken)
-  const [stats, setStats] = useState<StatCard[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const today = todayString()
 
-  useEffect(() => {
-    if (!token) return
-    let active = true
-    const load = async () => {
-      try {
-        const [tenants, users, recap] = await Promise.all([
-          listTenants(token),
-          listUsers(token),
-          dailyReport(token, todayString()),
-        ])
-        if (!active) return
-        const activeTenants = tenants.filter((t) => t.status === 'active').length
-        setStats([
-          { label: 'Total Tenant', value: tenants.length, Icon: Building2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
-          { label: 'Tenant Aktif', value: activeTenants, Icon: CheckCircle2, fg: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
-          { label: 'Total Pengguna', value: users.length, Icon: Users, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
-          { label: 'Absensi Hari Ini', value: recap.check_in, Icon: Activity, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
-        ])
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : 'Gagal memuat data')
-      }
-    }
-    void load()
-    return () => {
-      active = false
-    }
-  }, [token])
+  const { data: tenantsData } = useTenants({ limit: 1000 })
+  const { data: usersData } = useUsers({ limit: 1000 })
+  const { data: reportData } = useDailyReport(today)
+
+  const tenants = tenantsData?.items ?? []
+  const activeTenants = tenants.filter((t) => t.status === 'active').length
+
+  const stats: StatCard[] = [
+    { label: 'Total Tenant', value: tenantsData?.total ?? 0, Icon: Building2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
+    { label: 'Tenant Aktif', value: activeTenants, Icon: CheckCircle2, fg: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+    { label: 'Total Pengguna', value: usersData?.total ?? 0, Icon: Users, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+    { label: 'Absensi Hari Ini', value: reportData?.check_in ?? 0, Icon: Activity, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+  ]
 
   return (
     <div>
       <div className="page-header">
         <h2>Selamat Datang, Super Admin 👋</h2>
       </div>
-
-      {error && (
-        <div style={{ marginBottom: 16, fontSize: 13, color: '#dc2626' }}>{error}</div>
-      )}
 
       <div
         style={{
@@ -151,7 +83,7 @@ export function SuperAdminHomePage() {
           marginBottom: 24,
         }}
       >
-        {stats?.map(({ label, value, Icon, fg, bg }) => (
+        {stats.map(({ label, value, Icon, fg, bg }) => (
           <div key={label} className="stat-card">
             <div className="stat-icon" style={{ background: bg }}><Icon size={22} color={fg} /></div>
             <div>

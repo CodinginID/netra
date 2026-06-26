@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Eye, EyeOff, Plus, Search, X } from 'lucide-react'
 import {
-  listTenants,
-  createTenant,
-  suspendTenant,
-  activateTenant,
   type TenantOut,
 } from '@/api/adminApi'
-import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/Toast'
+import { useModalA11y } from '@/hooks/useModalA11y'
+import { Pagination } from '@/components/Pagination'
+import { useTenants } from '@/hooks/useApiQueries'
+import { useCreateTenant, useSuspendTenant, useActivateTenant } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
 
 function slugify(value: string): string {
@@ -41,23 +40,26 @@ function VerticalBadge({ config }: { config: TenantOut['config'] }) {
 }
 
 interface CreateModalProps {
-  token: string
   onClose: () => void
-  onCreated: (tenant: TenantOut) => void
+  onCreated: () => void
 }
 
-function CreateTenantModal({ token, onClose, onCreated }: CreateModalProps) {
+function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
   const { show } = useToast()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
-  const [adminUsername, setAdminUsername] = useState('')
+  const [adminEmail, setAdminEmail] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
   const [adminFullName, setAdminFullName] = useState('')
   const [vertical, setVertical] = useState<'company' | 'school' | 'university'>('company')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [showAdminPw, setShowAdminPw] = useState(false)
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
+
+  const createMutation = useCreateTenant(() => {
+    onClose()
+    onCreated()
+  })
 
   const onNameChange = (value: string) => {
     setName(value)
@@ -66,36 +68,32 @@ function CreateTenantModal({ token, onClose, onCreated }: CreateModalProps) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (submitting) return
+    if (createMutation.isPending) return
     if (adminPassword.length < 8) {
-      setError('Password minimal 8 karakter')
+      show('Password minimal 8 karakter', 'error')
       return
     }
-    setError(null)
-    setSubmitting(true)
-    try {
-      const tenant = await createTenant(token, {
+    createMutation.mutate(
+      {
         name: name.trim(),
         slug: slug.trim(),
-        admin_username: adminUsername.trim(),
+        admin_email: adminEmail.trim().toLowerCase(),
         admin_password: adminPassword,
         admin_full_name: adminFullName.trim(),
         config: { vertical: { mode: vertical } },
-      })
-      onCreated(tenant)
-      onClose()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal membuat tenant'
-      setError(msg)
-      show(msg, 'error')
-    } finally {
-      setSubmitting(false)
-    }
+      },
+      {
+        onError: (err) => {
+          show(err instanceof Error ? err.message : 'Gagal membuat tenant', 'error')
+        },
+      },
+    )
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div
+        ref={modalRef}
         className="modal-card"
         style={{ maxHeight: '90vh', overflowY: 'auto', padding: 0 }}
         onClick={(e) => e.stopPropagation()}
@@ -121,8 +119,6 @@ function CreateTenantModal({ token, onClose, onCreated }: CreateModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {error && <div className="error-banner">{error}</div>}
-
           <div className="field">
             <label htmlFor="tenant-name">Nama Tenant</label>
             <input
@@ -151,13 +147,14 @@ function CreateTenantModal({ token, onClose, onCreated }: CreateModalProps) {
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-admin-username">Username Admin</label>
+            <label htmlFor="tenant-admin-email">Email Admin</label>
             <input
-              id="tenant-admin-username"
+              id="tenant-admin-email"
               className="field-input"
-              value={adminUsername}
-              onChange={(e) => setAdminUsername(e.target.value)}
-              placeholder="admin"
+              type="email"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              placeholder="admin@organisasi.com"
               required
             />
           </div>
@@ -214,11 +211,11 @@ function CreateTenantModal({ token, onClose, onCreated }: CreateModalProps) {
           </div>
 
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={createMutation.isPending}>
               Batal
             </button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Membuat...' : 'Buat Tenant'}
+            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Membuat...' : 'Buat Tenant'}
             </button>
           </div>
         </form>
@@ -233,10 +230,11 @@ function ToggleConfirmModal({ tenant, onConfirm, onClose, busy }: {
   onClose: () => void
   busy: boolean
 }) {
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   const isSuspend = tenant.status === 'active'
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div ref={modalRef} className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">{isSuspend ? 'Suspend Tenant' : 'Aktifkan Tenant'}</h3>
         <p className="confirm-text">
           Yakin ingin {isSuspend ? 'menangguhkan' : 'mengaktifkan kembali'} tenant{' '}
@@ -259,72 +257,60 @@ function ToggleConfirmModal({ tenant, onConfirm, onClose, busy }: {
 }
 
 export function TenantsPage() {
-  const token = useAuthStore((s) => s.accessToken)
   const { show } = useToast()
-  const [tenants, setTenants] = useState<TenantOut[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [search, setSearch] = useState('')
+  const searchRef = useRef('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<TenantOut | null>(null)
 
-  useEffect(() => {
-    if (!token) return
-    let active = true
-    setError(null)
-    listTenants(token)
-      .then((data) => {
-        if (active) setTenants(data)
-      })
-      .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'Gagal memuat tenant')
-      })
-    return () => {
-      active = false
-    }
-  }, [token])
-
-  const rows = useMemo(() => {
-    if (!tenants) return []
-    const q = query.toLowerCase()
-    return tenants.filter(
-      (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q),
-    )
-  }, [tenants, query])
-
-  const handleToggle = async (tenant: TenantOut) => {
-    if (!token || busyId) return
-    setBusyId(tenant.id)
-    setError(null)
-    try {
-      const updated =
-        tenant.status === 'active'
-          ? await suspendTenant(token, tenant.id)
-          : await activateTenant(token, tenant.id)
-      setTenants((prev) =>
-        prev ? prev.map((t) => (t.id === updated.id ? updated : t)) : prev,
-      )
-      show(
-        updated.status === 'active' ? 'Tenant diaktifkan' : 'Tenant dinonaktifkan',
-        'success',
-      )
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal memperbarui status', 'error')
-    } finally {
-      setBusyId(null)
-    }
+  // Debounced server-side search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleSearchChange = (value: string) => {
+    searchRef.current = value
+    setSearch(value)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setPage(1)
+    }, 300)
   }
 
-  const handleConfirmToggle = async () => {
+  const { data: paginatedTenants, isLoading, error } = useTenants({ page, limit, search: searchRef.current.trim() || undefined })
+  const tenants = paginatedTenants?.items ?? []
+  const total = paginatedTenants?.total ?? 0
+  const pages = paginatedTenants?.pages ?? 0
+
+  const suspendMutation = useSuspendTenant(() => {
+    show('Tenant dinonaktifkan', 'success')
+  })
+  const activateMutation = useActivateTenant(() => {
+    show('Tenant diaktifkan', 'success')
+  })
+
+  const handleConfirmToggle = () => {
     if (!confirmTarget) return
-    await handleToggle(confirmTarget)
+    if (confirmTarget.status === 'active') {
+      suspendMutation.mutate(confirmTarget.id, {
+        onError: (err) => {
+          show(err instanceof Error ? err.message : 'Gagal memperbarui status', 'error')
+        },
+      })
+    } else {
+      activateMutation.mutate(confirmTarget.id, {
+        onError: (err) => {
+          show(err instanceof Error ? err.message : 'Gagal memperbarui status', 'error')
+        },
+      })
+    }
     setConfirmTarget(null)
   }
 
-  const handleCreated = (tenant: TenantOut) => {
-    setTenants((prev) => (prev ? [tenant, ...prev] : [tenant]))
+  const handleCreated = () => {
     show('Tenant berhasil dibuat', 'success')
   }
+
+  const busyId = suspendMutation.isPending ? suspendMutation.variables : (activateMutation.isPending ? activateMutation.variables : null)
 
   return (
     <div>
@@ -335,9 +321,10 @@ export function TenantsPage() {
             <Search size={16} />
             <input
               className="search-input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Cari tenant..."
+              aria-label="Cari tenant"
             />
           </div>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
@@ -347,7 +334,7 @@ export function TenantsPage() {
         </div>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error.message}</div>}
 
       <div className="data-card">
         <table className="data-table">
@@ -361,7 +348,7 @@ export function TenantsPage() {
             </tr>
           </thead>
           <tbody>
-            {tenants === null &&
+            {isLoading &&
               [0, 1, 2].map((i) => (
                 <tr key={`sk-${i}`}>
                   <td><div className="skeleton skeleton-text sm" /></td>
@@ -372,18 +359,18 @@ export function TenantsPage() {
                 </tr>
               ))}
 
-            {tenants !== null && rows.length === 0 && (
+            {!isLoading && tenants.length === 0 && (
               <tr>
                 <td colSpan={5}>
                   <div className="empty-state">
-                    {tenants.length === 0 ? 'Belum ada tenant terdaftar' : 'Tidak ada tenant yang cocok'}
+                    {total === 0 ? 'Belum ada tenant terdaftar' : 'Tidak ada tenant yang cocok'}
                   </div>
                 </td>
               </tr>
             )}
 
-            {tenants !== null &&
-              rows.map((t) => (
+            {!isLoading &&
+              tenants.map((t) => (
                 <tr key={t.id}>
                   <td style={{ fontWeight: 600 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -417,10 +404,13 @@ export function TenantsPage() {
               ))}
           </tbody>
         </table>
+        {!isLoading && (
+          <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
+        )}
       </div>
 
-      {modalOpen && token && (
-        <CreateTenantModal token={token} onClose={() => setModalOpen(false)} onCreated={handleCreated} />
+      {modalOpen && (
+        <CreateTenantModal onClose={() => setModalOpen(false)} onCreated={handleCreated} />
       )}
 
       {confirmTarget && (

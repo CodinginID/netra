@@ -11,20 +11,25 @@ function makeHeaders(token: string, extra?: Record<string, string>): Record<stri
 
 export interface UserItem {
   id: string
-  username: string
+  username?: string | null
   full_name?: string
+  external_id?: string | null
 }
 
 export async function fetchUsers(accessToken: string): Promise<UserItem[]> {
-  const res = await fetch(`${API_BASE}/users`, {
+  const res = await fetch(`${API_BASE}/users?page=1&limit=1000`, {
     headers: makeHeaders(accessToken),
   })
   if (!res.ok) {
     throw new Error(`Failed to fetch users (${res.status})`)
   }
   const json = await res.json()
-  // Support both { data: [...] } and plain array responses
-  return Array.isArray(json) ? json : (json.data ?? [])
+  // Tolerate every shape: plain array, { data: [...] }, or paginated
+  // { data: { items: [...] } } (current backend).
+  const data = json?.data ?? json
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  return []
 }
 
 export async function grantConsent(accessToken: string, userId: string): Promise<void> {

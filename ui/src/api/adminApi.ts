@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/authStore'
+import { refreshApi } from '@/api/authApi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
@@ -12,15 +13,81 @@ function authHeaders(token: string): HeadersInit {
   return h
 }
 
+// Dedupe concurrent refreshes: many parallel requests hitting 401 at once should
+// trigger a single /auth/refresh, then all retry with the new token.
+let refreshPromise: Promise<string | null> | null = null
+
+async function tryRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise
+  const rt = useAuthStore.getState().refreshToken
+  if (!rt) return null
+  refreshPromise = (async () => {
+    try {
+      const tokens = await refreshApi(rt)
+      useAuthStore.getState().updateTokens(tokens.access_token, tokens.refresh_token)
+      return tokens.access_token
+    } catch {
+      return null
+    } finally {
+      refreshPromise = null
+    }
+  })()
+  return refreshPromise
+}
+
 async function apiFetch<T>(url: string, token: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     ...init,
     headers: { ...authHeaders(token), ...init?.headers },
   })
+
+  // On 401, attempt a single silent refresh and retry once before giving up.
+  if (res.status === 401) {
+    const newToken = await tryRefresh()
+    if (newToken) {
+      res = await fetch(url, {
+        ...init,
+        headers: { ...authHeaders(newToken), ...init?.headers },
+      })
+    }
+    if (res.status === 401) {
+      useAuthStore.getState().logout()
+      throw new Error('Session expired')
+    }
+  }
+
   if (res.status === 204) return undefined as T
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.detail ?? json.error ?? `Request failed (${res.status})`)
   return (json.data ?? json) as T
+}
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+  pages: number
+}
+
+/**
+ * Coerce any list-shaped response into a valid PaginatedResponse.
+ * Tolerates the server returning a bare array (legacy) or a partial/empty
+ * envelope, so the UI never receives an `undefined` `items` array.
+ */
+function normalizePaginated<T>(raw: unknown): PaginatedResponse<T> {
+  if (Array.isArray(raw)) {
+    return { items: raw as T[], total: raw.length, page: 1, limit: raw.length || 10, pages: 1 }
+  }
+  const obj = (raw ?? {}) as Partial<PaginatedResponse<T>>
+  const items = Array.isArray(obj.items) ? obj.items : []
+  return {
+    items,
+    total: obj.total ?? items.length,
+    page: obj.page ?? 1,
+    limit: obj.limit ?? (items.length || 10),
+    pages: obj.pages ?? 1,
+  }
 }
 
 // --------------------------------------------------------------------------- //
@@ -37,6 +104,7 @@ export interface UserOut {
   is_active: boolean
   enrolled: boolean
   created_at: string
+  deleted_at?: string
 }
 
 export interface UserCreate {
@@ -48,8 +116,13 @@ export interface UserCreate {
   password?: string
 }
 
-export async function listUsers(token: string): Promise<UserOut[]> {
-  return apiFetch<UserOut[]>(`${API_BASE}/users`, token)
+export async function listUsers(token: string, params?: { page?: number; limit?: number; search?: string }): Promise<PaginatedResponse<UserOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.search) qs.set('search', params.search)
+  const raw = await apiFetch<unknown>(`${API_BASE}/users${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<UserOut>(raw)
 }
 
 export async function createUser(token: string, payload: UserCreate): Promise<UserOut> {
@@ -86,14 +159,19 @@ export interface DeviceOut {
   status: 'active' | 'revoked'
   last_seen_at: string | null
   created_at: string
+  deleted_at?: string
 }
 
 export interface DeviceRegistered extends DeviceOut {
   token: string
 }
 
-export async function listDevices(token: string): Promise<DeviceOut[]> {
-  return apiFetch<DeviceOut[]>(`${API_BASE}/devices`, token)
+export async function listDevices(token: string, params?: { page?: number; limit?: number }): Promise<PaginatedResponse<DeviceOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  const raw = await apiFetch<unknown>(`${API_BASE}/devices${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<DeviceOut>(raw)
 }
 
 export async function registerDevice(token: string, name: string): Promise<DeviceRegistered> {
@@ -105,6 +183,10 @@ export async function registerDevice(token: string, name: string): Promise<Devic
 
 export async function revokeDevice(token: string, deviceId: string): Promise<DeviceOut> {
   return apiFetch<DeviceOut>(`${API_BASE}/devices/${deviceId}/revoke`, token, { method: 'POST' })
+}
+
+export async function deleteDevice(token: string, deviceId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/devices/${deviceId}`, token, { method: 'DELETE' })
 }
 
 // --------------------------------------------------------------------------- //
@@ -133,6 +215,7 @@ export interface ScheduleOut {
   geofence: Record<string, unknown> | null
   is_default: boolean
   created_at: string
+  deleted_at?: string
 }
 
 export interface ScheduleCreate {
@@ -142,8 +225,12 @@ export interface ScheduleCreate {
   is_default?: boolean
 }
 
-export async function listSchedules(token: string): Promise<ScheduleOut[]> {
-  return apiFetch<ScheduleOut[]>(`${API_BASE}/schedules`, token)
+export async function listSchedules(token: string, params?: { page?: number; limit?: number }): Promise<PaginatedResponse<ScheduleOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  const raw = await apiFetch<unknown>(`${API_BASE}/schedules${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<ScheduleOut>(raw)
 }
 
 export async function createSchedule(
@@ -187,13 +274,16 @@ export interface AttendanceOut {
 
 export async function listAttendance(
   token: string,
-  params?: { from?: string; to?: string },
-): Promise<AttendanceOut[]> {
+  params?: { page?: number; limit?: number; from?: string; to?: string; user_id?: string },
+): Promise<PaginatedResponse<AttendanceOut>> {
   const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
   if (params?.from) qs.set('from', params.from)
   if (params?.to) qs.set('to', params.to)
-  const url = `${API_BASE}/attendance${qs.toString() ? `?${qs}` : ''}`
-  return apiFetch<AttendanceOut[]>(url, token)
+  if (params?.user_id) qs.set('user_id', params.user_id)
+  const raw = await apiFetch<unknown>(`${API_BASE}/attendance${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<AttendanceOut>(raw)
 }
 
 export function exportAttendanceUrl(from: string, to: string, format: 'csv' | 'xlsx'): string {
@@ -247,14 +337,20 @@ export interface TenantOut {
 export interface TenantCreate {
   name: string
   slug: string
-  admin_username: string
+  admin_email: string
   admin_password: string
   admin_full_name: string
+  admin_username?: string
   config?: { vertical?: { mode: string } }
 }
 
-export async function listTenants(token: string): Promise<TenantOut[]> {
-  return apiFetch<TenantOut[]>(`${API_BASE}/tenants`, token)
+export async function listTenants(token: string, params?: { page?: number; limit?: number; search?: string }): Promise<PaginatedResponse<TenantOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.search) qs.set('search', params.search)
+  const raw = await apiFetch<unknown>(`${API_BASE}/tenants${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<TenantOut>(raw)
 }
 
 export async function createTenant(token: string, payload: TenantCreate): Promise<TenantOut> {
@@ -270,4 +366,57 @@ export async function suspendTenant(token: string, tenantId: string): Promise<Te
 
 export async function activateTenant(token: string, tenantId: string): Promise<TenantOut> {
   return apiFetch<TenantOut>(`${API_BASE}/tenants/${tenantId}/activate`, token, { method: 'POST' })
+}
+
+// --------------------------------------------------------------------------- //
+// Trash / Recycle Bin
+// --------------------------------------------------------------------------- //
+export async function listDeletedUsers(token: string): Promise<PaginatedResponse<UserOut>> {
+  return normalizePaginated<UserOut>(await apiFetch<unknown>(`${API_BASE}/users/trash`, token))
+}
+
+export async function restoreUser(token: string, userId: string): Promise<UserOut> {
+  return apiFetch<UserOut>(`${API_BASE}/users/${userId}/restore`, token, { method: 'POST' })
+}
+
+export async function listDeletedDevices(token: string): Promise<PaginatedResponse<DeviceOut>> {
+  return normalizePaginated<DeviceOut>(await apiFetch<unknown>(`${API_BASE}/devices/trash`, token))
+}
+
+export async function restoreDevice(token: string, deviceId: string): Promise<DeviceOut> {
+  return apiFetch<DeviceOut>(`${API_BASE}/devices/${deviceId}/restore`, token, { method: 'POST' })
+}
+
+export async function listDeletedSchedules(token: string): Promise<PaginatedResponse<ScheduleOut>> {
+  return normalizePaginated<ScheduleOut>(await apiFetch<unknown>(`${API_BASE}/schedules/trash`, token))
+}
+
+export async function restoreSchedule(token: string, scheduleId: string): Promise<ScheduleOut> {
+  return apiFetch<ScheduleOut>(`${API_BASE}/schedules/${scheduleId}/restore`, token, { method: 'POST' })
+}
+
+// --------------------------------------------------------------------------- //
+// Onboarding
+// --------------------------------------------------------------------------- //
+export interface OnboardingStatus {
+  completed: boolean
+  steps: {
+    welcome: boolean
+    schedule: boolean
+    device: boolean
+    users: boolean
+    test: boolean
+  }
+}
+
+export async function getOnboardingStatus(token: string): Promise<OnboardingStatus> {
+  return apiFetch<OnboardingStatus>(`${API_BASE}/onboarding/status`, token)
+}
+
+export async function completeOnboarding(token: string): Promise<{ completed: boolean; completed_at: string }> {
+  return apiFetch<{ completed: boolean; completed_at: string }>(`${API_BASE}/onboarding/complete`, token, { method: 'POST' })
+}
+
+export async function dismissOnboarding(token: string): Promise<{ dismissed: boolean }> {
+  return apiFetch<{ dismissed: boolean }>(`${API_BASE}/onboarding/dismiss`, token, { method: 'POST' })
 }

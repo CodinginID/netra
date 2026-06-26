@@ -1,18 +1,14 @@
 import '@/styles/layout.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Users, UserPlus, Search, ScanFace, Shield, Edit2, Trash2, UserX, Eye, EyeOff } from 'lucide-react'
-import {
-  listUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-  type UserOut,
-  type UserCreate,
-  type UserUpdate,
-} from '@/api/adminApi'
-import { useAuthStore } from '@/store/authStore'
+import { EmptyState } from '@/components/EmptyState'
+import { useUsers } from '@/hooks/useApiQueries'
+import { useCreateUser, useUpdateUser, useDeleteUser, useRestoreUser } from '@/hooks/useApiMutations'
 import { useToast } from '@/components/Toast'
+import { useModalA11y } from '@/hooks/useModalA11y'
+import { Pagination } from '@/components/Pagination'
+import type { UserOut, UserCreate, UserUpdate } from '@/api/adminApi'
 
 // ── Badges ──────────────────────────────────────────────────────────────────
 
@@ -36,89 +32,127 @@ function EnrolledBadge({ enrolled }: { enrolled: boolean }) {
 
 // ── Create modal ─────────────────────────────────────────────────────────────
 
-const initialForm: UserCreate = { full_name: '', username: '', password: '', role: 'end_user' }
+const initialForm: UserCreate = {
+  full_name: '',
+  username: '',
+  email: '',
+  external_id: '',
+  password: '',
+  role: 'end_user',
+}
+
+const STAFF_ROLES = ['tenant_admin', 'supervisor']
 
 function CreateUserModal({
   onSubmit,
   onClose,
 }: {
-  onSubmit: (payload: UserCreate) => Promise<void>
+  onSubmit: (payload: UserCreate) => void
   onClose: () => void
 }) {
   const [form, setForm] = useState<UserCreate>(initialForm)
   const [showPw, setShowPw] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
 
-  async function handleSubmit(e: React.FormEvent) {
+  const isStaff = STAFF_ROLES.includes(form.role ?? '')
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.full_name.trim()) { setError('Nama lengkap wajib diisi'); return }
-    setSubmitting(true)
-    setError(null)
-    try {
-      const payload: UserCreate = { full_name: form.full_name.trim(), role: form.role }
-      if (form.username?.trim()) payload.username = form.username.trim()
-      if (form.password) payload.password = form.password
-      await onSubmit(payload)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menambah pengguna')
-    } finally {
-      setSubmitting(false)
+    if (isStaff) {
+      // Staff log in by email — email + password required.
+      if (!form.email?.trim()) { setError('Email wajib untuk admin/supervisor'); return }
+      if (!form.password || form.password.length < 8) { setError('Password minimal 8 karakter'); return }
+    } else {
+      // End users are matched to client systems by external_id (NIS/NIP/NIK).
+      if (!form.external_id?.trim()) { setError('ID unik (NIS/NIP/NIK) wajib untuk karyawan/siswa'); return }
     }
+    setError(null)
+    const payload: UserCreate = { full_name: form.full_name.trim(), role: form.role }
+    if (form.username?.trim()) payload.username = form.username.trim()
+    if (isStaff) {
+      payload.email = form.email!.trim().toLowerCase()
+      payload.password = form.password
+    } else {
+      payload.external_id = form.external_id!.trim()
+    }
+    onSubmit(payload)
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Tambah Pengguna</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Nama Lengkap *</label>
-            <input className="field-input" placeholder="Nama lengkap"
+            <label htmlFor="create-full-name">Nama Lengkap *</label>
+            <input id="create-full-name" className="field-input" placeholder="Nama lengkap"
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} required />
           </div>
           <div className="field">
-            <label>Username</label>
-            <input className="field-input" placeholder="Username"
-              value={form.username ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label>Password</label>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                className="field-input"
-                type={showPw ? 'text' : 'password'}
-                placeholder="Password"
-                style={{ paddingRight: 40 }}
-                value={form.password ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPw((v) => !v)}
-                style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
-              >
-                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-          <div className="field">
-            <label>Role</label>
-            <select className="field-input" value={form.role}
+            <label htmlFor="create-role">Role</label>
+            <select id="create-role" className="field-input" value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-              <option value="end_user">Karyawan</option>
+              <option value="end_user">Karyawan / Siswa</option>
+              <option value="supervisor">Supervisor</option>
               <option value="tenant_admin">Admin</option>
             </select>
           </div>
+
+          {!isStaff && (
+            <div className="field">
+              <label htmlFor="create-external-id">ID Unik (NIS/NIP/NIK) *</label>
+              <input id="create-external-id" className="field-input" placeholder="mis. 1023456"
+                value={form.external_id ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))} required />
+            </div>
+          )}
+
+          {isStaff && (
+            <>
+              <div className="field">
+                <label htmlFor="create-email">Email * <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>(untuk login)</span></label>
+                <input id="create-email" className="field-input" type="email" placeholder="admin@organisasi.com"
+                  value={form.email ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+              </div>
+              <div className="field">
+                <label htmlFor="create-password">Password *</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    id="create-password"
+                    className="field-input"
+                    type={showPw ? 'text' : 'password'}
+                    placeholder="Minimal 8 karakter"
+                    style={{ paddingRight: 40 }}
+                    value={form.password ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((v) => !v)}
+                    style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
+                  >
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="field">
+            <label htmlFor="create-username">Username <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>(opsional)</span></label>
+            <input id="create-username" className="field-input" placeholder="Username (opsional)"
+              value={form.username ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
+          </div>
           {error && <div className="error-banner">{error}</div>}
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>Batal</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Menyimpan...' : 'Simpan'}
-            </button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Batal</button>
+            <button type="submit" className="btn btn-primary">Simpan</button>
           </div>
         </form>
       </div>
@@ -134,7 +168,7 @@ function EditUserModal({
   onClose,
 }: {
   user: UserOut
-  onSubmit: (payload: UserUpdate) => Promise<void>
+  onSubmit: (payload: { userId: string; payload: UserUpdate }) => void
   onClose: () => void
 }) {
   const [form, setForm] = useState<UserUpdate>({
@@ -142,47 +176,43 @@ function EditUserModal({
     username: user.username ?? '',
     role: user.role,
   })
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.full_name?.trim()) { setError('Nama lengkap wajib diisi'); return }
-    setSubmitting(true)
     setError(null)
-    try {
-      await onSubmit({
+    onSubmit({
+      userId: user.id,
+      payload: {
         full_name: form.full_name.trim(),
         role: form.role,
         username: form.username?.trim() || undefined,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal mengubah pengguna')
-    } finally {
-      setSubmitting(false)
-    }
+      },
+    })
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Edit Pengguna</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Nama Lengkap *</label>
-            <input className="field-input" placeholder="Nama lengkap"
+            <label htmlFor="edit-full-name">Nama Lengkap *</label>
+            <input id="edit-full-name" className="field-input" placeholder="Nama lengkap"
               value={form.full_name ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} required />
           </div>
           <div className="field">
-            <label>Username</label>
-            <input className="field-input" placeholder="Username"
+            <label htmlFor="edit-username">Username</label>
+            <input id="edit-username" className="field-input" placeholder="Username"
               value={form.username ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
           </div>
           <div className="field">
-            <label>Role</label>
-            <select className="field-input" value={form.role}
+            <label htmlFor="edit-role">Role</label>
+            <select id="edit-role" className="field-input" value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
               <option value="end_user">Karyawan</option>
               <option value="tenant_admin">Admin</option>
@@ -190,10 +220,8 @@ function EditUserModal({
           </div>
           {error && <div className="error-banner">{error}</div>}
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>Batal</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Menyimpan...' : 'Simpan Perubahan'}
-            </button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Batal</button>
+            <button type="submit" className="btn btn-primary">Simpan Perubahan</button>
           </div>
         </form>
       </div>
@@ -214,13 +242,13 @@ function DeleteConfirmModal({
   onClose: () => void
   loading: boolean
 }) {
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Hapus Pengguna</h3>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-          Yakin ingin menghapus <strong style={{ color: 'var(--color-text)' }}>{user.full_name}</strong>?
-          Tindakan ini tidak bisa dibatalkan dan akan menghapus semua data absensi terkait.
+          Yakin hapus <strong style={{ color: 'var(--color-text)' }}>{user.full_name}</strong>? Data dapat dipulihkan dari Tempat Sampah dalam 30 hari.
         </p>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Batal</button>
@@ -236,87 +264,110 @@ function DeleteConfirmModal({
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export function UsersPage() {
-  const token = useAuthStore((s) => s.accessToken)
   const navigate = useNavigate()
   const location = useLocation()
   const { show } = useToast()
   // Derive base path from current route so this page works under both /tenant and /admin
   const basePath = location.pathname.startsWith('/admin') ? '/admin' : '/tenant'
 
-  const [users, setUsers] = useState<UserOut[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
   const [search, setSearch] = useState('')
+  const [searchParam, setSearchParam] = useState('')
+  const [sortKey, setSortKey] = useState<'full_name' | 'role' | 'enrolled'>('full_name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState<UserOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<UserOut | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
-  async function loadUsers() {
-    if (!token) return
-    setError(null)
-    try {
-      setUsers(await listUsers(token))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat pengguna')
-    }
-  }
+  // Debounced server-side search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setSearchParam(value.trim())
+      setPage(1)
+    }, 300)
+  }, [])
 
-  useEffect(() => { void loadUsers() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  // React Query
+  const { data: paginatedUsers, isLoading, error } = useUsers({ page, limit, search: searchParam || undefined })
+  const users = paginatedUsers?.items ?? null
+  const total = paginatedUsers?.total ?? 0
+  const pages = paginatedUsers?.pages ?? 1
 
-  const stats = useMemo(() => {
-    if (!users) return []
-    const enrolled = users.filter((u) => u.enrolled).length
-    return [
-      { label: 'Total Pengguna', value: users.length, Icon: Users, color: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)' },
-      { label: 'Sudah Enrolled', value: enrolled, Icon: ScanFace, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
-      { label: 'Belum Enrolled', value: users.length - enrolled, Icon: UserX, color: '#ca8a04', bg: 'rgba(202,138,4,0.08)' },
-    ]
-  }, [users])
-
-  const filtered = useMemo(() => {
-    if (!users) return []
-    const q = search.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(
-      (u) => u.full_name.toLowerCase().includes(q) || (u.username ?? '').toLowerCase().includes(q),
-    )
-  }, [users, search])
-
-  async function handleCreate(payload: UserCreate) {
-    if (!token) return
-    await createUser(token, payload)
-    show('Pengguna berhasil ditambahkan', 'success')
+  const closeModal = useCallback(() => {
     setShowCreate(false)
-    void loadUsers()
-  }
-
-  async function handleEdit(payload: UserUpdate) {
-    if (!token || !editTarget) return
-    await updateUser(token, editTarget.id, payload)
-    show('Pengguna berhasil diperbarui', 'success')
     setEditTarget(null)
-    void loadUsers()
+  }, [])
+
+  const createMutation = useCreateUser(() => {
+    closeModal()
+    show('Pengguna berhasil ditambahkan', 'success')
+  })
+
+  const updateMutation = useUpdateUser(() => {
+    closeModal()
+    show('Pengguna berhasil diperbarui', 'success')
+  })
+
+  const deleteMutation = useDeleteUser(() => {
+    setDeleteTarget(null)
+    show(`${deletedUserName} berhasil dihapus`, 'success', {
+      label: 'Undo',
+      onClick: () => restoreMutation.mutate(deletedUserId),
+    })
+  })
+
+  const restoreMutation = useRestoreUser(() => {
+    show('Pengguna berhasil dipulihkan', 'success')
+  })
+
+  // Capture delete target info for the undo toast callback
+  const [deletedUserId, setDeletedUserId] = useState('')
+  const [deletedUserName, setDeletedUserName] = useState('')
+
+  function handleCreate(payload: UserCreate) {
+    createMutation.mutate(payload)
   }
 
-  async function handleDelete() {
-    if (!token || !deleteTarget) return
-    setDeleting(true)
-    try {
-      await deleteUser(token, deleteTarget.id)
-      show(`${deleteTarget.full_name} berhasil dihapus`, 'success')
-      setDeleteTarget(null)
-      void loadUsers()
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal menghapus pengguna', 'error')
-    } finally {
-      setDeleting(false)
-    }
+  function handleEdit(userId: string, payload: UserUpdate) {
+    updateMutation.mutate({ userId, payload })
+  }
+
+  function handleDelete() {
+    if (!deleteTarget) return
+    setDeletedUserId(deleteTarget.id)
+    setDeletedUserName(deleteTarget.full_name)
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   function handleEnroll(user: UserOut) {
     navigate(`${basePath}/enrollment`, { state: { userId: user.id, userName: user.full_name } })
   }
+
+  const enrolledCount = users ? users.filter((u) => u.enrolled).length : 0
+  const notEnrolledCount = users ? users.length - enrolledCount : 0
+
+  const sorted = useMemo(() => {
+    if (!users) return users
+    return [...users].sort((a, b) => {
+      let av: string, bv: string
+      if (sortKey === 'full_name') { av = a.full_name ?? ''; bv = b.full_name ?? '' }
+      else if (sortKey === 'role') { av = a.role; bv = b.role }
+      else { av = a.enrolled ? '1' : '0'; bv = b.enrolled ? '1' : '0' }
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+    })
+  }, [users, sortKey, sortDir])
+
+  function toggleSort(key: 'full_name' | 'role' | 'enrolled') {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  const sortGlyph = (key: 'full_name' | 'role' | 'enrolled') =>
+    sortKey === key ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.3 }}>↕</span>
 
   return (
     <div>
@@ -334,7 +385,7 @@ export function UsersPage() {
 
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-        {users === null && !error
+        {isLoading && !error
           ? [0, 1, 2].map((i) => (
               <div key={i} className="stat-card">
                 <div className="skeleton" style={{ width: 46, height: 46, borderRadius: 10, flexShrink: 0 }} />
@@ -344,7 +395,11 @@ export function UsersPage() {
                 </div>
               </div>
             ))
-          : stats.map(({ label, value, Icon, color, bg }) => (
+          : [
+              { label: 'Total Pengguna', value: total, Icon: Users, color: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)' },
+              { label: 'Sudah Enrolled', value: enrolledCount, Icon: ScanFace, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+              { label: 'Belum Enrolled', value: notEnrolledCount, Icon: UserX, color: '#ca8a04', bg: 'rgba(202,138,4,0.08)' },
+            ].map(({ label, value, Icon, color, bg }) => (
               <div key={label} className="stat-card">
                 <div className="stat-icon" style={{ background: bg }}>
                   <Icon size={20} color={color} />
@@ -357,7 +412,7 @@ export function UsersPage() {
             ))}
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error instanceof Error ? error.message : 'Gagal memuat pengguna'}</div>}
 
       {/* Search */}
       <div className="search-input-wrap" style={{ maxWidth: 360, marginBottom: 16 }}>
@@ -366,7 +421,8 @@ export function UsersPage() {
           className="search-input"
           placeholder="Cari pengguna..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          aria-label="Cari pengguna"
         />
       </div>
 
@@ -375,15 +431,21 @@ export function UsersPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Nama</th>
+              <th onClick={() => toggleSort('full_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                Nama {sortGlyph('full_name')}
+              </th>
               <th>Username</th>
-              <th>Role</th>
-              <th>Status Enrolled</th>
+              <th onClick={() => toggleSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                Role {sortGlyph('role')}
+              </th>
+              <th onClick={() => toggleSort('enrolled')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                Status Enrolled {sortGlyph('enrolled')}
+              </th>
               <th style={{ textAlign: 'right' }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {users === null && !error && [0, 1, 2, 3, 4].map((i) => (
+            {isLoading && !error && [0, 1, 2, 3, 4].map((i) => (
               <tr key={i}>
                 <td><div className="skeleton skeleton-text" style={{ width: '55%' }} /></td>
                 <td><div className="skeleton skeleton-text sm" /></td>
@@ -393,25 +455,24 @@ export function UsersPage() {
               </tr>
             ))}
 
-            {users !== null && filtered.length === 0 && (
+            {!isLoading && users !== null && users.length === 0 && (
               <tr>
                 <td colSpan={5}>
-                  <div className="empty-state">
-                    <Users size={36} color="var(--color-text-muted)" style={{ marginBottom: 10 }} />
-                    <p style={{ margin: 0, fontWeight: 500 }}>
-                      {users.length === 0 ? 'Belum ada pengguna' : 'Tidak ada pengguna yang cocok'}
-                    </p>
-                    {users.length === 0 && (
-                      <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-                        Klik "Tambah Pengguna" untuk menambahkan karyawan pertama.
-                      </p>
-                    )}
-                  </div>
+                  <EmptyState
+                    icon="users"
+                    title="Belum ada pengguna"
+                    description="Tambahkan pengguna pertama Anda untuk mulai mengelola absensi"
+                    action={
+                      <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                        Tambah Pengguna
+                      </button>
+                    }
+                  />
                 </td>
               </tr>
             )}
 
-            {users !== null && filtered.map((row) => (
+            {sorted !== null && sorted.length > 0 && sorted.map((row) => (
               <tr key={row.id}>
                 <td style={{ fontWeight: 500 }}>{row.full_name}</td>
                 <td style={{ color: 'var(--color-text-secondary)' }}>{row.username ?? '-'}</td>
@@ -431,6 +492,7 @@ export function UsersPage() {
                     <button
                       className="btn-icon"
                       title="Edit pengguna"
+                      aria-label="Ubah pengguna"
                       onClick={() => setEditTarget(row)}
                     >
                       <Edit2 size={15} />
@@ -438,6 +500,7 @@ export function UsersPage() {
                     <button
                       className="btn-icon btn-icon-primary"
                       title={row.enrolled ? 'Update enrollment wajah' : 'Enroll wajah'}
+                      aria-label={row.enrolled ? 'Update enrollment wajah' : 'Enroll wajah'}
                       onClick={() => handleEnroll(row)}
                     >
                       <ScanFace size={15} />
@@ -445,6 +508,7 @@ export function UsersPage() {
                     <button
                       className="btn-icon btn-icon-danger"
                       title="Hapus pengguna"
+                      aria-label="Hapus pengguna"
                       onClick={() => setDeleteTarget(row)}
                     >
                       <Trash2 size={15} />
@@ -455,20 +519,23 @@ export function UsersPage() {
             ))}
           </tbody>
         </table>
+        {!isLoading && users !== null && (
+          <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
+        )}
       </div>
 
       {showCreate && (
         <CreateUserModal onSubmit={handleCreate} onClose={() => setShowCreate(false)} />
       )}
       {editTarget && (
-        <EditUserModal user={editTarget} onSubmit={handleEdit} onClose={() => setEditTarget(null)} />
+        <EditUserModal user={editTarget} onSubmit={(p) => handleEdit(p.userId, p.payload)} onClose={() => setEditTarget(null)} />
       )}
       {deleteTarget && (
         <DeleteConfirmModal
           user={deleteTarget}
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
-          loading={deleting}
+          loading={deleteMutation.isPending}
         />
       )}
     </div>

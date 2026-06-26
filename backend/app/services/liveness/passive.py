@@ -16,7 +16,10 @@ from pathlib import Path
 
 import numpy as np
 
+from app.core.logging import get_logger
 from app.services.liveness.base import LivenessError
+
+log = get_logger("netra.liveness.passive")
 
 # HuggingFace: garciafido/minifasnet-v2-anti-spoofing-onnx
 _MODEL_URL = (
@@ -27,6 +30,7 @@ _MODEL_SHA256 = "d7b3cd9ba8a7ceb13baa8c4720902e27ca3112eff52f926c08804af6b6eecc7
 
 _INPUT_SIZE = (80, 80)   # (width, height)
 _SCALE = 2.7             # face crop margin multiplier
+_LIVE_CLASS = 2          # softmax index for the "real/live" class (this model)
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -150,5 +154,16 @@ class SilentFaceLivenessEngine:
         input_name = session.get_inputs()[0].name
         logits = session.run(None, {input_name: blob})[0][0]  # (3,)
         probs = _softmax(logits)
-        # Class 0 = live, Class 1 = print attack, Class 2 = replay attack
-        return float(probs[0])
+        # For THIS ONNX model (garciafido/minifasnet-v2), empirically the "live"
+        # class is index 2: a real face in front of the camera yields
+        # probs ≈ [~0.0004, ~0.006, ~0.993] (verified via logged diagnostics).
+        # Index 0/1 are the spoof classes (print / replay).
+        live = float(probs[_LIVE_CLASS])
+        log.info(
+            "liveness_probs",
+            prob0=round(float(probs[0]), 4),
+            prob1=round(float(probs[1]), 4),
+            prob2=round(float(probs[2]), 4),
+            live=round(live, 4),
+        )
+        return live

@@ -294,7 +294,8 @@ export function EnrollmentPage() {
                   <option value="">-- Pilih pengguna --</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.full_name ? `${u.full_name} (${u.username})` : u.username}
+                      {u.full_name ?? 'Tanpa nama'}
+                      {u.external_id ? ` · ${u.external_id}` : u.username ? ` (${u.username})` : ''}
                     </option>
                   ))}
                 </select>

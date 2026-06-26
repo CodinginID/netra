@@ -10,6 +10,7 @@ interface AuthState {
   isAuthenticated: boolean
   selectedTenantId: string | null
   setTokens: (access: string, refresh: string, role: Role) => void
+  updateTokens: (access: string, refresh: string) => void
   setSelectedTenantId: (id: string | null) => void
   logout: () => void
 }
@@ -35,6 +36,9 @@ export const useAuthStore = create<AuthState>()(
         } catch { /* invalid token shape */ }
         set({ accessToken: access, refreshToken: refresh, role, username, isAuthenticated: true, selectedTenantId })
       },
+
+      // Update tokens after a silent refresh — keep role/tenant context intact.
+      updateTokens: (access, refresh) => set({ accessToken: access, refreshToken: refresh }),
 
       setSelectedTenantId: (id) => set({ selectedTenantId: id }),
 

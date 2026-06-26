@@ -33,23 +33,23 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         json={
             "name": f"Sekolah {slug}",
             "slug": slug,
-            "admin_username": f"admin-{slug}",
+            "admin_email": f"admin-{slug}@netra.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin",
         },
     )
     assert resp.status_code == 201, resp.text
     admin = await _token(
-        client, username=f"admin-{slug}", password="adminpass123", tenant_slug=slug
+        client, email=f"admin-{slug}@netra.app", password="adminpass123"
     )
     return {"Authorization": f"Bearer {admin}"}
 
 
-async def _create_user(client: AsyncClient, hdr: dict, full_name: str, username: str) -> str:
+async def _create_user(client: AsyncClient, hdr: dict, full_name: str, external_id: str) -> str:
     resp = await client.post(
         "/api/v1/users",
         headers=hdr,
-        json={"full_name": full_name, "role": "end_user", "username": username},
+        json={"full_name": full_name, "role": "end_user", "external_id": external_id},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()["data"]["id"]
@@ -70,7 +70,7 @@ async def _device_token(client: AsyncClient, hdr: dict, name: str = "Kiosk") -> 
 
 @pytest.mark.asyncio
 async def test_enroll_requires_consent(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rec-a")
     user_id = await _create_user(client, hdr, "Bob", "bob")
 
@@ -103,7 +103,7 @@ async def test_enroll_requires_consent(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rec-b")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
@@ -184,7 +184,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
 @pytest.mark.asyncio
 async def test_recognition_is_tenant_isolated(client: AsyncClient, super_admin):
     """A kiosk in tenant B must NEVER match a face enrolled in tenant A (RLS)."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     ohdr = {"Authorization": f"Bearer {owner}"}
 
     # Tenant A: enroll Alice.
@@ -227,7 +227,7 @@ async def _enroll(client: AsyncClient, hdr: dict, user_id: str, face: bytes) -> 
 @pytest.mark.asyncio
 async def test_liveness_rejects_spoof(client: AsyncClient, super_admin):
     """A spoofed (non-live) capture is rejected before identification."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "live-a")
     device = await _device_token(client, hdr)
 
@@ -242,7 +242,7 @@ async def test_liveness_rejects_spoof(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_geofence_enforced(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "geo-a")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
@@ -294,7 +294,7 @@ async def test_geofence_enforced(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_holiday_has_no_late_penalty(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "hol-a")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)

@@ -29,11 +29,15 @@
   --color-danger-border: #ffb4ab;
 
   --color-warning: #d97706;
+  --color-warning-text: #b45309;    /* 4.7:1 on white — AA compliant for normal text */
   --color-warning-bg: #fffbeb;
   --color-warning-border: #fde68a;
 
   --color-info: #006387;
   --color-info-bg: #c4e7ff;
+
+  /* Accessible text variants (WCAG AA 4.5:1 on white) */
+  --color-brand-text: #0a7a70;     /* 4.6:1 on white — use for brand-colored text */
 
   /* Sidebar — deep navy */
   --sidebar-bg: linear-gradient(180deg, #0f172a 0%, #0a1628 100%);
@@ -207,7 +211,7 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
 .btn-success:hover { background: #d1fae5; }
 .btn-warning {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
   border: 1.5px solid var(--color-warning-border);
 }
 .btn-warning:hover { background: #fde68a; }
@@ -250,7 +254,7 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
 }
 .badge-green { background: var(--color-success-bg); color: var(--color-success); }
 .badge-gray { background: rgba(100,116,139,0.1); color: #64748b; }
-.badge-orange { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-orange { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .badge-blue { background: var(--color-info-bg); color: var(--color-info); }
 .badge-red { background: var(--color-danger-bg); color: var(--color-danger); }
 
@@ -302,18 +306,38 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
 
 /* ── Empty state ── */
 .empty-state {
-  padding: 3rem 2rem;
-  text-align: center;
-  color: var(--color-text-secondary);
-  font-size: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  min-height: 200px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
 }
 
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(20px); }
   to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Toast action button ── */
+.toast-action-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  margin-left: 8px;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+.toast-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* ── Icon button ── */
@@ -346,6 +370,117 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
   border-radius: var(--radius-sm);
 }
 
+/* Remove default outline for mouse users (keep for keyboard) */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Buttons with branded focus ring and soft glow */
+.btn:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-brand-light);
+}
+
+.btn-primary:focus-visible {
+  outline-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.btn-danger:focus-visible {
+  outline-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(186, 26, 26, 0.3);
+}
+
+.btn-ghost:focus-visible {
+  outline-color: var(--color-brand);
+  box-shadow: 0 0 0 4px var(--color-brand-light);
+}
+
+.btn-icon:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Input fields */
+.field-input:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 0;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-light);
+}
+
+.search-input:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 0;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-light);
+}
+
+/* Links */
+a:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Sidebar nav links — light outline on dark background */
+.sidebar-nav-link:focus-visible {
+  outline: 2px solid var(--sidebar-accent);
+  outline-offset: -2px;
+}
+
+/* Notification bell */
+.notif-trigger:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Badges (non-interactive, but if used in buttons) */
+.badge:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+/* Modal backdrop — focus should go to modal content, not backdrop */
+.modal-backdrop:focus {
+  outline: none;
+}
+
+/* Kiosk-specific — dark background needs lighter focus ring */
+.kiosk-camera-placeholder:focus-visible,
+.kiosk-settings-btn:focus-visible {
+  outline-color: #6bd8cb;
+}
+
+/* Skip to content link */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  padding: 12px 24px;
+  background: var(--color-brand);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 0 0 8px 8px;
+  text-decoration: none;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* Schedule type buttons */
+.schedule-type-btn:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
 /* ── Schedule type selector ── */
 .schedule-type-row {
   display: flex;
@@ -365,12 +500,12 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.schedule-type-btn:hover { border-color: var(--color-brand); color: var(--color-brand); }
+.schedule-type-btn:hover { border-color: var(--color-brand); color: var(--color-brand-text); }
 
 .schedule-type-btn--active {
   border-color: var(--color-brand);
   background: var(--color-brand-light);
-  color: var(--color-brand);
+  color: var(--color-brand-text);
   font-weight: 600;
 }
 
@@ -495,3 +630,15 @@ input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s 
 .notif-item:last-child { border-bottom: none; }
 .notif-item-name { color: var(--color-text); font-weight: 500; }
 .notif-item-time { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+/* === Accessibility: Reduced Motion Preference === */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

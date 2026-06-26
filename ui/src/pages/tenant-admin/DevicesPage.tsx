@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Monitor, Wifi, WifiOff, Plus, Copy, RefreshCw } from 'lucide-react'
-import { useAuthStore } from '@/store/authStore'
+import { useState } from 'react'
+import { Monitor, Wifi, WifiOff, Plus, Copy, RefreshCw, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
+import { useModalA11y } from '@/hooks/useModalA11y'
 import {
-  listDevices,
-  registerDevice,
-  revokeDevice,
   type DeviceOut,
   type DeviceRegistered,
 } from '@/api/adminApi'
+import { Pagination } from '@/components/Pagination'
+import { useDevices } from '@/hooks/useApiQueries'
+import { useRegisterDevice, useRevokeDevice, useDeleteDevice, useRestoreDevice } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -42,9 +43,10 @@ function AddDeviceModal({
   submitting: boolean
 }) {
   const [name, setName] = useState('')
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose: onCancel })
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onCancel}>
+      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">Tambah Perangkat</h3>
         <form
           onSubmit={(e) => {
@@ -53,8 +55,9 @@ function AddDeviceModal({
           }}
         >
           <div className="field">
-            <label>Nama Perangkat</label>
+            <label htmlFor="device-name">Nama Perangkat</label>
             <input
+              id="device-name"
               className="field-input"
               autoFocus
               type="text"
@@ -104,6 +107,7 @@ function NewTokenBanner({ device, onDismiss }: { device: DeviceRegistered; onDis
         <button
           className="btn btn-ghost btn-sm"
           title="Salin token"
+          aria-label="Salin token"
           onClick={() => navigator.clipboard?.writeText(device.token)}
         >
           <Copy size={15} />
@@ -116,64 +120,99 @@ function NewTokenBanner({ device, onDismiss }: { device: DeviceRegistered; onDis
   )
 }
 
+function DeleteConfirmModal({
+  device,
+  onConfirm,
+  onClose,
+  loading,
+}: {
+  device: DeviceOut
+  onConfirm: () => void
+  onClose: () => void
+  loading: boolean
+}) {
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
+  return (
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div className="modal-card" ref={modalRef} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">Hapus Perangkat</h3>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+          Yakin hapus perangkat <strong style={{ color: 'var(--color-text)' }}>{device.name}</strong>? Data dapat dipulihkan dari Tempat Sampah dalam 30 hari.
+        </p>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Batal</button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>
+            {loading ? 'Menghapus...' : 'Hapus'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function DevicesPage() {
-  const token = useAuthStore((s) => s.accessToken)
   const { show } = useToast()
-  const [devices, setDevices] = useState<DeviceOut[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
   const [showForm, setShowForm] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [newDevice, setNewDevice] = useState<DeviceRegistered | null>(null)
-  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DeviceOut | null>(null)
 
-  const load = useCallback(async () => {
-    if (!token) return
-    setLoading(true)
-    setError(null)
-    try {
-      setDevices(await listDevices(token))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat perangkat')
-    } finally {
-      setLoading(false)
-    }
-  }, [token])
+  const { data: paginatedDevices, isLoading, error } = useDevices({ page, limit })
+  const devices = paginatedDevices?.items ?? []
+  const total = paginatedDevices?.total ?? 0
+  const pages = paginatedDevices?.pages ?? 0
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  const registerMutation = useRegisterDevice(() => {
+    setShowForm(false)
+    show('Perangkat berhasil didaftarkan', 'success')
+  })
 
-  const handleAdd = async (name: string) => {
-    if (!token) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const created = await registerDevice(token, name)
-      setNewDevice(created)
-      setShowForm(false)
-      show('Perangkat berhasil didaftarkan', 'success')
-      await load()
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal mendaftarkan perangkat', 'error')
-    } finally {
-      setSubmitting(false)
-    }
+  const revokeMutation = useRevokeDevice(() => {
+    show('Perangkat berhasil dicabut', 'success')
+  })
+
+  const deleteMutation = useDeleteDevice()
+  const restoreMutation = useRestoreDevice()
+
+  const handleAdd = (name: string) => {
+    // Per-call onSuccess receives the created device (incl. the one-time token)
+    // so we can surface it in the banner — the hook-level onSuccess only handles
+    // toast/cache invalidation and gets no data.
+    registerMutation.mutate(name, {
+      onSuccess: (device) => setNewDevice(device),
+    })
   }
 
-  const handleRevoke = async (deviceId: string) => {
-    if (!token) return
-    setRevokingId(deviceId)
-    setError(null)
-    try {
-      await revokeDevice(token, deviceId)
-      show('Perangkat berhasil dicabut', 'success')
-      await load()
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Gagal mencabut perangkat', 'error')
-    } finally {
-      setRevokingId(null)
-    }
+  const handleRevoke = (deviceId: string) => {
+    revokeMutation.mutate(deviceId, {
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal mencabut perangkat', 'error')
+      },
+    })
+  }
+
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    const deletedDevice = { ...deleteTarget }
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null)
+        show(`${deletedDevice.name} berhasil dihapus`, 'success', {
+          label: 'Undo',
+          onClick: () => {
+            restoreMutation.mutate(deletedDevice.id, {
+              onError: () => {
+                show('Gagal membatalkan penghapusan', 'error')
+              },
+            })
+          },
+        })
+      },
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal menghapus perangkat', 'error')
+      },
+    })
   }
 
   const onlineCount = devices.filter((d) => d.status === 'active').length
@@ -191,14 +230,14 @@ export function DevicesPage() {
       {newDevice && <NewTokenBanner device={newDevice} onDismiss={() => setNewDevice(null)} />}
 
       {showForm && (
-        <AddDeviceModal onSubmit={handleAdd} onCancel={() => setShowForm(false)} submitting={submitting} />
+        <AddDeviceModal onSubmit={handleAdd} onCancel={() => setShowForm(false)} submitting={registerMutation.isPending} />
       )}
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error.message}</div>}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
         <span className="device-chip">
-          <Monitor size={15} /> Total: {devices.length} perangkat
+          <Monitor size={15} /> Total: {total} perangkat
         </span>
         <span className="device-chip">
           <Wifi size={15} color="#16a34a" /> Aktif: {onlineCount}
@@ -208,7 +247,7 @@ export function DevicesPage() {
         </span>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {[0, 1, 2].map((i) => (
             <div key={i} className="stat-card" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
@@ -225,45 +264,68 @@ export function DevicesPage() {
         </div>
       ) : devices.length === 0 ? (
         <div className="data-card">
-          <div className="empty-state">
-            <Monitor size={40} color="var(--color-text-muted)" style={{ marginBottom: 12 }} />
-            <p style={{ margin: 0, fontWeight: 500 }}>Belum ada perangkat terdaftar</p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-              Klik "Tambah Perangkat" di atas untuk mendaftarkan kiosk pertama.
-            </p>
-          </div>
+          <EmptyState
+            icon="monitor"
+            title="Belum ada perangkat"
+            description="Daftarkan perangkat kiosk pertama Anda untuk mulai absensi"
+            action={
+              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                Tambah Perangkat
+              </button>
+            }
+          />
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {devices.map((device) => (
-            <div
-              key={device.id}
-              className="stat-card"
-              style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
-                <StatusBadge active={device.status === 'active'} />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
-                <RefreshCw size={13} /> Terakhir aktif: {formatLastSeen(device.last_seen_at)}
-              </div>
-
-              {device.status === 'active' && (
-                <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleRevoke(device.id)}
-                    disabled={revokingId === device.id}
-                  >
-                    {revokingId === device.id ? 'Mencabut...' : 'Cabut'}
-                  </button>
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {devices.map((device) => (
+              <div
+                key={device.id}
+                className="stat-card"
+                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
+                  <StatusBadge active={device.status === 'active'} />
                 </div>
-              )}
-            </div>
-          ))}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  <RefreshCw size={13} /> Terakhir aktif: {formatLastSeen(device.last_seen_at)}
+                </div>
+
+                {device.status === 'active' && (
+                  <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleRevoke(device.id)}
+                      disabled={revokeMutation.isPending && revokeMutation.variables === device.id}
+                    >
+                      {revokeMutation.isPending && revokeMutation.variables === device.id ? 'Mencabut...' : 'Cabut'}
+                    </button>
+                    <button
+                      className="btn-icon btn-icon-danger"
+                      title="Hapus perangkat"
+                      aria-label="Hapus perangkat"
+                      onClick={() => setDeleteTarget(device)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         </div>
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          device={deleteTarget}
+          onConfirm={handleDelete}
+          onClose={() => setDeleteTarget(null)}
+          loading={deleteMutation.isPending}
+        />
       )}
     </div>
   )

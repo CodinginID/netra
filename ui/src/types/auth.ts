@@ -13,9 +13,8 @@ export interface AuthTokens {
 }
 
 export interface LoginRequest {
-  username: string
+  email: string
   password: string
-  tenant_slug?: string
 }
 
 export interface ApiResponse<T> {

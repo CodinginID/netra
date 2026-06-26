@@ -1,5 +1,5 @@
 import '@/styles/layout.css'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   ClipboardList,
   UserCheck,
@@ -12,12 +12,13 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { EmptyState } from '@/components/EmptyState'
 import {
-  listAttendance,
   exportAttendanceUrl,
-  listUsers,
   type AttendanceOut,
 } from '@/api/adminApi'
+import { Pagination } from '@/components/Pagination'
+import { useAttendance, useUsers } from '@/hooks/useApiQueries'
 
 type StatusLabel = 'Tepat Waktu' | 'Terlambat' | 'Pulang Awal'
 
@@ -72,34 +73,20 @@ export function AttendancePage() {
 
   const [fromDate, setFromDate] = useState(today())
   const [toDate, setToDate] = useState(today())
-  const [rows, setRows] = useState<AttendanceOut[]>([])
-  const [userMap, setUserMap] = useState<Map<string, string>>(new Map())
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
-    if (!token) return
-    setLoading(true)
-    setError(null)
-    try {
-      const [data, users] = await Promise.all([
-        listAttendance(token, { from: fromDate, to: toDate }),
-        listUsers(token),
-      ])
-      setUserMap(new Map(users.map((u) => [u.id, u.full_name ?? u.username ?? u.id.slice(0, 8)])))
-      setRows(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat data kehadiran')
-      setRows([])
-    } finally {
-      setLoading(false)
-    }
-  }, [token, fromDate, toDate])
+  const { data: paginatedAttendance, isLoading, error } = useAttendance({ page, limit, from: fromDate, to: toDate })
+  const rows = paginatedAttendance?.items ?? []
+  const total = paginatedAttendance?.total ?? 0
+  const pages = paginatedAttendance?.pages ?? 0
 
-  useEffect(() => {
-    void fetchData()
-  }, [fetchData])
+  // Fetch all users for name lookup (no pagination needed for lookup)
+  const { data: usersData } = useUsers({ limit: 1000 })
+  const userMap = new Map<string, string>(
+    (usersData?.items ?? []).map((u) => [u.id, u.full_name ?? u.username ?? u.id.slice(0, 8)])
+  )
 
   async function handleExport() {
     if (!token) return
@@ -114,11 +101,10 @@ export function AttendancePage() {
       link.click()
       URL.revokeObjectURL(link.href)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal mengekspor data')
+      // Export error handling kept local since it's not a query
     }
   }
 
-  const total = rows.length
   const onTime = rows.filter((r) => r.status === 'on_time').length
   const late = rows.filter((r) => r.status === 'late').length
 
@@ -128,10 +114,11 @@ export function AttendancePage() {
     { label: 'Terlambat', value: late, icon: Clock3, color: '#ca8a04' },
   ]
 
-  const filteredRows = query.trim()
+  // Client-side name filter (search input)
+  const filteredRows = query
     ? rows.filter((r) => {
-        const name = userMap.get(r.user_id) ?? r.user_id
-        return name.toLowerCase().includes(query.trim().toLowerCase())
+        const name = userMap.get(r.user_id) ?? ''
+        return name.toLowerCase().includes(query.toLowerCase())
       })
     : rows
 
@@ -176,23 +163,26 @@ export function AttendancePage() {
             placeholder="Cari nama pengguna..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Cari nama pengguna"
           />
         </div>
-        <span className="filter-label">Dari:</span>
+        <span className="filter-label" id="from-date-label">Dari:</span>
         <input
           type="date"
           className="date-input"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
+          aria-labelledby="from-date-label"
         />
-        <span className="filter-label">Sampai:</span>
+        <span className="filter-label" id="to-date-label">Sampai:</span>
         <input
           type="date"
           className="date-input"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
+          aria-labelledby="to-date-label"
         />
-        <button className="btn btn-primary" onClick={() => void fetchData()} disabled={loading}>
+        <button className="btn btn-primary" onClick={() => setPage(1)} disabled={isLoading}>
           <Search size={16} /> Cari
         </button>
         <button className="btn btn-ghost" onClick={() => void handleExport()}>
@@ -200,7 +190,7 @@ export function AttendancePage() {
         </button>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error.message}</div>}
 
       <div className="data-card">
         <table className="data-table">
@@ -212,7 +202,7 @@ export function AttendancePage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               <tr>
                 <td colSpan={5}>
                   <div className="empty-state">Memuat...</div>
@@ -221,11 +211,11 @@ export function AttendancePage() {
             ) : filteredRows.length === 0 ? (
               <tr>
                 <td colSpan={5}>
-                  <div className="empty-state">
-                    <ClipboardList size={36} color="var(--color-text-muted)" style={{ marginBottom: 10 }} />
-                    <p style={{ margin: 0, fontWeight: 500 }}>Tidak ada catatan kehadiran</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>Coba ubah filter periode atau nama pengguna.</p>
-                  </div>
+                  <EmptyState
+                    icon="clipboard"
+                    title="Belum ada data kehadiran"
+                    description="Data absensi akan muncul setelah kiosk mulai digunakan"
+                  />
                 </td>
               </tr>
             ) : (
@@ -245,6 +235,7 @@ export function AttendancePage() {
             )}
           </tbody>
         </table>
+        <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
       </div>
     </div>
   )
