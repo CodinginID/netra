@@ -22,6 +22,7 @@ import { DevicesPage } from '@/pages/tenant-admin/DevicesPage'
 import { SchedulesPage } from '@/pages/tenant-admin/SchedulesPage'
 import { AttendancePage } from '@/pages/tenant-admin/AttendancePage'
 import { DailyStatusPage } from '@/pages/tenant-admin/DailyStatusPage'
+import { IntegrationPage } from '@/pages/tenant-admin/IntegrationPage'
 import { TrashPage } from '@/pages/tenant-admin/TrashPage'
 
 // Kiosk (public — device token auth)
@@ -34,6 +35,8 @@ import {
   SuperAdminHomePage,
 } from '@/pages/super-admin/SuperAdminDashboard'
 import { TenantsPage } from '@/pages/super-admin/TenantsPage'
+import { SettingsPage } from '@/pages/super-admin/SettingsPage'
+import { TenantScopedDashboard } from '@/components/TenantScopedDashboard'
 
 // Tenant Admin dashboard home
 import { TenantAdminHomePage } from '@/pages/tenant-admin/TenantAdminDashboard'
@@ -84,6 +87,7 @@ function AppRoutes() {
           <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
           <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
           <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
+          <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 
@@ -99,13 +103,22 @@ function AppRoutes() {
           <Route index element={<SuperAdminIndex />} />
           <Route path="dashboard" element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
           <Route path="tenants" element={<ErrorBoundary><TenantsPage /></ErrorBoundary>} />
-          <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
-          <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
-          <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
-          <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
-          <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
-          <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+
+          {/* Tenant-scoped routes — context-switched view for a specific tenant */}
+          <Route path="tenants/:tenantId" element={<ErrorBoundary><TenantScopedDashboard /></ErrorBoundary>}>
+            <Route index element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
+            <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+            <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
+            <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
+            <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
+            <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+            <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
+            <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
+            <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+            <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+          </Route>
         </Route>
 
         {/* 404 */}

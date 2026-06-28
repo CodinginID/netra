@@ -1,4 +1,5 @@
 import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react'
+import { t } from '@/store/i18nStore'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -40,7 +41,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         }}
       >
         <h2 style={{ margin: 0, color: 'var(--color-danger)', fontSize: 20, fontWeight: 700 }}>
-          Terjadi kesalahan
+          {t('error.something_wrong')}
         </h2>
         <p style={{ margin: 0, color: 'var(--color-text)', maxWidth: 480 }}>{error.message}</p>
         <button
@@ -56,7 +57,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             cursor: 'pointer',
           }}
         >
-          Muat ulang halaman
+          {t('error.reload_page')}
         </button>
       </div>
     )

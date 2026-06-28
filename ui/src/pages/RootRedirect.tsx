@@ -9,7 +9,7 @@ export function RootRedirect() {
   }
 
   if (role === 'super_admin') {
-    return <Navigate to="/admin/tenants" replace />
+    return <Navigate to="/admin/dashboard" replace />
   }
 
   if (role === 'tenant_admin' || role === 'supervisor') {

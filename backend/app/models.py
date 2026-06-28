@@ -62,6 +62,11 @@ class DeviceStatus(str, enum.Enum):
     revoked = "revoked"
 
 
+class ApiKeyStatus(str, enum.Enum):
+    active = "active"
+    revoked = "revoked"
+
+
 # --------------------------------------------------------------------------- #
 # Platform-level
 # --------------------------------------------------------------------------- #
@@ -234,6 +239,34 @@ class Device(Base, TimestampMixin):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ApiKey(Base, TimestampMixin):
+    """Tenant-scoped API key for server-to-server integration.
+
+    Lets a tenant's own application pull data from netra (e.g. attendance
+    reports into their dashboard) without a human login. The full key is shown
+    ONCE on creation; only its SHA-256 hash is stored. ``prefix`` is a
+    non-secret display fragment (e.g. ``ntr_live_a1b2c3``) so admins can tell
+    keys apart. ``scopes`` restrict what the key may do (e.g. attendance:read).
+    """
+
+    __tablename__ = "api_keys"
+    __table_args__ = (Index("ix_apikey_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(20), nullable=False)  # non-secret display fragment
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    status: Mapped[ApiKeyStatus] = mapped_column(
+        Enum(ApiKeyStatus, name="api_key_status"), default=ApiKeyStatus.active, nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SSOConnection(Base, TimestampMixin):
     """Per-tenant Identity Provider config (Phase 2 wiring)."""
 
@@ -309,4 +342,5 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "sso_connections",
     "consents",
     "webhook_endpoints",
+    "api_keys",
 )

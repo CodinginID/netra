@@ -12,9 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import tenant_id_ctx
-from app.core.security import JWTError, decode_token, hash_device_token
+from app.core.security import JWTError, decode_token, hash_api_key, hash_device_token
 from app.db.session import SessionFactory, _set_tenant
-from app.models import Device, DeviceStatus, Role
+from app.models import ApiKey, ApiKeyStatus, Device, DeviceStatus, Role
 
 # Security schemes — registered with OpenAPI so Swagger UI renders an "Authorize"
 # button. auto_error=False lets us return our own 401 (instead of 403) and keep
@@ -27,6 +27,12 @@ device_token_scheme = APIKeyHeader(
     name="X-Device-Token",
     auto_error=False,
     description="Kiosk device token returned once when registering a device.",
+)
+api_key_scheme = APIKeyHeader(
+    name="X-API-Key",
+    auto_error=False,
+    description="Tenant API key (ntr_live_…) for server-to-server integration. "
+    "May also be sent as 'Authorization: Bearer ntr_live_…'.",
 )
 
 
@@ -187,3 +193,91 @@ async def get_device_db(
         except Exception:
             await session.rollback()
             raise
+
+
+# --------------------------------------------------------------------------- #
+# API key auth (server-to-server tenant integration)
+# --------------------------------------------------------------------------- #
+@dataclass
+class ApiPrincipal:
+    """Authenticated identity for a tenant API key."""
+
+    key_id: str
+    tenant_id: str
+    scopes: list[str]
+
+
+async def get_api_principal(
+    request: Request,
+    x_api_key: str | None = Depends(api_key_scheme),
+) -> ApiPrincipal:
+    """Authenticate a server-to-server request via tenant API key.
+
+    Accepts the key from the ``X-API-Key`` header or ``Authorization: Bearer``.
+    Looks the key up by hash on an UNSCOPED session (the tenant is unknown until
+    the key is found), rejecting revoked or expired keys. Updates last_used_at.
+    """
+    raw = x_api_key
+    if not raw:
+        auth = request.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer "):
+            raw = auth[7:].strip()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key (send X-API-Key or Authorization: Bearer)",
+        )
+
+    key_hash = hash_api_key(raw)
+    async with SessionFactory() as session:
+        await _set_tenant(session, None)  # platform context: search across tenants
+        key = (
+            await session.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+        ).scalar_one_or_none()
+        if key is None or key.status != ApiKeyStatus.active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key"
+            )
+        if key.expires_at is not None and key.expires_at < datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired"
+            )
+        key.last_used_at = datetime.now(UTC)
+        await session.commit()
+        tenant_id = key.tenant_id
+        key_id = key.id
+        scopes = list(key.scopes or [])
+
+    tenant_id_ctx.set(tenant_id)
+    return ApiPrincipal(key_id=key_id, tenant_id=tenant_id, scopes=scopes)
+
+
+async def get_api_db(
+    principal: ApiPrincipal = Depends(get_api_principal),
+) -> AsyncIterator[AsyncSession]:
+    """Tenant-bound (RLS-scoped) session for an authenticated API key."""
+    tenant_id_ctx.set(principal.tenant_id)
+    async with SessionFactory() as session:
+        await _set_tenant(session, principal.tenant_id)
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+def require_scope(scope: str):
+    """Dependency factory enforcing the API key carries ``scope``."""
+
+    async def _checker(
+        principal: ApiPrincipal = Depends(get_api_principal),
+    ) -> ApiPrincipal:
+        if scope not in principal.scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"API key missing required scope: {scope}",
+            )
+        return principal
+
+    return _checker

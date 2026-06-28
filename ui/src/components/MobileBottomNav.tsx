@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { MoreHorizontal, KeyRound, LogOut } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/layout.css'
 
 interface NavItem {
@@ -22,6 +23,7 @@ const MAX_TABS = 4
 
 export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBottomNavProps) {
   const location = useLocation()
+  const { t } = useI18n()
   const [moreOpen, setMoreOpen] = useState(false)
 
   const primary = items.slice(0, MAX_TABS)
@@ -44,11 +46,11 @@ export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBot
           type="button"
           className={`mobile-nav-item${moreOpen || overflowActive ? ' active' : ''}`}
           onClick={() => setMoreOpen(true)}
-          aria-label="Menu lainnya"
+          aria-label={t('mobile.more_menu')}
           aria-expanded={moreOpen}
         >
           <MoreHorizontal size={22} />
-          <span>Lainnya</span>
+          <span>{t('mobile.more')}</span>
         </button>
       </nav>
 
@@ -58,7 +60,7 @@ export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBot
             className="mobile-more-sheet"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
-            aria-label="Menu lainnya"
+            aria-label={t('mobile.more_menu')}
           >
             <div className="mobile-more-handle" />
 
@@ -83,7 +85,7 @@ export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBot
 
             <div className="mobile-more-actions">
               <div className="mobile-more-row">
-                <span>Tema gelap</span>
+                <span>{t('mobile.dark_theme')}</span>
                 <ThemeToggle />
               </div>
               <button
@@ -91,14 +93,14 @@ export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBot
                 className="mobile-more-action"
                 onClick={() => { setMoreOpen(false); onChangePassword() }}
               >
-                <KeyRound size={18} /> Ubah Password
+                <KeyRound size={18} /> {t('theme.change_password')}
               </button>
               <button
                 type="button"
                 className="mobile-more-action danger"
                 onClick={() => { setMoreOpen(false); onLogout() }}
               >
-                <LogOut size={18} /> Keluar
+                <LogOut size={18} /> {t('theme.sign_out')}
               </button>
             </div>
           </div>

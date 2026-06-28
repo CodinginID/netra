@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { CheckCircle2, Clock, LogOut, UserX, Users, Search } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { DonutChart } from '@/components/charts/DonutChart'
+import { useI18n } from '@/store/i18nStore'
 import { useDailyStatus } from '@/hooks/useApiQueries'
 import type { DailyStatusValue } from '@/api/adminApi'
 import '@/styles/layout.css'
 
 function todayLocal(): string {
-  return new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local tz
+  return new Date().toLocaleDateString('en-CA')
 }
 
 function formatTime(iso: string | null): string {
@@ -17,24 +18,26 @@ function formatTime(iso: string | null): string {
   return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-const STATUS_META: Record<DailyStatusValue, { label: string; cls: string; Icon: typeof CheckCircle2 }> = {
-  present: { label: 'Hadir', cls: 'badge-green', Icon: CheckCircle2 },
-  late: { label: 'Terlambat', cls: 'badge-orange', Icon: Clock },
-  checked_out: { label: 'Sudah Pulang', cls: 'badge-gray', Icon: LogOut },
-  absent: { label: 'Belum Hadir', cls: 'badge-red', Icon: UserX },
+const STATUS_META: Record<DailyStatusValue, { labelKey: string; cls: string; Icon: typeof CheckCircle2 }> = {
+  present: { labelKey: 'daily_status.status_present', cls: 'badge-green', Icon: CheckCircle2 },
+  late: { labelKey: 'daily_status.status_late', cls: 'badge-orange', Icon: Clock },
+  checked_out: { labelKey: 'daily_status.status_checked_out', cls: 'badge-gray', Icon: LogOut },
+  absent: { labelKey: 'daily_status.status_absent', cls: 'badge-red', Icon: UserX },
 }
 
 function StatusBadge({ status }: { status: DailyStatusValue }) {
-  const { label, cls, Icon } = STATUS_META[status]
+  const { t } = useI18n()
+  const { labelKey, cls, Icon } = STATUS_META[status]
   return (
     <span className={`badge ${cls}`}>
       <Icon size={13} />
-      {label}
+      {t(labelKey)}
     </span>
   )
 }
 
 export function DailyStatusPage() {
+  const { t } = useI18n()
   const [date, setDate] = useState(todayLocal())
   const [query, setQuery] = useState('')
   const { data, isLoading, error } = useDailyStatus(date)
@@ -57,20 +60,20 @@ export function DailyStatusPage() {
     : rows
 
   const stats = [
-    { label: 'Total', value: counts.total, color: 'var(--color-brand)', icon: Users },
-    { label: 'Hadir', value: counts.present, color: '#16a34a', icon: CheckCircle2 },
-    { label: 'Terlambat', value: counts.late, color: '#ca8a04', icon: Clock },
-    { label: 'Sudah Pulang', value: counts.checked_out, color: '#64748b', icon: LogOut },
-    { label: 'Belum Hadir', value: counts.absent, color: '#dc2626', icon: UserX },
+    { label: t('daily_status.stat_total'), value: counts.total, color: 'var(--color-brand)', icon: Users },
+    { label: t('daily_status.stat_present'), value: counts.present, color: '#16a34a', icon: CheckCircle2 },
+    { label: t('daily_status.stat_late'), value: counts.late, color: '#ca8a04', icon: Clock },
+    { label: t('daily_status.stat_checked_out'), value: counts.checked_out, color: '#64748b', icon: LogOut },
+    { label: t('daily_status.stat_absent'), value: counts.absent, color: '#dc2626', icon: UserX },
   ]
 
   return (
     <div>
       <div className="page-toolbar">
         <div>
-          <h2 className="page-title">Status Kehadiran Harian</h2>
+          <h2 className="page-title">{t('daily_status.title')}</h2>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            Siapa yang sudah absen dan siapa yang belum, per hari.
+            {t('daily_status.subtitle')}
           </p>
         </div>
       </div>
@@ -100,16 +103,16 @@ export function DailyStatusPage() {
       {counts.total > 0 && (
         <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
-            Rincian Status
+            {t('daily_status.detail_title')}
           </div>
           <DonutChart
-            centerLabel="Total"
+            centerLabel={t('daily_status.stat_total')}
             centerValue={counts.total}
             data={[
-              { label: 'Hadir', value: counts.present, color: '#16a34a' },
-              { label: 'Terlambat', value: counts.late, color: '#ca8a04' },
-              { label: 'Sudah Pulang', value: counts.checked_out, color: '#64748b' },
-              { label: 'Belum Hadir', value: counts.absent, color: '#dc2626' },
+              { label: t('daily_status.stat_present'), value: counts.present, color: '#16a34a' },
+              { label: t('daily_status.stat_late'), value: counts.late, color: '#ca8a04' },
+              { label: t('daily_status.stat_checked_out'), value: counts.checked_out, color: '#64748b' },
+              { label: t('daily_status.stat_absent'), value: counts.absent, color: '#dc2626' },
             ]}
           />
         </div>
@@ -121,13 +124,13 @@ export function DailyStatusPage() {
           <input
             className="search-input"
             type="text"
-            placeholder="Cari nama atau ID..."
+            placeholder={t('daily_status.search_placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Cari nama atau ID"
+            aria-label={t('daily_status.search_label')}
           />
         </div>
-        <span className="filter-label" id="status-date-label">Tanggal:</span>
+        <span className="filter-label" id="status-date-label">{t('daily_status.date_label')}:</span>
         <input
           type="date"
           className="date-input"
@@ -137,28 +140,27 @@ export function DailyStatusPage() {
         />
       </div>
 
-      {error && <div className="error-banner">{error instanceof Error ? error.message : 'Gagal memuat status'}</div>}
+      {error && <div className="error-banner">{error instanceof Error ? error.message : t('daily_status.load_error')}</div>}
 
-      {/* Desktop: table */}
       <div className="data-card responsive-table">
         <table className="data-table">
           <thead>
             <tr>
-              {['Nama', 'ID (NIS/NIP)', 'Status', 'Jam Masuk', 'Jam Pulang'].map((h) => (
+              {[t('daily_status.th_name'), t('daily_status.th_id'), t('daily_status.th_status'), t('daily_status.th_check_in'), t('daily_status.th_check_out')].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5}><div className="empty-state">Memuat...</div></td></tr>
+              <tr><td colSpan={5}><div className="empty-state">{t('daily_status.loading')}</div></td></tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={5}>
                   <EmptyState
                     icon="clipboard"
-                    title="Belum ada pengguna"
-                    description="Tambahkan & daftarkan wajah pengguna untuk mulai memantau kehadiran."
+                    title={t('daily_status.empty')}
+                    description={t('daily_status.empty_desc')}
                   />
                 </td>
               </tr>
@@ -177,16 +179,15 @@ export function DailyStatusPage() {
         </table>
       </div>
 
-      {/* Mobile: cards */}
       <div className="responsive-cards">
         {isLoading ? (
-          <div className="empty-state">Memuat...</div>
+          <div className="empty-state">{t('daily_status.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="data-card">
             <EmptyState
               icon="clipboard"
-              title="Belum ada pengguna"
-              description="Tambahkan & daftarkan wajah pengguna untuk mulai memantau kehadiran."
+              title={t('daily_status.empty')}
+              description={t('daily_status.empty_desc')}
             />
           </div>
         ) : (
@@ -197,15 +198,15 @@ export function DailyStatusPage() {
                 <StatusBadge status={r.status} />
               </div>
               <div className="record-card-row">
-                <span className="label">ID</span>
+                <span className="label">{t('daily_status.card_id')}</span>
                 <span className="value">{r.external_id ?? '—'}</span>
               </div>
               <div className="record-card-row">
-                <span className="label">Jam Masuk</span>
+                <span className="label">{t('daily_status.card_check_in')}</span>
                 <span className="value">{formatTime(r.check_in_at)}</span>
               </div>
               <div className="record-card-row">
-                <span className="label">Jam Pulang</span>
+                <span className="label">{t('daily_status.card_check_out')}</span>
                 <span className="value">{formatTime(r.check_out_at)}</span>
               </div>
             </div>

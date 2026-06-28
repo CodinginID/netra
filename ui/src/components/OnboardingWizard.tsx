@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/Toast'
+import { useI18n } from '@/store/i18nStore'
 import { completeOnboarding } from '@/api/adminApi'
 
 interface OnboardingWizardProps {
@@ -72,7 +73,7 @@ const STEPS: StepDef[] = [
     steps: [
       'Buka menu Perangkat di sidebar kiri',
       'Klik "Daftarkan Perangkat" di kanan atas',
-      'Masukkan nama perangkat (mis. "Kiosk Lantai 1")',
+      'onboarding.device_step_name',
       'Salin token yang ditampilkan — token hanya muncul sekali',
       'Gunakan token tersebut pada konfigurasi kiosk',
     ],
@@ -107,7 +108,7 @@ const STEPS: StepDef[] = [
       'Buka menu Kehadiran di sidebar kiri',
       'Pastikan perangkat kiosk sudah aktif',
       'Minta salah satu pengguna untuk mencoba absen',
-      'Periksa hasil absensi — pastikan statusnya "Tepat Waktu"',
+      'onboarding.test_step_check',
       'Jika ada masalah, periksa kembali jadwal dan enrollment',
     ],
     cta: 'Buka Kehadiran',
@@ -118,6 +119,7 @@ const STEPS: StepDef[] = [
 export function OnboardingWizard({ onClose, onComplete }: OnboardingWizardProps) {
   const [step, setStep] = useState(0)
   const [completing, setCompleting] = useState(false)
+  const { t } = useI18n()
   const token = useAuthStore((s) => s.accessToken)
   const toast = useToast()
   const current = STEPS[step]
@@ -226,7 +228,7 @@ export function OnboardingWizard({ onClose, onComplete }: OnboardingWizardProps)
           </div>
           <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.8, color: 'var(--color-text-secondary)' }}>
             {current.steps.map((s, i) => (
-              <li key={i}>{s}</li>
+              <li key={i}>{s.includes('.') ? t(s) : s}</li>
             ))}
           </ol>
           {current.cta && current.ctaLink && (

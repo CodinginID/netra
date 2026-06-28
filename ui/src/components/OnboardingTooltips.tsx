@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Sparkles, Keyboard, Search, LayoutDashboard } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/polish.css'
 
 const STORAGE_KEY = 'netra.onboarding.seen.v1'
 
 type Step = {
   icon: typeof Sparkles
-  title: string
-  body: string
+  titleKey: string
+  bodyKey: string
 }
 
 /**
@@ -19,18 +20,18 @@ type Step = {
 const STEPS: Step[] = [
   {
     icon: LayoutDashboard,
-    title: 'Selamat datang di Netra',
-    body: 'Kelola kehadiran berbasis pengenalan wajah dari satu dasbor. Mari kenali beberapa hal cepat.',
+    titleKey: 'onboarding.step1_title',
+    bodyKey: 'onboarding.step1_body',
   },
   {
     icon: Search,
-    title: 'Cari & filter di mana saja',
-    body: 'Setiap halaman daftar punya pencarian dan filter di bagian atas untuk menemukan data dengan cepat.',
+    titleKey: 'onboarding.step2_title',
+    bodyKey: 'onboarding.step2_body',
   },
   {
     icon: Keyboard,
-    title: 'Pintasan keyboard',
-    body: 'Tekan tanda tanya (?) kapan saja untuk melihat daftar pintasan keyboard yang tersedia.',
+    titleKey: 'onboarding.step3_title',
+    bodyKey: 'onboarding.step3_body',
   },
 ]
 
@@ -51,6 +52,7 @@ function markSeen() {
 }
 
 export function OnboardingTooltips() {
+  const { t } = useI18n()
   const [visible, setVisible] = useState(false)
   const [step, setStep] = useState(0)
   // Only coach signed-in users inside the app — never on the login/kiosk screens.
@@ -84,14 +86,14 @@ export function OnboardingTooltips() {
       className="ob-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Panduan pengenalan"
+      aria-label={t('onboarding.guide_label')}
     >
       <div className="ob-card">
         <div className="ob-illu" aria-hidden="true">
           <Icon size={28} strokeWidth={1.75} />
         </div>
-        <h2 className="ob-title">{current.title}</h2>
-        <p className="ob-body">{current.body}</p>
+        <h2 className="ob-title">{t(current.titleKey)}</h2>
+        <p className="ob-body">{t(current.bodyKey)}</p>
         <div className="ob-footer">
           <div className="ob-dots" aria-hidden="true">
             {STEPS.map((_, i) => (
@@ -101,11 +103,11 @@ export function OnboardingTooltips() {
           <div className="ob-actions">
             {!isLast && (
               <button type="button" className="ob-skip" onClick={dismiss}>
-                Lewati
+                {t('onboarding.skip')}
               </button>
             )}
             <button type="button" className="ob-next" onClick={next}>
-              {isLast ? 'Mengerti' : 'Lanjut'}
+              {isLast ? t('onboarding.got_it') : t('onboarding.next')}
             </button>
           </div>
         </div>

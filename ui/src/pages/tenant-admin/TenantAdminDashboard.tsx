@@ -10,31 +10,34 @@ import {
   AlertCircle,
   XCircle,
   UserCheck,
+  KeyRound,
   Trash2,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { dailyReport } from '@/api/adminApi'
 import { useAttendance, useDailyReport, useUsers, useOnboardingStatus } from '@/hooks/useApiQueries'
 import { useAuthStore } from '@/store/authStore'
+import { useI18n } from '@/store/i18nStore'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { OnboardingBanner } from '@/components/OnboardingBanner'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { AttendanceHeatmap } from '@/components/charts/AttendanceHeatmap'
 import { StepProgress } from '@/components/charts/StepProgress'
 
-const NAV_ITEMS = [
-  { label: 'Pengguna', to: '/tenant/users', icon: Users },
-  { label: 'Enrollment', to: '/tenant/enrollment', icon: ScanFace },
-  { label: 'Perangkat', to: '/tenant/devices', icon: Monitor },
-  { label: 'Jadwal', to: '/tenant/schedules', icon: CalendarDays },
-  { label: 'Kehadiran', to: '/tenant/attendance', icon: ClipboardList },
-  { label: 'Status Harian', to: '/tenant/status', icon: UserCheck },
-  { label: 'Tempat Sampah', to: '/tenant/trash', icon: Trash2 },
-]
-
 export function TenantAdminDashboard() {
+  const { t } = useI18n()
+  const navItems = [
+    { label: t('users.title'), to: '/tenant/users', icon: Users },
+    { label: t('enrollment.title'), to: '/tenant/enrollment', icon: ScanFace },
+    { label: t('devices.title'), to: '/tenant/devices', icon: Monitor },
+    { label: t('schedules.title'), to: '/tenant/schedules', icon: CalendarDays },
+    { label: t('attendance.title'), to: '/tenant/attendance', icon: ClipboardList },
+    { label: t('daily_status.title'), to: '/tenant/status', icon: UserCheck },
+    { label: t('integration.title'), to: '/tenant/integration', icon: KeyRound },
+    { label: t('trash.title'), to: '/tenant/trash', icon: Trash2 },
+  ]
   return (
-    <DashboardLayout title="Tenant Admin" navItems={NAV_ITEMS}>
+    <DashboardLayout title={t('tenant_admin.title')} navItems={navItems}>
       <Outlet />
     </DashboardLayout>
   )
@@ -53,13 +56,7 @@ interface StatCard {
   spark?: number[]
 }
 
-const ONBOARDING_STEPS: { key: 'welcome' | 'schedule' | 'device' | 'users' | 'test'; label: string }[] = [
-  { key: 'welcome', label: 'Selamat Datang' },
-  { key: 'schedule', label: 'Jadwal' },
-  { key: 'device', label: 'Perangkat' },
-  { key: 'users', label: 'Pengguna' },
-  { key: 'test', label: 'Uji Coba' },
-]
+const ONBOARDING_STEP_KEYS = ['step_welcome', 'step_schedule', 'step_device', 'step_users', 'step_test'] as const
 
 interface RecentItem {
   name: string
@@ -129,6 +126,7 @@ function TrendBadge({ delta }: { delta: number | null }) {
 }
 
 export function TenantAdminHomePage() {
+  const { t } = useI18n()
   const token = useAuthStore((s) => s.accessToken)
   const [showWizard, setShowWizard] = useState(false)
   const [showBanner, setShowBanner] = useState(false)
@@ -212,7 +210,7 @@ export function TenantAdminHomePage() {
   )
   const recent: RecentItem[] = sorted.slice(0, 5).map((a) => ({
     name: userMap.get(a.user_id) ?? a.user_id.slice(0, 8),
-    action: a.type === 'check_in' ? 'Check In' : 'Check Out',
+    action: a.type === 'check_in' ? t('dashboard.action_check_in') : t('dashboard.action_check_out'),
     time: new Date(a.occurred_at).toLocaleTimeString('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
@@ -225,17 +223,20 @@ export function TenantAdminHomePage() {
   const lateSeries = trend.map((t) => t.late)
   const heatmapData = trend.map((t) => ({ date: t.day, count: t.check_in }))
 
-  const onboardingSteps = ONBOARDING_STEPS.map((s) => ({
-    label: s.label,
-    done: onboardingData?.steps?.[s.key] ?? false,
-  }))
+  const onboardingSteps = ONBOARDING_STEP_KEYS.map((key) => {
+    const stepKey = key.replace('step_', '') as keyof NonNullable<typeof onboardingData>['steps']
+    return {
+      label: t(`onboarding.${key}`),
+      done: onboardingData?.steps?.[stepKey] ?? false,
+    }
+  })
   const showOnboardingSteps = !!onboardingData && !onboardingData.completed
 
   const stats: StatCard[] = [
-    { label: 'Hadir', value: report?.check_in ?? 0, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)', spark: checkInSeries },
-    { label: 'Di Kantor', value: inOfficeCount, Icon: UserCheck, fg: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
-    { label: 'Terlambat', value: report?.late ?? 0, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)', spark: lateSeries },
-    { label: 'Tidak Hadir', value: absent, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+    { label: t('dashboard.stat_present'), value: report?.check_in ?? 0, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)', spark: checkInSeries },
+    { label: t('dashboard.stat_in_office'), value: inOfficeCount, Icon: UserCheck, fg: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
+    { label: t('dashboard.stat_late'), value: report?.late ?? 0, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)', spark: lateSeries },
+    { label: t('dashboard.stat_absent'), value: absent, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
   ]
 
   return (
@@ -256,7 +257,7 @@ export function TenantAdminHomePage() {
       {showOnboardingSteps && (
         <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 18 }}>
-            Progres Penyiapan
+            {t('dashboard.setup_progress')}
           </div>
           <StepProgress steps={onboardingSteps} />
         </div>
@@ -264,12 +265,12 @@ export function TenantAdminHomePage() {
 
       <div className="page-header">
         <div>
-          <h2>Absensi Hari Ini</h2>
-          <p>Rekap kehadiran tenggat hari ini</p>
+          <h2>{t('dashboard.today_attendance')}</h2>
+          <p>{t('dashboard.today_subtitle')}</p>
         </div>
         <span className="live-badge">
           <span className="live-dot" />
-          LIVE
+          {t('dashboard.live')}
         </span>
       </div>
 
@@ -301,12 +302,12 @@ export function TenantAdminHomePage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="stat-value">{value}</div>
-                  {label === 'Hadir' && (
+                  {label === t('dashboard.stat_present') && (
                     <div style={{ marginTop: 2 }}>
                       <TrendBadge delta={trendDelta.hadir} />
                     </div>
                   )}
-                  {label === 'Terlambat' && (
+                  {label === t('dashboard.stat_late') && (
                     <div style={{ marginTop: 2 }}>
                       <TrendBadge delta={trendDelta.terlambat} />
                     </div>
@@ -324,7 +325,7 @@ export function TenantAdminHomePage() {
 
       <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Tingkat Kehadiran</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{t('dashboard.attendance_rate')}</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-brand)' }}>{rate}%</span>
         </div>
         <div className="progress-track">
@@ -335,17 +336,17 @@ export function TenantAdminHomePage() {
       {trend.length > 0 && (
         <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
           <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 14, color: 'var(--color-text)' }}>
-            Tren 7 Hari Terakhir
+            {t('dashboard.trend_7_days')}
           </div>
           <TrendChart data={trend} />
           <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--color-text-muted)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(13,148,136,0.18)' }} />
-              Hadir
+              {t('dashboard.trend_present')}
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(217,119,6,0.7)' }} />
-              Terlambat
+              {t('dashboard.trend_late')}
             </span>
           </div>
         </div>
@@ -354,7 +355,7 @@ export function TenantAdminHomePage() {
       {heatmapData.length > 0 && (
         <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
           <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 14, color: 'var(--color-text)' }}>
-            Pola Kehadiran Bulan Ini
+            {t('dashboard.pattern_this_month')}
           </div>
           <AttendanceHeatmap data={heatmapData} />
         </div>
@@ -363,7 +364,7 @@ export function TenantAdminHomePage() {
       <div className="data-card" aria-live="polite">
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
-            Aktivitas Terbaru
+            {t('dashboard.recent_activity')}
           </h3>
         </div>
 
@@ -375,7 +376,7 @@ export function TenantAdminHomePage() {
         ))}
 
         {!attLoading && recent.length === 0 && (
-          <div className="empty-state">Belum ada aktivitas hari ini</div>
+          <div className="empty-state">{t('dashboard.no_activity_today')}</div>
         )}
 
         {recent.map((item, i) => (

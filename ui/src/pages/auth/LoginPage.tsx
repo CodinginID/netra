@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, Lock, Mail, ArrowRight, ArrowLeft } from 'lucide-react'
 import { checkEmailApi, loginApi } from '@/api/authApi'
 import { useAuthStore } from '@/store/authStore'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/auth.css'
 
 type ScanState = 'idle' | 'scanning' | 'verified' | 'failed'
@@ -11,6 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const setTokens = useAuthStore((s) => s.setTokens)
+  const { t } = useI18n()
 
   const [step, setStep] = useState<1 | 2>(1)
   const [email, setEmail] = useState('')
@@ -33,14 +35,14 @@ export function LoginPage() {
     try {
       const exists = await checkEmailApi(value)
       if (!exists) {
-        setError('Email not found. Please check and try again.')
+        setError(t('login.email_not_found'))
         cardRef.current?.classList.add('shake')
         setTimeout(() => cardRef.current?.classList.remove('shake'), 600)
         return
       }
       setStep(2)
     } catch {
-      setError('Could not verify email. Please try again.')
+      setError(t('login.cannot_verify'))
     } finally {
       setCheckingEmail(false)
     }
@@ -67,7 +69,7 @@ export function LoginPage() {
       setScanState('failed')
       const card = cardRef.current
       card?.classList.add('shake')
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('login.sign_in'))
       setTimeout(() => {
         card?.classList.remove('shake')
         setScanState('idle')
@@ -90,14 +92,14 @@ export function LoginPage() {
       <main className="auth-panel">
         <div className="auth-card" ref={cardRef}>
           <div className="auth-card-head">
-            <h1 className="auth-title">Welcome back</h1>
-            <p className="auth-subtitle">Sign in to manage your organization's attendance.</p>
+            <h1 className="auth-title">{t('login.welcome')}</h1>
+            <p className="auth-subtitle">{t('login.subtitle')}</p>
           </div>
 
           {step === 1 ? (
             <form onSubmit={handleContinue} className="auth-form" key="step-1">
               <div className="form-group">
-                <label htmlFor="email">Email</label>
+                <label htmlFor="email">{t('login.email')}</label>
                 <div className="input-icon-wrapper">
                   <Mail className="input-icon" size={18} />
                   <input
@@ -108,7 +110,7 @@ export function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
-                    placeholder="you@organization.com"
+                    placeholder={t('login.email_placeholder')}
                     autoFocus
                     disabled={checkingEmail}
                   />
@@ -119,8 +121,8 @@ export function LoginPage() {
 
               <button type="submit" className="btn-primary" disabled={checkingEmail}>
                 {checkingEmail
-                  ? <><span className="btn-spinner" aria-hidden /> Checking...</>
-                  : <>Continue <ArrowRight size={18} /></>}
+                  ? <><span className="btn-spinner" aria-hidden /> {t('login.checking')}</>
+                  : <>{t('login.continue')} <ArrowRight size={18} /></>}
               </button>
             </form>
           ) : (
@@ -132,7 +134,7 @@ export function LoginPage() {
               </button>
 
               <div className="form-group">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t('login.password')}</label>
                 <div className="input-icon-wrapper">
                   <Lock className="input-icon" size={18} />
                   <input
@@ -143,7 +145,7 @@ export function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    placeholder="Enter password"
+                    placeholder={t('login.password_placeholder')}
                     autoFocus
                     disabled={loading}
                   />
@@ -151,7 +153,7 @@ export function LoginPage() {
                     type="button"
                     className="input-trailing-btn"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+                    aria-label={showPassword ? t('login.hide_password_aria') : t('login.show_password_aria')}
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -163,17 +165,17 @@ export function LoginPage() {
 
               <button type="submit" className={`btn-primary${scanState === 'verified' ? ' btn-verified' : ''}`} disabled={loading}>
                 {loading ? (
-                  <><span className="btn-spinner" aria-hidden /> Authenticating...</>
+                  <><span className="btn-spinner" aria-hidden /> {t('login.authenticating')}</>
                 ) : scanState === 'verified' ? (
-                  <>&#10003;&nbsp;Access Granted</>
+                  <>&#10003;&nbsp;{t('login.access_granted')}</>
                 ) : (
-                  <>Sign In <ArrowRight size={18} /></>
+                  <>{t('login.sign_in_with_arrow')} <ArrowRight size={18} /></>
                 )}
               </button>
             </form>
           )}
 
-          <p className="auth-powered">Powered by <strong>Netra</strong></p>
+          <p className="auth-powered">{t('login.powered_by')} <strong>Netra</strong></p>
         </div>
       </main>
     </div>
@@ -181,6 +183,7 @@ export function LoginPage() {
 }
 
 function FaceScanVisual({ state }: { state: ScanState }) {
+  const { t } = useI18n()
   return (
     <div className={`auth-face-scan ${state}`}>
       <svg viewBox="0 0 220 240" className="face-scan-svg" aria-hidden="true">
@@ -223,20 +226,20 @@ function FaceScanVisual({ state }: { state: ScanState }) {
       <div className="face-scan-status">
         {state === 'scanning' && (
           <span className="face-scan-badge scanning">
-            <span className="badge-dot" />Scanning...
+            <span className="badge-dot" />{t('login.scanning_badge')}
           </span>
         )}
         {state === 'verified' && (
-          <span className="face-scan-badge verified">&#10003; Access Granted</span>
+          <span className="face-scan-badge verified">&#10003; {t('login.access_granted')}</span>
         )}
         {state === 'failed' && (
-          <span className="face-scan-badge failed">&#10007; Access Denied</span>
+          <span className="face-scan-badge failed">&#10007; {t('login.access_denied')}</span>
         )}
         {state === 'idle' && (
-          <span className="face-scan-badge">&#10003; Identity Verified</span>
+          <span className="face-scan-badge">&#10003; {t('login.identity_verified')}</span>
         )}
         <span className="face-scan-meta">
-          {state === 'scanning' ? 'Processing biometrics...' : 'Liveness 99.2% · 6 ms'}
+          {state === 'scanning' ? t('login.processing_biometrics') : t('login.liveness_meta')}
         </span>
       </div>
     </div>

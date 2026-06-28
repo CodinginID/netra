@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, LogOut, KeyRound } from 'lucide-react'
+import { Eye, LogOut } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { NotificationBell } from '@/components/NotificationBell'
-import { ThemeToggle } from '@/components/ThemeToggle'
+import { ProfileMenu } from '@/components/ProfileMenu'
 import { ChangePasswordModal } from '@/components/ChangePasswordModal'
 import { MobileBottomNav } from '@/components/MobileBottomNav'
 import '@/styles/layout.css'
@@ -22,16 +22,6 @@ interface DashboardLayoutProps {
   children: React.ReactNode
   /** Optional element rendered in the topbar (e.g. tenant switcher for super admins). */
   headerSlot?: React.ReactNode
-}
-
-function initials(name?: string | null, fallback?: string | null): string {
-  const src = name ?? fallback ?? '?'
-  return src
-    .split(/[_\s]/)
-    .map((p) => p.charAt(0))
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
 }
 
 function roleLabel(role?: string | null): string {
@@ -115,21 +105,12 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
           </div>
           <div className="topbar-user">
             <NotificationBell />
-            {/* Desktop-only cluster — on mobile these live in the bottom-nav "Lainnya" sheet */}
+            {/* Desktop-only account menu — on mobile these live in the bottom-nav "Lainnya" sheet */}
             <div className="topbar-user-desktop">
-              <ThemeToggle />
-              <button
-                className="btn-icon"
-                title="Ubah password"
-                aria-label="Ubah password"
-                onClick={() => setShowChangePw(true)}
-              >
-                <KeyRound size={18} />
-              </button>
-              <div className="topbar-avatar">{initials(roleLabel(role))}</div>
-              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.2 }}>
-                {roleLabel(role)}
-              </span>
+              <ProfileMenu
+                onChangePassword={() => setShowChangePw(true)}
+                onLogout={handleLogout}
+              />
             </div>
           </div>
         </header>

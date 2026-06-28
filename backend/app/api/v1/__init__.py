@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    api_keys,
     attendance,
     auth,
     consent,
     devices,
     enrollment,
     health,
+    integration,
     onboarding,
     reports,
     schedules,
@@ -33,4 +35,6 @@ api_router.include_router(enrollment.router)
 api_router.include_router(attendance.router)
 api_router.include_router(reports.router)
 api_router.include_router(webhooks.router)
+api_router.include_router(api_keys.router)
+api_router.include_router(integration.router)
 api_router.include_router(trash.router)

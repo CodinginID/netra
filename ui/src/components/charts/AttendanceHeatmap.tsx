@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/charts.css'
 
 export interface HeatmapDay {
@@ -14,7 +15,7 @@ interface AttendanceHeatmapProps {
   month?: Date
 }
 
-const DOW = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
+const DOW_KEYS = ['heatmap.mon', 'heatmap.tue', 'heatmap.wed', 'heatmap.thu', 'heatmap.fri', 'heatmap.sat', 'heatmap.sun'] as const
 
 /** Monday-first weekday index (0 = Mon ... 6 = Sun). */
 function mondayIndex(d: Date): number {
@@ -27,6 +28,7 @@ function mondayIndex(d: Date): number {
  * the calendar aligned. Gracefully handles an empty data array.
  */
 export function AttendanceHeatmap({ data, month = new Date() }: AttendanceHeatmapProps) {
+  const { t } = useI18n()
   const year = month.getFullYear()
   const mon = month.getMonth()
 
@@ -61,10 +63,10 @@ export function AttendanceHeatmap({ data, month = new Date() }: AttendanceHeatma
   return (
     <div className="heatmap">
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{monthLabel}</div>
-      <div className="heatmap__grid" role="grid" aria-label={`Heatmap kehadiran ${monthLabel}`}>
-        {DOW.map((d) => (
-          <div key={d} className="heatmap__dow">
-            {d}
+      <div className="heatmap__grid" role="grid" aria-label={t('heatmap.grid_label', { month: monthLabel })}>
+        {DOW_KEYS.map((k) => (
+          <div key={k} className="heatmap__dow">
+            {t(k)}
           </div>
         ))}
         {cells.map((c) => {
@@ -77,9 +79,9 @@ export function AttendanceHeatmap({ data, month = new Date() }: AttendanceHeatma
               key={c.key}
               className={`heatmap__cell ${filled ? 'heatmap__cell--filled' : 'heatmap__cell--empty'}`}
               style={cellStyle(c.count)}
-              title={`${c.iso}: ${c.count} kehadiran`}
+              title={`${c.iso}: ${c.count} ${t('heatmap.attendance')}`}
               role="gridcell"
-              aria-label={`${c.iso}: ${c.count} kehadiran`}
+              aria-label={`${c.iso}: ${c.count} ${t('heatmap.attendance')}`}
             >
               {c.day}
             </div>
@@ -87,12 +89,12 @@ export function AttendanceHeatmap({ data, month = new Date() }: AttendanceHeatma
         })}
       </div>
       <div className="heatmap__legend">
-        <span>Sedikit</span>
+        <span>{t('heatmap.few')}</span>
         <span className="heatmap__legend-swatch heatmap__cell--empty" />
         <span className="heatmap__legend-swatch" style={{ background: 'rgba(13, 148, 136, 0.45)' }} />
         <span className="heatmap__legend-swatch" style={{ background: 'rgba(13, 148, 136, 0.75)' }} />
         <span className="heatmap__legend-swatch" style={{ background: 'rgba(13, 148, 136, 1)' }} />
-        <span>Banyak</span>
+        <span>{t('heatmap.many')}</span>
       </div>
     </div>
   )

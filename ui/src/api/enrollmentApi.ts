@@ -1,10 +1,11 @@
-import { useAuthStore } from '@/store/authStore'
+import { getApiTenantContext } from '@/api/adminApi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 function makeHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
-  const tenantId = useAuthStore.getState().selectedTenantId
   const h: Record<string, string> = { ...extra, Authorization: `Bearer ${token}` }
+  // Read from the shared tenant context in adminApi
+  const tenantId = getApiTenantContext()
   if (tenantId) h['X-Tenant-Id'] = tenantId
   return h
 }

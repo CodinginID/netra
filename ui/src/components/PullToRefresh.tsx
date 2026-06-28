@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { useI18n } from '@/store/i18nStore'
 
 const TRIGGER = 64 // px pull distance to trigger a refresh
 const MAX = 90
@@ -15,6 +16,7 @@ export function PullToRefresh({
   onRefresh: () => void | Promise<unknown>
   children: ReactNode
 }) {
+  const { t } = useI18n()
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const startY = useRef(0)
@@ -72,7 +74,7 @@ export function PullToRefresh({
         {refreshing ? (
           <span className="pull-spinner" />
         ) : (
-          <span>{pull >= TRIGGER ? 'Lepaskan untuk memuat ulang' : 'Tarik untuk memuat ulang'}</span>
+          <span>{pull >= TRIGGER ? t('pull_refresh.release') : t('pull_refresh.pull')}</span>
         )}
       </div>
       {children}

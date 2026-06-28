@@ -13,6 +13,7 @@ import { PullToRefresh } from '@/components/PullToRefresh'
 import { MobileFab } from '@/components/MobileFab'
 import { ExpandableCard } from '@/components/ExpandableCard'
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
+import { useI18n, t as tFn } from '@/store/i18nStore'
 import type { UserOut, UserCreate, UserUpdate } from '@/api/adminApi'
 
 // ── Badges ──────────────────────────────────────────────────────────────────
@@ -22,7 +23,7 @@ function RoleBadge({ role }: { role: string }) {
   return (
     <span className={isAdmin ? 'badge badge-blue' : 'badge badge-gray'}>
       {isAdmin && <Shield size={12} />}
-      {isAdmin ? 'Admin' : 'Karyawan'}
+      {isAdmin ? tFn('users.role_admin') : tFn('users.role_employee')}
     </span>
   )
 }
@@ -30,7 +31,7 @@ function RoleBadge({ role }: { role: string }) {
 function EnrolledBadge({ enrolled }: { enrolled: boolean }) {
   return (
     <span className={enrolled ? 'badge badge-green' : 'badge badge-gray'}>
-      {enrolled ? 'Enrolled' : 'Belum Enrolled'}
+      {enrolled ? tFn('users.enrolled') : tFn('users.not_enrolled')}
     </span>
   )
 }
@@ -55,6 +56,7 @@ function CreateUserModal({
   onSubmit: (payload: UserCreate) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [form, setForm] = useState<UserCreate>(initialForm)
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,14 +66,12 @@ function CreateUserModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.full_name.trim()) { setError('Nama lengkap wajib diisi'); return }
+    if (!form.full_name.trim()) { setError(t('users.full_name_required')); return }
     if (isStaff) {
-      // Staff log in by email — email + password required.
-      if (!form.email?.trim()) { setError('Email wajib untuk admin/supervisor'); return }
-      if (!form.password || form.password.length < 8) { setError('Password minimal 8 karakter'); return }
+      if (!form.email?.trim()) { setError(t('users.email_required')); return }
+      if (!form.password || form.password.length < 8) { setError(t('users.password_min')); return }
     } else {
-      // End users are matched to client systems by external_id (NIS/NIP/NIK).
-      if (!form.external_id?.trim()) { setError('ID unik (NIS/NIP/NIK) wajib untuk karyawan/siswa'); return }
+      if (!form.external_id?.trim()) { setError(t('users.unique_id_required')); return }
     }
     setError(null)
     const payload: UserCreate = { full_name: form.full_name.trim(), role: form.role }
@@ -88,28 +88,28 @@ function CreateUserModal({
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Tambah Pengguna</h3>
+        <h3 className="modal-title">{t('users.create_title')}</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="create-full-name">Nama Lengkap *</label>
-            <input id="create-full-name" className="field-input" placeholder="Nama lengkap"
+            <label htmlFor="create-full-name">{t('users.full_name_label')}</label>
+            <input id="create-full-name" className="field-input" placeholder={t('users.full_name_placeholder')}
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} required />
           </div>
           <div className="field">
-            <label htmlFor="create-role">Role</label>
+            <label htmlFor="create-role">{t('users.role_label')}</label>
             <select id="create-role" className="field-input" value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-              <option value="end_user">Karyawan / Siswa</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="tenant_admin">Admin</option>
+              <option value="end_user">{t('users.role_employee_student')}</option>
+              <option value="supervisor">{t('users.role_supervisor')}</option>
+              <option value="tenant_admin">{t('users.role_admin_option')}</option>
             </select>
           </div>
 
           {!isStaff && (
             <div className="field">
-              <label htmlFor="create-external-id">ID Unik (NIS/NIP/NIK) *</label>
-              <input id="create-external-id" className="field-input" placeholder="mis. 1023456"
+              <label htmlFor="create-external-id">{t('users.unique_id_label')}</label>
+              <input id="create-external-id" className="field-input" placeholder={t('users.unique_id_placeholder')}
                 value={form.external_id ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))} required />
             </div>
@@ -118,19 +118,19 @@ function CreateUserModal({
           {isStaff && (
             <>
               <div className="field">
-                <label htmlFor="create-email">Email * <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>(untuk login)</span></label>
-                <input id="create-email" className="field-input" type="email" placeholder="admin@organisasi.com"
+                <label htmlFor="create-email">{t('users.email_label')} <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('users.email_note')}</span></label>
+                <input id="create-email" className="field-input" type="email" placeholder={t('users.email_placeholder')}
                   value={form.email ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
               </div>
               <div className="field">
-                <label htmlFor="create-password">Password *</label>
+                <label htmlFor="create-password">{t('users.password_label')}</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <input
                     id="create-password"
                     className="field-input"
                     type={showPw ? 'text' : 'password'}
-                    placeholder="Minimal 8 karakter"
+                    placeholder={t('users.password_placeholder')}
                     style={{ paddingRight: 40 }}
                     value={form.password ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
@@ -139,7 +139,7 @@ function CreateUserModal({
                     type="button"
                     onClick={() => setShowPw((v) => !v)}
                     style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                    aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
+                    aria-label={showPw ? t('users.hide_password') : t('users.show_password')}
                   >
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -149,15 +149,15 @@ function CreateUserModal({
           )}
 
           <div className="field">
-            <label htmlFor="create-username">Username <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>(opsional)</span></label>
-            <input id="create-username" className="field-input" placeholder="Username (opsional)"
+            <label htmlFor="create-username">{t('users.username_label')} <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('users.username_optional')}</span></label>
+            <input id="create-username" className="field-input" placeholder={t('users.username_placeholder')}
               value={form.username ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
           </div>
           {error && <div className="error-banner">{error}</div>}
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Batal</button>
-            <button type="submit" className="btn btn-primary">Simpan</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>{t('users.cancel')}</button>
+            <button type="submit" className="btn btn-primary">{t('users.save')}</button>
           </div>
         </form>
       </div>
@@ -176,6 +176,7 @@ function EditUserModal({
   onSubmit: (payload: { userId: string; payload: UserUpdate }) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [form, setForm] = useState<UserUpdate>({
     full_name: user.full_name,
     username: user.username ?? '',
@@ -186,7 +187,7 @@ function EditUserModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.full_name?.trim()) { setError('Nama lengkap wajib diisi'); return }
+    if (!form.full_name?.trim()) { setError(t('users.full_name_required')); return }
     setError(null)
     onSubmit({
       userId: user.id,
@@ -201,32 +202,32 @@ function EditUserModal({
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Edit Pengguna</h3>
+        <h3 className="modal-title">{t('users.edit_title')}</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="edit-full-name">Nama Lengkap *</label>
-            <input id="edit-full-name" className="field-input" placeholder="Nama lengkap"
+            <label htmlFor="edit-full-name">{t('users.full_name_label')}</label>
+            <input id="edit-full-name" className="field-input" placeholder={t('users.full_name_placeholder')}
               value={form.full_name ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} required />
           </div>
           <div className="field">
-            <label htmlFor="edit-username">Username</label>
-            <input id="edit-username" className="field-input" placeholder="Username"
+            <label htmlFor="edit-username">{t('users.username_label')}</label>
+            <input id="edit-username" className="field-input" placeholder={t('users.username_label')}
               value={form.username ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
           </div>
           <div className="field">
-            <label htmlFor="edit-role">Role</label>
+            <label htmlFor="edit-role">{t('users.role_label')}</label>
             <select id="edit-role" className="field-input" value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-              <option value="end_user">Karyawan</option>
-              <option value="tenant_admin">Admin</option>
+              <option value="end_user">{t('users.role_employee')}</option>
+              <option value="tenant_admin">{t('users.role_admin')}</option>
             </select>
           </div>
           {error && <div className="error-banner">{error}</div>}
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Batal</button>
-            <button type="submit" className="btn btn-primary">Simpan Perubahan</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>{t('users.cancel')}</button>
+            <button type="submit" className="btn btn-primary">{t('users.save_changes')}</button>
           </div>
         </form>
       </div>
@@ -247,18 +248,19 @@ function DeleteConfirmModal({
   onClose: () => void
   loading: boolean
 }) {
+  const { t } = useI18n()
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div className="modal-card" ref={modalRef} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Hapus Pengguna</h3>
+        <h3 className="modal-title">{t('users.delete_title')}</h3>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-          Yakin hapus <strong style={{ color: 'var(--color-text)' }}>{user.full_name}</strong>? Data dapat dipulihkan dari Tempat Sampah dalam 30 hari.
+          {t('users.delete_confirm', { name: user.full_name })}
         </p>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Batal</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>{t('common.cancel')}</button>
           <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Menghapus...' : 'Hapus'}
+            {loading ? t('common.deleting') : t('common.delete')}
           </button>
         </div>
       </div>
@@ -271,6 +273,7 @@ function DeleteConfirmModal({
 export function UsersPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useI18n()
   const { show } = useToast()
   useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   // Derive base path from current route so this page works under both /tenant and /admin
@@ -311,24 +314,24 @@ export function UsersPage() {
 
   const createMutation = useCreateUser(() => {
     closeModal()
-    show('Pengguna berhasil ditambahkan', 'success')
+    show(t('users.toast_created'), 'success')
   })
 
   const updateMutation = useUpdateUser(() => {
     closeModal()
-    show('Pengguna berhasil diperbarui', 'success')
+    show(t('users.toast_updated'), 'success')
   })
 
   const deleteMutation = useDeleteUser(() => {
     setDeleteTarget(null)
-    show(`${deletedUserName} berhasil dihapus`, 'success', {
-      label: 'Undo',
+    show(t('users.toast_deleted', { name: deletedUserName }), 'success', {
+      label: t('common.undo'),
       onClick: () => restoreMutation.mutate(deletedUserId),
     })
   })
 
   const restoreMutation = useRestoreUser(() => {
-    show('Pengguna berhasil dipulihkan', 'success')
+    show(t('users.toast_restored'), 'success')
   })
 
   // Capture delete target info for the undo toast callback
@@ -379,13 +382,13 @@ export function UsersPage() {
     <div>
       <div className="page-toolbar">
         <div>
-          <h2 className="page-title">Pengguna</h2>
+          <h2 className="page-title">{t('users.title')}</h2>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            Kelola pengguna tenant
+            {t('users.subtitle')}
           </p>
         </div>
         <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
-          <UserPlus size={16} /> Tambah Pengguna
+          <UserPlus size={16} /> {t('users.add')}
         </button>
       </div>
 
@@ -402,9 +405,9 @@ export function UsersPage() {
               </div>
             ))
           : [
-              { label: 'Total Pengguna', value: total, Icon: Users, color: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)' },
-              { label: 'Sudah Enrolled', value: enrolledCount, Icon: ScanFace, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
-              { label: 'Belum Enrolled', value: notEnrolledCount, Icon: UserX, color: '#ca8a04', bg: 'rgba(202,138,4,0.08)' },
+              { label: t('users.stat_total'), value: total, Icon: Users, color: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)' },
+              { label: t('users.stat_enrolled'), value: enrolledCount, Icon: ScanFace, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+              { label: t('users.stat_not_enrolled'), value: notEnrolledCount, Icon: UserX, color: '#ca8a04', bg: 'rgba(202,138,4,0.08)' },
             ].map(({ label, value, Icon, color, bg }) => (
               <div key={label} className="stat-card">
                 <div className="stat-icon" style={{ background: bg }}>
@@ -412,23 +415,23 @@ export function UsersPage() {
                 </div>
                 <div>
                   <div className="stat-value">{value}</div>
-                  <div className="stat-label">{label}</div>
+                  <div className="stat-label">{t('stat.total_users')}</div>
                 </div>
               </div>
             ))}
       </div>
 
-      {error && <div className="error-banner">{error instanceof Error ? error.message : 'Gagal memuat pengguna'}</div>}
+      {error && <div className="error-banner">{error instanceof Error ? error.message : t('users.load_error')}</div>}
 
       {/* Search */}
       <div className="search-input-wrap" style={{ maxWidth: 360, marginBottom: 16 }}>
         <Search size={16} />
         <input
           className="search-input"
-          placeholder="Cari pengguna..."
+          placeholder={t('users.search_placeholder')}
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          aria-label="Cari pengguna"
+          aria-label={t('users.search_label')}
         />
       </div>
 
@@ -438,16 +441,16 @@ export function UsersPage() {
           <thead>
             <tr>
               <th onClick={() => toggleSort('full_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                Nama {sortGlyph('full_name')}
+                {t('users.th_name')} {sortGlyph('full_name')}
               </th>
-              <th>Username</th>
+              <th>{t('users.th_username')}</th>
               <th onClick={() => toggleSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                Role {sortGlyph('role')}
+                {t('users.th_role')} {sortGlyph('role')}
               </th>
               <th onClick={() => toggleSort('enrolled')} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                Status Enrolled {sortGlyph('enrolled')}
+                {t('users.th_enrolled_status')} {sortGlyph('enrolled')}
               </th>
-              <th style={{ textAlign: 'right' }}>Aksi</th>
+              <th style={{ textAlign: 'right' }}>{t('users.th_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -466,11 +469,11 @@ export function UsersPage() {
                 <td colSpan={5}>
                   <EmptyState
                     icon="users"
-                    title="Belum ada pengguna"
-                    description="Tambahkan pengguna pertama Anda untuk mulai mengelola absensi"
+                    title={t('users.empty')}
+                    description={t('users.empty_desc')}
                     action={
                       <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                        Tambah Pengguna
+                        {t('users.add')}
                       </button>
                     }
                   />
@@ -488,7 +491,7 @@ export function UsersPage() {
                     <EnrolledBadge enrolled={row.enrolled} />
                     {!row.enrolled && (
                       <span style={{ fontSize: 11, color: 'var(--color-brand)', cursor: 'pointer', fontWeight: 500 }} onClick={() => handleEnroll(row)}>
-                        Enroll →
+                        {t('users.enroll_inline')} →
                       </span>
                     )}
                   </div>
@@ -497,24 +500,24 @@ export function UsersPage() {
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                     <button
                       className="btn-icon"
-                      title="Edit pengguna"
-                      aria-label="Ubah pengguna"
+                      title={t('users.edit_tooltip')}
+                      aria-label={t('users.edit_aria')}
                       onClick={() => setEditTarget(row)}
                     >
                       <Edit2 size={15} />
                     </button>
                     <button
                       className="btn-icon btn-icon-primary"
-                      title={row.enrolled ? 'Update enrollment wajah' : 'Enroll wajah'}
-                      aria-label={row.enrolled ? 'Update enrollment wajah' : 'Enroll wajah'}
+                      title={row.enrolled ? t('users.enroll_aria_update') : t('users.enroll_aria_new')}
+                      aria-label={row.enrolled ? t('users.enroll_aria_update') : t('users.enroll_aria_new')}
                       onClick={() => handleEnroll(row)}
                     >
                       <ScanFace size={15} />
                     </button>
                     <button
                       className="btn-icon btn-icon-danger"
-                      title="Hapus pengguna"
-                      aria-label="Hapus pengguna"
+                      title={t('users.delete_tooltip')}
+                      aria-label={t('users.delete_aria')}
                       onClick={() => setDeleteTarget(row)}
                     >
                       <Trash2 size={15} />
@@ -537,8 +540,8 @@ export function UsersPage() {
             {sorted.map((row) => (
               <SwipeCard
                 key={row.id}
-                left={{ icon: <Edit2 size={20} />, label: 'Edit', variant: 'primary', onAction: () => setEditTarget(row) }}
-                right={{ icon: <Trash2 size={20} />, label: 'Hapus', variant: 'danger', onAction: () => setDeleteTarget(row) }}
+                left={{ icon: <Edit2 size={20} />, label: t('common.edit'), variant: 'primary', onAction: () => setEditTarget(row) }}
+                right={{ icon: <Trash2 size={20} />, label: t('common.delete'), variant: 'danger', onAction: () => setDeleteTarget(row) }}
               >
                 <ExpandableCard
                   header={
@@ -552,26 +555,26 @@ export function UsersPage() {
                   }
                 >
                   <div className="user-card-detail-row">
-                    <span className="label">Username</span>
+                    <span className="label">{t('users.card_username')}</span>
                     <span className="value">{row.username ?? '-'}</span>
                   </div>
                   <div className="user-card-detail-row">
-                    <span className="label">Role</span>
+                    <span className="label">{t('users.card_role')}</span>
                     <span className="value"><RoleBadge role={row.role} /></span>
                   </div>
                   <div className="user-card-detail-row">
-                    <span className="label">Status Enrolled</span>
+                    <span className="label">{t('users.card_enrolled_status')}</span>
                     <span className="value"><EnrolledBadge enrolled={row.enrolled} /></span>
                   </div>
                   <div className="user-card-actions">
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(row)}>
-                      <Edit2 size={15} /> Edit
+                      <Edit2 size={15} /> {t('users.card_edit')}
                     </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => handleEnroll(row)}>
-                      <ScanFace size={15} /> {row.enrolled ? 'Update' : 'Enroll'}
+                      <ScanFace size={15} /> {row.enrolled ? t('users.card_update') : t('users.card_enroll')}
                     </button>
                     <button className="btn btn-danger btn-sm" onClick={() => setDeleteTarget(row)}>
-                      <Trash2 size={15} /> Hapus
+                      <Trash2 size={15} /> {t('users.card_delete')}
                     </button>
                   </div>
                 </ExpandableCard>
@@ -584,7 +587,7 @@ export function UsersPage() {
         </PullToRefresh>
       )}
 
-      <MobileFab onClick={() => setShowCreate(true)} label="Tambah Pengguna">
+      <MobileFab onClick={() => setShowCreate(true)} label={t('users.add')}>
         <UserPlus size={24} />
       </MobileFab>
 

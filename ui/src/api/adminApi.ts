@@ -3,13 +3,29 @@ import { refreshApi } from '@/api/authApi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
+/**
+ * Mutable ref holding the current tenant context.
+ * Set by `setApiTenantContext` (or the `useTenantApiHeaders` hook) so that
+ * apiFetch picks up the tenant from the URL rather than localStorage.
+ */
+let _currentTenantId: string | null = null
+
+/** Update the active tenant for all subsequent API calls. */
+export function setApiTenantContext(tenantId: string | null) {
+  _currentTenantId = tenantId
+}
+
+/** Read the current tenant context — used by enrollmentApi.ts. */
+export function getApiTenantContext(): string | null {
+  return _currentTenantId
+}
+
 function authHeaders(token: string): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   }
-  const tenantId = useAuthStore.getState().selectedTenantId
-  if (tenantId) h['X-Tenant-Id'] = tenantId
+  if (_currentTenantId) h['X-Tenant-Id'] = _currentTenantId
   return h
 }
 
@@ -192,6 +208,54 @@ export async function regenerateDeviceToken(token: string, deviceId: string): Pr
 
 export async function deleteDevice(token: string, deviceId: string): Promise<void> {
   return apiFetch<void>(`${API_BASE}/devices/${deviceId}`, token, { method: 'DELETE' })
+}
+
+// --------------------------------------------------------------------------- //
+// API keys (server-to-server integration)
+// --------------------------------------------------------------------------- //
+export interface ApiKeyOut {
+  id: string
+  name: string
+  prefix: string
+  scopes: string[]
+  status: 'active' | 'revoked'
+  last_used_at: string | null
+  expires_at: string | null
+  created_at: string
+}
+
+export interface ApiKeyCreated extends ApiKeyOut {
+  key: string
+}
+
+export async function listApiKeys(token: string): Promise<ApiKeyOut[]> {
+  return apiFetch<ApiKeyOut[]>(`${API_BASE}/api-keys`, token)
+}
+
+export async function listApiKeyScopes(token: string): Promise<Record<string, string>> {
+  return apiFetch<Record<string, string>>(`${API_BASE}/api-keys/scopes`, token)
+}
+
+export async function createApiKey(
+  token: string,
+  payload: { name: string; scopes: string[]; expires_in_days?: number | null },
+): Promise<ApiKeyCreated> {
+  return apiFetch<ApiKeyCreated>(`${API_BASE}/api-keys`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function rotateApiKey(token: string, keyId: string): Promise<ApiKeyCreated> {
+  return apiFetch<ApiKeyCreated>(`${API_BASE}/api-keys/${keyId}/rotate`, token, { method: 'POST' })
+}
+
+export async function revokeApiKey(token: string, keyId: string): Promise<ApiKeyOut> {
+  return apiFetch<ApiKeyOut>(`${API_BASE}/api-keys/${keyId}/revoke`, token, { method: 'POST' })
+}
+
+export async function deleteApiKey(token: string, keyId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/api-keys/${keyId}`, token, { method: 'DELETE' })
 }
 
 // --------------------------------------------------------------------------- //

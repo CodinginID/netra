@@ -1,4 +1,5 @@
 import { GraduationCap, X } from 'lucide-react'
+import { useI18n } from '@/store/i18nStore'
 
 interface OnboardingBannerProps {
   onOpenWizard: () => void
@@ -6,6 +7,7 @@ interface OnboardingBannerProps {
 }
 
 export function OnboardingBanner({ onOpenWizard, onDismiss }: OnboardingBannerProps) {
+  const { t } = useI18n()
   return (
     <div
       style={{
@@ -37,10 +39,10 @@ export function OnboardingBanner({ onOpenWizard, onDismiss }: OnboardingBannerPr
         </div>
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
-            Selesaikan setup awal
+            {t('banner.setup_title')}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.4 }}>
-            Buat jadwal, daftarkan perangkat, dan tambahkan pengguna agar absensi bisa berjalan.
+            {t('banner.setup_body')}
           </div>
         </div>
       </div>
@@ -56,7 +58,7 @@ export function OnboardingBanner({ onOpenWizard, onDismiss }: OnboardingBannerPr
             fontWeight: 700,
           }}
         >
-          Mulai Setup
+          {t('banner.cta_start')}
         </button>
         <button
           onClick={onDismiss}
@@ -72,7 +74,7 @@ export function OnboardingBanner({ onOpenWizard, onDismiss }: OnboardingBannerPr
             color: '#fff',
             cursor: 'pointer',
           }}
-          aria-label="Tutup banner"
+          aria-label={t('banner.dismiss_label')}
         >
           <X size={16} />
         </button>

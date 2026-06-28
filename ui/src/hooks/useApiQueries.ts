@@ -21,6 +21,8 @@ export const queryKeys = {
     (params ? ['tenants', params] : ['tenants']) as readonly unknown[],
   trash: (type: 'users' | 'devices' | 'schedules') =>
     ['trash', type] as readonly unknown[],
+  apiKeys: () => ['apiKeys'] as readonly unknown[],
+  apiKeyScopes: () => ['apiKeyScopes'] as readonly unknown[],
   onboarding: () => ['onboarding'] as readonly unknown[],
   dailyReport: (date: string) => ['dailyReport', date] as readonly unknown[],
   dailyStatus: (date: string) => ['dailyStatus', date] as readonly unknown[],
@@ -42,6 +44,24 @@ export function useDevices(params?: { page?: number; limit?: number }) {
   return useQuery({
     queryKey: queryKeys.devices(params),
     queryFn: () => api.listDevices(token!, params),
+    enabled: !!token,
+  })
+}
+
+export function useApiKeys() {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.apiKeys(),
+    queryFn: () => api.listApiKeys(token!),
+    enabled: !!token,
+  })
+}
+
+export function useApiKeyScopes() {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.apiKeyScopes(),
+    queryFn: () => api.listApiKeyScopes(token!),
     enabled: !!token,
   })
 }

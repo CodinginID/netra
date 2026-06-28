@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, EyeOff, Plus, Search, X } from 'lucide-react'
+import { Eye, EyeOff, Plus, Search, X, ArrowUpRight } from 'lucide-react'
 import {
   type TenantOut,
 } from '@/api/adminApi'
@@ -10,6 +10,8 @@ import { Pagination } from '@/components/Pagination'
 import { MobileFab } from '@/components/MobileFab'
 import { useTenants } from '@/hooks/useApiQueries'
 import { useCreateTenant, useSuspendTenant, useActivateTenant } from '@/hooks/useApiMutations'
+import { useNavigate } from 'react-router-dom'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/layout.css'
 
 function slugify(value: string): string {
@@ -26,18 +28,20 @@ function formatDate(iso: string): string {
 }
 
 function StatusBadge({ status }: { status: TenantOut['status'] }) {
+  const { t } = useI18n()
   return (
     <span className={status === 'active' ? 'badge badge-green' : 'badge badge-gray'}>
-      {status === 'active' ? 'Aktif' : 'Suspended'}
+      {status === 'active' ? t('active') : t('suspended')}
     </span>
   )
 }
 
 function VerticalBadge({ config }: { config: TenantOut['config'] }) {
+  const { t } = useI18n()
   const mode = (config?.vertical as { mode?: string } | undefined)?.mode ?? 'company'
-  if (mode === 'university') return <span className="badge badge-blue">Universitas</span>
-  if (mode === 'school') return <span className="badge badge-green">Sekolah</span>
-  return <span className="badge badge-gray">Perusahaan</span>
+  if (mode === 'university') return <span className="badge badge-blue">{t('university')}</span>
+  if (mode === 'school') return <span className="badge badge-green">{t('school')}</span>
+  return <span className="badge badge-gray">{t('company')}</span>
 }
 
 interface CreateModalProps {
@@ -47,6 +51,7 @@ interface CreateModalProps {
 
 function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
   const { show } = useToast()
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
@@ -71,7 +76,7 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
     e.preventDefault()
     if (createMutation.isPending) return
     if (adminPassword.length < 8) {
-      show('Password minimal 8 karakter', 'error')
+      show(t('tenant.error_password_min'), 'error')
       return
     }
     createMutation.mutate(
@@ -85,7 +90,7 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
       },
       {
         onError: (err) => {
-          show(err instanceof Error ? err.message : 'Gagal membuat tenant', 'error')
+          show(err instanceof Error ? err.message : t('tenant.error_create_failed'), 'error')
         },
       },
     )
@@ -108,9 +113,9 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
             borderBottom: '1px solid var(--color-border)',
           }}
         >
-          <h3 className="modal-title" style={{ marginBottom: 0 }}>Tambah Tenant</h3>
+          <h3 className="modal-title" style={{ marginBottom: 0 }}>{t('tenant.add')}</h3>
           <button
-            aria-label="Tutup"
+            aria-label={t('common.close')}
             onClick={onClose}
             className="btn btn-ghost btn-sm"
             style={{ padding: '6px', border: 'none' }}
@@ -121,19 +126,19 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
 
         <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div className="field">
-            <label htmlFor="tenant-name">Nama Tenant</label>
+            <label htmlFor="tenant-name">{t('tenant.form_name')}</label>
             <input
               id="tenant-name"
               className="field-input"
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              placeholder="PT Maju Jaya"
+              placeholder={t('tenant.form_name_placeholder')}
               required
             />
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-slug">Slug</label>
+            <label htmlFor="tenant-slug">{t('tenant.form_slug')}</label>
             <input
               id="tenant-slug"
               className="field-input"
@@ -142,26 +147,26 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
                 setSlugTouched(true)
                 setSlug(slugify(e.target.value))
               }}
-              placeholder="maju-jaya"
+              placeholder={t('tenant.form_slug_placeholder')}
               required
             />
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-admin-email">Email Admin</label>
+            <label htmlFor="tenant-admin-email">{t('tenant.form_admin_email')}</label>
             <input
               id="tenant-admin-email"
               className="field-input"
               type="email"
               value={adminEmail}
               onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder="admin@organisasi.com"
+              placeholder={t('tenant.form_admin_email_placeholder')}
               required
             />
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-admin-password">Password Admin</label>
+            <label htmlFor="tenant-admin-password">{t('tenant.form_admin_password')}</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
                 id="tenant-admin-password"
@@ -170,7 +175,7 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
                 style={{ paddingRight: 40 }}
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="Minimal 8 karakter"
+                placeholder={t('tenant.form_admin_password_placeholder')}
                 minLength={8}
                 required
               />
@@ -178,7 +183,7 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
                 type="button"
                 onClick={() => setShowAdminPw((v) => !v)}
                 style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                aria-label={showAdminPw ? 'Sembunyikan password' : 'Tampilkan password'}
+                aria-label={showAdminPw ? t('login.hide_password') : t('login.show_password')}
               >
                 {showAdminPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -186,37 +191,37 @@ function CreateTenantModal({ onClose, onCreated }: CreateModalProps) {
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-admin-fullname">Nama Lengkap Admin</label>
+            <label htmlFor="tenant-admin-fullname">{t('tenant.form_admin_fullname')}</label>
             <input
               id="tenant-admin-fullname"
               className="field-input"
               value={adminFullName}
               onChange={(e) => setAdminFullName(e.target.value)}
-              placeholder="Budi Santoso"
+              placeholder={t('tenant.form_admin_fullname_placeholder')}
               required
             />
           </div>
 
           <div className="field">
-            <label htmlFor="tenant-vertical">Jenis Organisasi</label>
+            <label htmlFor="tenant-vertical">{t('tenant.form_vertical')}</label>
             <select
               id="tenant-vertical"
               className="field-input"
               value={vertical}
               onChange={(e) => setVertical(e.target.value as 'company' | 'school' | 'university')}
             >
-              <option value="company">Perusahaan</option>
-              <option value="school">Sekolah (K-12)</option>
-              <option value="university">Universitas / Kampus</option>
+              <option value="company">{t('tenant.option_company')}</option>
+              <option value="school">{t('tenant.option_school')}</option>
+              <option value="university">{t('tenant.option_university')}</option>
             </select>
           </div>
 
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={createMutation.isPending}>
-              Batal
+              {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Membuat...' : 'Buat Tenant'}
+              {createMutation.isPending ? t('common.creating') : t('tenant.add')}
             </button>
           </div>
         </form>
@@ -231,25 +236,28 @@ function ToggleConfirmModal({ tenant, onConfirm, onClose, busy }: {
   onClose: () => void
   busy: boolean
 }) {
+  const { t } = useI18n()
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   const isSuspend = tenant.status === 'active'
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div ref={modalRef} className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">{isSuspend ? 'Suspend Tenant' : 'Aktifkan Tenant'}</h3>
+        <h3 className="modal-title">{isSuspend ? t('tenant.suspend_title') : t('tenant.activate_title')}</h3>
         <p className="confirm-text">
-          Yakin ingin {isSuspend ? 'menangguhkan' : 'mengaktifkan kembali'} tenant{' '}
-          <strong style={{ color: 'var(--color-text)' }}>{tenant.name}</strong>?
-          {isSuspend && ' Pengguna tenant tidak dapat login selama ditangguhkan.'}
+          {t('tenant.confirm_toggle', {
+            action: isSuspend ? t('tenant.suspend') : t('tenant.activate'),
+            name: tenant.name,
+          })}
+          {isSuspend && ' ' + t('tenant.toggle_warning')}
         </p>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Batal</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
           <button
             className={isSuspend ? 'btn btn-warning' : 'btn btn-success'}
             onClick={onConfirm}
             disabled={busy}
           >
-            {busy ? '...' : isSuspend ? 'Suspend' : 'Aktifkan'}
+            {busy ? '...' : isSuspend ? t('tenant.suspend') : t('tenant.activate')}
           </button>
         </div>
       </div>
@@ -259,12 +267,18 @@ function ToggleConfirmModal({ tenant, onConfirm, onClose, busy }: {
 
 export function TenantsPage() {
   const { show } = useToast()
+  const { t } = useI18n()
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [search, setSearch] = useState('')
   const searchRef = useRef('')
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<TenantOut | null>(null)
+
+  const handleKelola = (tenantId: string) => {
+    navigate(`/admin/tenants/${tenantId}`)
+  }
 
   // Debounced server-side search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -280,13 +294,13 @@ export function TenantsPage() {
   const { data: paginatedTenants, isLoading, error } = useTenants({ page, limit, search: searchRef.current.trim() || undefined })
   const tenants = paginatedTenants?.items ?? []
   const total = paginatedTenants?.total ?? 0
-  const pages = paginatedTenants?.pages ?? 0
+  const pages = paginatedTenants?.pages ?? 1
 
   const suspendMutation = useSuspendTenant(() => {
-    show('Tenant dinonaktifkan', 'success')
+    show(t('tenant.toast_deactivated'), 'success')
   })
   const activateMutation = useActivateTenant(() => {
-    show('Tenant diaktifkan', 'success')
+    show(t('tenant.toast_activated'), 'success')
   })
 
   const handleConfirmToggle = () => {
@@ -294,13 +308,13 @@ export function TenantsPage() {
     if (confirmTarget.status === 'active') {
       suspendMutation.mutate(confirmTarget.id, {
         onError: (err) => {
-          show(err instanceof Error ? err.message : 'Gagal memperbarui status', 'error')
+          show(err instanceof Error ? err.message : t('tenant.error_update_failed'), 'error')
         },
       })
     } else {
       activateMutation.mutate(confirmTarget.id, {
         onError: (err) => {
-          show(err instanceof Error ? err.message : 'Gagal memperbarui status', 'error')
+          show(err instanceof Error ? err.message : t('tenant.error_update_failed'), 'error')
         },
       })
     }
@@ -308,7 +322,7 @@ export function TenantsPage() {
   }
 
   const handleCreated = () => {
-    show('Tenant berhasil dibuat', 'success')
+    show(t('tenant.toast_created'), 'success')
   }
 
   const busyId = suspendMutation.isPending ? suspendMutation.variables : (activateMutation.isPending ? activateMutation.variables : null)
@@ -316,7 +330,7 @@ export function TenantsPage() {
   return (
     <div>
       <div className="page-toolbar">
-        <h2 className="page-title">Tenants</h2>
+        <h2 className="page-title">{t('tenant.title')}</h2>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <div className="search-input-wrap">
             <Search size={16} />
@@ -324,13 +338,13 @@ export function TenantsPage() {
               className="search-input"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Cari tenant..."
-              aria-label="Cari tenant"
+              placeholder={t('tenant.search_placeholder')}
+              aria-label={t('tenant.search_placeholder')}
             />
           </div>
           <button className="btn btn-primary add-fab-twin" onClick={() => setModalOpen(true)}>
             <Plus size={16} />
-            Tambah Tenant
+            {t('tenant.add')}
           </button>
         </div>
       </div>
@@ -341,11 +355,11 @@ export function TenantsPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Nama Tenant</th>
-              <th>Slug</th>
-              <th>Status</th>
-              <th>Terdaftar</th>
-              <th style={{ textAlign: 'right' }}>Aksi</th>
+              <th>{t('tenant.col_name')}</th>
+              <th>{t('tenant.col_slug')}</th>
+              <th>{t('tenant.col_status')}</th>
+              <th>{t('tenant.col_registered')}</th>
+              <th colSpan={2} style={{ textAlign: 'right' }}>{t('tenant.col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -357,47 +371,58 @@ export function TenantsPage() {
                   <td><div className="skeleton skeleton-badge" /></td>
                   <td><div className="skeleton skeleton-text sm" /></td>
                   <td><div className="skeleton skeleton-text" style={{ width: 70, marginLeft: 'auto' }} /></td>
+                  <td><div className="skeleton skeleton-text" style={{ width: 70, marginLeft: 'auto' }} /></td>
                 </tr>
               ))}
 
             {!isLoading && tenants.length === 0 && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty-state">
-                    {total === 0 ? 'Belum ada tenant terdaftar' : 'Tidak ada tenant yang cocok'}
+                    {total === 0 ? t('tenant.empty') : t('tenant.empty_search')}
                   </div>
                 </td>
               </tr>
             )}
 
             {!isLoading &&
-              tenants.map((t) => (
-                <tr key={t.id}>
+              tenants.map((tenant) => (
+                <tr key={tenant.id}>
                   <td style={{ fontWeight: 600 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {t.name}
-                      <VerticalBadge config={t.config} />
+                      {tenant.name}
+                      <VerticalBadge config={tenant.config} />
                     </span>
                   </td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{t.slug}</td>
-                  <td><StatusBadge status={t.status} /></td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(t.created_at)}</td>
+                  <td style={{ color: 'var(--color-text-secondary)' }}>{tenant.slug}</td>
+                  <td><StatusBadge status={tenant.status} /></td>
+                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(tenant.created_at)}</td>
                   <td style={{ textAlign: 'right' }}>
-                    {t.status === 'active' ? (
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => handleKelola(tenant.id)}
+                      title={t('tenant.manage_tooltip')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      {t('btn.manage')} <ArrowUpRight size={13} />
+                    </button>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {tenant.status === 'active' ? (
                       <button
                         className="btn btn-sm btn-warning"
-                        onClick={() => setConfirmTarget(t)}
-                        disabled={busyId === t.id}
+                        onClick={() => setConfirmTarget(tenant)}
+                        disabled={busyId === tenant.id}
                       >
-                        {busyId === t.id ? '...' : 'Suspend'}
+                        {busyId === tenant.id ? '...' : t('tenant.suspend')}
                       </button>
                     ) : (
                       <button
                         className="btn btn-sm btn-success"
-                        onClick={() => setConfirmTarget(t)}
-                        disabled={busyId === t.id}
+                        onClick={() => setConfirmTarget(tenant)}
+                        disabled={busyId === tenant.id}
                       >
-                        {busyId === t.id ? '...' : 'Aktifkan'}
+                        {busyId === tenant.id ? '...' : t('tenant.activate')}
                       </button>
                     )}
                   </td>
@@ -410,7 +435,7 @@ export function TenantsPage() {
         )}
       </div>
 
-      <MobileFab onClick={() => setModalOpen(true)} label="Tambah Tenant">
+      <MobileFab onClick={() => setModalOpen(true)} label={t('tenant.add')}>
         <Plus size={24} />
       </MobileFab>
 

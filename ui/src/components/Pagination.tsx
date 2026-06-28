@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { useI18n } from '@/store/i18nStore'
 
 interface PaginationProps {
   page: number
@@ -10,6 +11,7 @@ interface PaginationProps {
 }
 
 export function Pagination({ page, limit, total, pages, onPageChange, onLimitChange }: PaginationProps) {
+  const { t } = useI18n()
   if (pages <= 1) return null
 
   const limitOptions = [10, 20, 50, 100]
@@ -24,17 +26,17 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
       color: 'var(--color-text-muted)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>{total} item{total !== 1 ? '' : ''}</span>
+        <span>{total} {t('pagination.items')}</span>
         {onLimitChange && (
           <select
             value={limit}
             onChange={(e) => onLimitChange(Number(e.target.value))}
             className="field-input"
             style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }}
-            aria-label="Item per halaman"
+            aria-label={t('pagination.per_page_label')}
           >
             {limitOptions.map((n) => (
-              <option key={n} value={n}>{n} / halaman</option>
+              <option key={n} value={n}>{n} {t('pagination.per_page')}</option>
             ))}
           </select>
         )}
@@ -45,7 +47,7 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
           className="btn btn-sm btn-ghost"
           disabled={page === 1}
           onClick={() => onPageChange(1)}
-          aria-label="Halaman pertama"
+          aria-label={t('pagination.first')}
         >
           <ChevronsLeft size={14} />
         </button>
@@ -53,7 +55,7 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
           className="btn btn-sm btn-ghost"
           disabled={page === 1}
           onClick={() => onPageChange(page - 1)}
-          aria-label="Halaman sebelumnya"
+          aria-label={t('pagination.prev')}
         >
           <ChevronLeft size={14} />
         </button>
@@ -75,7 +77,7 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
               key={p}
               className={`btn btn-sm${p === page ? ' btn-primary' : ' btn-ghost'}`}
               onClick={() => onPageChange(p)}
-              aria-label={`Halaman ${p}`}
+              aria-label={t('pagination.page', { page: p })}
               aria-current={p === page ? 'page' : undefined}
             >
               {p}
@@ -87,7 +89,7 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
           className="btn btn-sm btn-ghost"
           disabled={page === pages}
           onClick={() => onPageChange(page + 1)}
-          aria-label="Halaman berikutnya"
+          aria-label={t('pagination.next')}
         >
           <ChevronRight size={14} />
         </button>
@@ -95,7 +97,7 @@ export function Pagination({ page, limit, total, pages, onPageChange, onLimitCha
           className="btn btn-sm btn-ghost"
           disabled={page === pages}
           onClick={() => onPageChange(pages)}
-          aria-label="Halaman terakhir"
+          aria-label={t('pagination.last')}
         >
           <ChevronsRight size={14} />
         </button>

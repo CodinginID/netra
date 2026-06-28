@@ -3,6 +3,7 @@ import { Plus, Clock, Edit2, Trash2, X } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
+import { useI18n } from '@/store/i18nStore'
 import {
   type ScheduleOut,
   type ScheduleCreate,
@@ -49,28 +50,29 @@ function ScheduleFormFields({
   graceMinutes: number; setGraceMinutes: (v: number) => void
   sessions: SessionRule[]; setSessions: (s: SessionRule[]) => void
 }) {
+  const { t } = useI18n()
   function updateSession(i: number, key: keyof SessionRule, val: string) {
     setSessions(sessions.map((s, idx) => idx === i ? { ...s, [key]: val } : s))
   }
   return (
     <>
       <div className="schedule-type-row">
-        {(['shift', 'session'] as const).map((t) => (
-          <button key={t} type="button"
-            className={`schedule-type-btn${scheduleType === t ? ' schedule-type-btn--active' : ''}`}
-            onClick={() => setScheduleType(t)}
+        {(['shift', 'session'] as const).map((st) => (
+          <button key={st} type="button"
+            className={`schedule-type-btn${scheduleType === st ? ' schedule-type-btn--active' : ''}`}
+            onClick={() => setScheduleType(st)}
           >
-            {t === 'shift' ? 'Shift Harian' : 'Sesi / Periode'}
+            {st === 'shift' ? t('schedules.shift') : t('schedules.session')}
           </button>
         ))}
       </div>
 
       {scheduleType === 'shift' ? (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <label className="schedule-form-field">Jam Masuk
+          <label className="schedule-form-field">{t('schedules.time_in')}
             <input className="field-input" type="time" value={workdayStart} onChange={(e) => setWorkdayStart(e.target.value)} required />
           </label>
-          <label className="schedule-form-field">Jam Pulang
+          <label className="schedule-form-field">{t('schedules.time_out')}
             <input className="field-input" type="time" value={workdayEnd} onChange={(e) => setWorkdayEnd(e.target.value)} required />
           </label>
         </div>
@@ -78,12 +80,12 @@ function ScheduleFormFields({
         <div className="session-list">
           {sessions.map((s, i) => (
             <div key={i} className="session-row">
-              <input className="field-input" placeholder="Nama sesi" value={s.name} onChange={(e) => updateSession(i, 'name', e.target.value)} required aria-label={`Nama sesi ${i + 1}`} />
-              <input className="field-input" type="time" value={s.start} onChange={(e) => updateSession(i, 'start', e.target.value)} required aria-label={`Waktu mulai sesi ${i + 1}`} />
+              <input className="field-input" placeholder={t('schedules.session_name')} value={s.name} onChange={(e) => updateSession(i, 'name', e.target.value)} required aria-label={t('schedules.session_name')} />
+              <input className="field-input" type="time" value={s.start} onChange={(e) => updateSession(i, 'start', e.target.value)} required aria-label={t('schedules.session_start')} />
               <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>–</span>
-              <input className="field-input" type="time" value={s.end} onChange={(e) => updateSession(i, 'end', e.target.value)} required aria-label={`Waktu selesai sesi ${i + 1}`} />
+              <input className="field-input" type="time" value={s.end} onChange={(e) => updateSession(i, 'end', e.target.value)} required aria-label={t('schedules.session_end')} />
               {sessions.length > 1 && (
-                <button type="button" className="btn-icon btn-icon-danger" aria-label="Hapus sesi" onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
+                <button type="button" className="btn-icon btn-icon-danger" aria-label={t('schedules.delete_session')} onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
                   <X size={14} />
                 </button>
               )}
@@ -104,6 +106,7 @@ function ScheduleFormFields({
 }
 
 function ScheduleForm({ onSubmit, onCancel, submitting }: ScheduleFormProps) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [scheduleType, setScheduleType] = useState<'shift' | 'session'>('shift')
   const [workdayStart, setWorkdayStart] = useState('08:00')
@@ -121,13 +124,13 @@ function ScheduleForm({ onSubmit, onCancel, submitting }: ScheduleFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="data-card" style={{ padding: '20px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <label className="schedule-form-field">Nama Jadwal
-        <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Shift Pagi / Sesi Pagi" required />
+      <label className="schedule-form-field">{t('schedules.form_name')}
+        <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('schedules.form_name_placeholder')} required />
       </label>
       <ScheduleFormFields {...{ scheduleType, setScheduleType, workdayStart, setWorkdayStart, workdayEnd, setWorkdayEnd, graceMinutes, setGraceMinutes, sessions, setSessions }} />
       <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? 'Menyimpan...' : 'Simpan'}</button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>Batal</button>
+        <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? t('common.saving') : t('common.save')}</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </form>
   )
@@ -139,6 +142,7 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   onClose: () => void
   submitting: boolean
 }) {
+  const { t } = useI18n()
   const [name, setName] = useState(schedule.name)
   const [scheduleType, setScheduleType] = useState<'shift' | 'session'>(schedule.rules.type === 'session' ? 'session' : 'shift')
   const [workdayStart, setWorkdayStart] = useState(schedule.rules.workday_start ?? '08:00')
@@ -158,15 +162,15 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Edit Jadwal</h3>
+        <h3 className="modal-title">{t('schedules.edit_title')}</h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field"><label htmlFor="edit-schedule-name">Nama Jadwal</label>
+          <div className="field"><label htmlFor="edit-schedule-name">{t('schedules.form_name')}</label>
             <input id="edit-schedule-name" className="field-input" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <ScheduleFormFields {...{ scheduleType, setScheduleType, workdayStart, setWorkdayStart, workdayEnd, setWorkdayEnd, graceMinutes, setGraceMinutes, sessions, setSessions }} />
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>Batal</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? 'Menyimpan...' : 'Simpan'}</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? t('common.saving') : t('common.save_changes')}</button>
           </div>
         </form>
       </div>
@@ -180,22 +184,30 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
   onClose: () => void
   loading: boolean
 }) {
+  const { t } = useI18n()
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div className="modal-card" ref={modalRef} style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Hapus Jadwal</h3>
-        <p className="confirm-text">Yakin hapus jadwal <strong style={{ color: 'var(--color-text)' }}>{schedule.name}</strong>? Data dapat dipulihkan dalam 30 hari.</p>
+        <h3 className="modal-title">{t('schedules.delete_title')}</h3>
+        <p className="confirm-text">
+          {t('schedules.confirm_delete', { name: schedule.name })}
+        </p>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>Batal</button>
-          <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>{loading ? 'Menghapus...' : 'Hapus'}</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>{t('common.cancel')}</button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>
+            {loading ? t('common.deleting') : t('common.delete')}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export function SchedulesPage() {
+  const { t } = useI18n()
   const { show } = useToast()
   useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   const [page, setPage] = useState(1)
@@ -320,8 +332,8 @@ export function SchedulesPage() {
           {schedules.map((s) => (
             <SwipeCard
               key={s.id}
-              left={{ icon: <Edit2 size={20} />, label: 'Edit', variant: 'primary', onAction: () => setEditTarget(s) }}
-              right={{ icon: <Trash2 size={20} />, label: 'Hapus', variant: 'danger', onAction: () => setDeleteTarget(s) }}
+              left={{ icon: <Edit2 size={20} />, label: t('common.edit'), variant: 'primary', onAction: () => setEditTarget(s) }}
+              right={{ icon: <Trash2 size={20} />, label: t('common.delete'), variant: 'danger', onAction: () => setDeleteTarget(s) }}
             >
             <div className="data-card schedule-row">
               <div className="schedule-row-name">

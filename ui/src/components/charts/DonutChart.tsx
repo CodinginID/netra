@@ -1,3 +1,4 @@
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/charts.css'
 
 export interface DonutSlice {
@@ -27,6 +28,7 @@ export function DonutChart({
   size = 160,
   thickness = 18,
 }: DonutChartProps) {
+  const { t } = useI18n()
   const total = data.reduce((sum, d) => sum + d.value, 0)
   const radius = (size - thickness) / 2
   const circumference = 2 * Math.PI * radius
@@ -52,7 +54,7 @@ export function DonutChart({
     return (
       <div className="donut-chart">
         <div className="donut-chart__svg-wrap" style={{ width: size, height: size }}>
-          <svg className="donut-chart__svg" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Tidak ada data">
+          <svg className="donut-chart__svg" viewBox={`0 0 ${size} ${size}`} role="img" aria-label={t('donut.no_data_label')}>
             <circle
               cx={center}
               cy={center}
@@ -67,7 +69,7 @@ export function DonutChart({
             <span className="donut-chart__total-label">{centerLabel}</span>
           </div>
         </div>
-        <div className="donut-chart__empty">Belum ada data untuk ditampilkan.</div>
+        <div className="donut-chart__empty">{t('donut.no_data')}</div>
       </div>
     )
   }
@@ -79,7 +81,7 @@ export function DonutChart({
           className="donut-chart__svg"
           viewBox={`0 0 ${size} ${size}`}
           role="img"
-          aria-label={`Diagram lingkaran: total ${total}`}
+          aria-label={t('donut.chart_label', { total })}
         >
           <circle
             cx={center}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Bell } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useAttendance, useUsers } from '@/hooks/useApiQueries'
+import { useI18n } from '@/store/i18nStore'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -9,6 +10,7 @@ function today(): string {
 
 export function NotificationBell() {
   const token = useAuthStore((s) => s.accessToken)
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const todayDate = today()
@@ -45,7 +47,7 @@ export function NotificationBell() {
       <button
         className="notif-trigger"
         onClick={() => setOpen((o) => !o)}
-        aria-label={`${late.length} late check-ins today`}
+        aria-label={`${late.length} ${t('notification.late_title', { count: late.length })}`}
       >
         <Bell size={18} />
         {late.length > 0 && <span className="notif-badge" aria-live="polite">{late.length > 99 ? '99+' : late.length}</span>}
@@ -53,9 +55,9 @@ export function NotificationBell() {
 
       {open && (
         <div className="notif-dropdown">
-          <div className="notif-header">Late today ({late.length})</div>
+          <div className="notif-header">{t('notification.late_title', { count: late.length })}</div>
           {late.length === 0 ? (
-            <div className="notif-empty">No late check-ins</div>
+            <div className="notif-empty">{t('notification.no_late')}</div>
           ) : (
             late.map((row) => (
               <div className="notif-item" key={row.id}>

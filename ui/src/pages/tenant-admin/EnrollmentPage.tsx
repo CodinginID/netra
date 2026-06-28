@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/Toast'
+import { useI18n } from '@/store/i18nStore'
 import { fetchUsers, enrollFaceMulti, grantConsent, type UserItem } from '@/api/enrollmentApi'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
 import { useVoiceGuide } from '@/hooks/useVoiceGuide'
@@ -11,15 +12,9 @@ type CameraState  = 'idle' | 'active' | 'denied' | 'unavailable'
 type CapturePhase = 'front' | 'left' | 'right' | 'preview'
 type SubmitState  = 'idle' | 'loading' | 'success' | 'error'
 
-const PHASE_CFG: Record<Exclude<CapturePhase,'preview'>, { label: string; voice: string; icon: string; duration: number }> = {
-  front: { label: 'Lurus',  voice: 'Lihat lurus ke kamera',    icon: 'front', duration: 3 },
-  left:  { label: 'Kiri',   voice: 'Putar kepala ke kiri',     icon: 'left',  duration: 4 },
-  right: { label: 'Kanan',  voice: 'Putar kepala ke kanan',    icon: 'right', duration: 4 },
-}
 const PHASES: Exclude<CapturePhase,'preview'>[] = ['front','left','right']
-const CIRC = 2 * Math.PI * 22 // SVG circle circumference r=22
+const CIRC = 2 * Math.PI * 22
 
-// ── Face direction SVG icons ──────────────────────────────────────────────────
 function FaceIcon({ dir, size = 36 }: { dir: string; size?: number }) {
   const s = size
   if (dir === 'front') return (
@@ -48,13 +43,13 @@ function FaceIcon({ dir, size = 36 }: { dir: string; size?: number }) {
   )
 }
 
-// ── Angle card component ──────────────────────────────────────────────────────
 function AngleCard({
   label, icon, isActive, isDone, progress,
 }: {
   label: string; icon: string
   isActive: boolean; isDone: boolean; progress: number
 }) {
+  const { t } = useI18n()
   const offset = CIRC * (1 - progress)
   return (
     <div className={`angle-card ${isActive ? 'angle-card--active' : isDone ? 'angle-card--done' : 'angle-card--idle'}`}>
@@ -82,17 +77,17 @@ function AngleCard({
         </div>
       </div>
       <span className="angle-card-label">{label}</span>
-      {isActive && <span className="angle-card-badge">Aktif</span>}
+      {isActive && <span className="angle-card-badge">{t('enrollment.angle_active')}</span>}
     </div>
   )
 }
 
-// ── Step bar ──────────────────────────────────────────────────────────────────
 function StepBar({ active }: { active: 1 | 2 | 3 }) {
+  const { t } = useI18n()
   const STEPS = [
-    { label: 'Pilih Pengguna',        icon: '01' },
-    { label: 'Rekam Wajah',           icon: '02' },
-    { label: 'Persetujuan & Submit',  icon: '03' },
+    { label: t('enrollment.step1'), icon: '01' },
+    { label: t('enrollment.step2'), icon: '02' },
+    { label: t('enrollment.step3'), icon: '03' },
   ]
   return (
     <div className="step-bar">
@@ -115,8 +110,8 @@ function StepBar({ active }: { active: 1 | 2 | 3 }) {
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export function EnrollmentPage() {
+  const { t } = useI18n()
   const { show } = useToast()
   const accessToken = useAuthStore((s) => s.accessToken)
   const { announcePhase, announceCountdown, announceDone } = useVoiceGuide()
@@ -191,11 +186,17 @@ export function EnrollmentPage() {
     })
   }
 
+  const phaseConfig = {
+    front: { label: t('enrollment.angle_front'), voice: t('enrollment.voice_front'), icon: 'front', duration: 3 },
+    left:  { label: t('enrollment.angle_left'),  voice: t('enrollment.voice_left'),  icon: 'left',  duration: 4 },
+    right: { label: t('enrollment.angle_right'), voice: t('enrollment.voice_right'), icon: 'right', duration: 4 },
+  } as const
+
   const runCaptureSequence = useCallback(async () => {
     const blobs: Blob[] = []; const urls: string[] = []
 
     for (const phase of PHASES) {
-      const { voice, duration } = PHASE_CFG[phase]
+      const { voice, duration } = phaseConfig[phase]
       setCapturePhase(phase)
       if (voiceEnabled) announcePhase(phase)
 
@@ -206,7 +207,7 @@ export function EnrollmentPage() {
           if (voiceEnabled && rem > 0) announceCountdown(rem)
           if (rem <= 0) { clearInterval(id); resolve() }
         }, 1000)
-        void voice // silence unused warning
+        void voice
       })
 
       const blob = await captureFrame()
@@ -249,52 +250,52 @@ export function EnrollmentPage() {
     try {
       await grantConsent(accessToken, uid)
       await enrollFaceMulti(accessToken, uid, capturedBlobs)
-      show(`Enrollment berhasil — ${capturedBlobs.length} sudut wajah terdaftar.`, 'success')
+      show(t('enrollment.toast_success', { count: capturedBlobs.length }), 'success')
       changeUser()
     } catch (err) {
       setSubmitState('error')
-      setErrorMessage(err instanceof Error ? err.message : 'Enrollment gagal.')
+      setErrorMessage(err instanceof Error ? err.message : t('enrollment.toast_error'))
     } finally {
       setSubmitState((s) => s === 'loading' ? 'idle' : s)
     }
   }
 
-  const phaseConfig   = capturePhase && capturePhase !== 'preview' ? PHASE_CFG[capturePhase] : null
-  const phaseProgress = phaseConfig ? (1 - countdown / phaseConfig.duration) : 0
+  const currentPhase = capturePhase && capturePhase !== 'preview' ? phaseConfig[capturePhase] : null
+  const phaseProgress = currentPhase ? (1 - countdown / currentPhase.duration) : 0
   const canSubmit     = !!uid && capturedBlobs.length > 0 && consentGranted && submitState !== 'loading'
   const userName      = resolvedUserName()
+  const previewLabels = [t('enrollment.preview_front'), t('enrollment.preview_left'), t('enrollment.preview_right')]
 
   return (
     <div>
       <div className="page-header">
-        <h2>Enrollment Wajah</h2>
-        <p>Rekam wajah pengguna dari 3 sudut untuk identifikasi yang akurat</p>
+        <h2>{t('enrollment.title')}</h2>
+        <p>{t('enrollment.subtitle')}</p>
       </div>
 
       <StepBar active={activeStep} />
 
       <div className="enrollment-layout">
 
-        {/* ── Step 1: Pilih Pengguna ── */}
         {activeStep === 1 && (
           <div className="enrollment-section">
-            <h3>Pilih Pengguna</h3>
-            {usersLoading && <p style={{ color:'var(--color-text-secondary)', fontSize:'0.875rem' }}>Memuat daftar pengguna…</p>}
+            <h3>{t('enrollment.step1')}</h3>
+            {usersLoading && <p style={{ color:'var(--color-text-secondary)', fontSize:'0.875rem' }}>{t('enrollment.loading_users')}</p>}
             {!usersLoading && usersError && (
               <div className="users-error">
-                <span>Gagal memuat daftar pengguna.</span>
-                <button className="btn btn-ghost btn-sm" onClick={loadUsers}>Coba lagi</button>
+                <span>{t('enrollment.users_error')}</span>
+                <button className="btn btn-ghost btn-sm" onClick={loadUsers}>{t('enrollment.try_again')}</button>
               </div>
             )}
             {!usersLoading && !usersError && users.length > 0 && (
               <div className="form-group">
-                <label htmlFor="user-select">Pengguna</label>
+                <label htmlFor="user-select">{t('enrollment.user_label')}</label>
                 <select id="user-select" className="user-id-select" value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}>
-                  <option value="">-- Pilih pengguna --</option>
+                  <option value="">{t('enrollment.select_placeholder')}</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.full_name ?? 'Tanpa nama'}
+                      {u.full_name ?? t('enrollment.no_name')}
                       {u.external_id ? ` · ${u.external_id}` : u.username ? ` (${u.username})` : ''}
                     </option>
                   ))}
@@ -303,31 +304,30 @@ export function EnrollmentPage() {
             )}
             {!usersLoading && !usersError && users.length === 0 && (
               <div className="form-group">
-                <label htmlFor="manual-user-id">User ID</label>
+                <label htmlFor="manual-user-id">{t('enrollment.manual_user_id')}</label>
                 <input id="manual-user-id" type="text" className="user-id-input"
                   value={manualUserId} onChange={(e) => setManualUserId(e.target.value)}
-                  placeholder="Masukkan user_id secara manual"/>
+                  placeholder={t('enrollment.manual_user_id_placeholder')}/>
               </div>
             )}
             {uid && (
               <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginTop:'0.5rem' }}>
                 <button className="btn btn-primary" onClick={startCamera}>
-                  Mulai Rekam Wajah →
+                  {t('enrollment.start_recording')} →
                 </button>
                 <label className="voice-toggle">
                   <input type="checkbox" checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)}/>
-                  <span>🔊 Panduan suara</span>
+                  <span>{t('enrollment.voice_guide')}</span>
                 </label>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Step 2: Rekam Wajah ── */}
         {activeStep === 2 && (
           <div className="enrollment-section">
             <h3>
-              Rekam Wajah
+              {t('enrollment.recording_title')}
               {userName && (
                 <span className="user-confirm-banner" style={{ fontSize:'0.78rem', marginBottom:0 }}>
                   <span className="dot"/>{userName}
@@ -335,7 +335,6 @@ export function EnrollmentPage() {
               )}
             </h3>
 
-            {/* 3 Angle cards */}
             <div className="angle-cards">
               {PHASES.map((p, i) => {
                 const phaseIdx = capturePhase && capturePhase !== 'preview'
@@ -343,13 +342,12 @@ export function EnrollmentPage() {
                 const isDone   = capturePhase === 'preview' || phaseIdx > i
                 const isActive = phaseIdx === i
                 return (
-                  <AngleCard key={p} label={PHASE_CFG[p].label} icon={PHASE_CFG[p].icon}
+                  <AngleCard key={p} label={phaseConfig[p].label} icon={phaseConfig[p].icon}
                     isActive={isActive} isDone={isDone} progress={isActive ? phaseProgress : 0}/>
                 )
               })}
             </div>
 
-            {/* Camera */}
             {capturePhase !== 'preview' && (
               <>
                 {cameraState === 'active' ? (
@@ -358,7 +356,6 @@ export function EnrollmentPage() {
                     <canvas ref={canvasRef} className="camera-canvas"/>
                     <canvas ref={overlayRef} className="camera-detection-canvas"/>
 
-                    {/* Oval guide when no face detected */}
                     {!hasFace && (
                       <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"
                         style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
@@ -367,19 +364,18 @@ export function EnrollmentPage() {
                       </svg>
                     )}
 
-                    {/* Instruction overlay */}
-                    {phaseConfig && (
+                    {currentPhase && (
                       <div className="cam-instruction">
                         <div className="cam-instruction-icon">
-                          <FaceIcon dir={phaseConfig.icon} size={40}/>
+                          <FaceIcon dir={currentPhase.icon} size={40}/>
                         </div>
-                        <div className="cam-instruction-text">{phaseConfig.voice}</div>
+                        <div className="cam-instruction-text">{currentPhase.voice}</div>
                         <div className="cam-instruction-countdown">{countdown}</div>
                       </div>
                     )}
                     {!capturePhase && (
                       <div className="cam-instruction cam-instruction--dim">
-                        <div className="cam-instruction-text">Posisikan wajah di dalam oval…</div>
+                        <div className="cam-instruction-text">{t('enrollment.position_face')}</div>
                       </div>
                     )}
                   </div>
@@ -388,43 +384,41 @@ export function EnrollmentPage() {
                     <span className="camera-placeholder-icon">
                       {cameraState === 'denied' ? '🚫' : cameraState === 'unavailable' ? '📵' : '📷'}
                     </span>
-                    <p>{cameraState === 'denied' ? 'Kamera ditolak browser.' : cameraState === 'unavailable' ? 'Kamera tidak tersedia.' : 'Kamera belum aktif.'}</p>
+                    <p>{cameraState === 'denied' ? t('enrollment.camera_denied') : cameraState === 'unavailable' ? t('enrollment.camera_unavailable') : t('enrollment.camera_inactive')}</p>
                     {cameraState === 'idle' && (
-                      <button className="btn btn-primary btn-sm" onClick={startCamera}>Aktifkan Kamera</button>
+                      <button className="btn btn-primary btn-sm" onClick={startCamera}>{t('enrollment.enable_camera')}</button>
                     )}
                   </div>
                 )}
               </>
             )}
 
-            {/* Preview thumbnails */}
             {capturePhase === 'preview' && capturedUrls.length > 0 && (
               <div className="enroll-previews">
                 {capturedUrls.map((url, i) => (
                   <div key={i} className="enroll-preview-thumb">
-                    <img src={url} alt={`Sudut ${i + 1}`}/>
-                    <span>{['Depan','Kiri','Kanan'][i]}</span>
+                    <img src={url} alt={t('enrollment.preview_alt', { index: i + 1 })}/>
+                    <span>{previewLabels[i]}</span>
                   </div>
                 ))}
               </div>
             )}
 
             <div className="step-nav-row" style={{ display:'flex', gap:'0.75rem' }}>
-              <button className="btn btn-ghost btn-sm" onClick={changeUser}>← Ganti Pengguna</button>
+              <button className="btn btn-ghost btn-sm" onClick={changeUser}>{t('enrollment.change_user')}</button>
               {capturePhase === 'preview' && (
                 <button className="btn btn-ghost btn-sm"
                   onClick={() => { retake(); void startCamera() }}>
-                  Ulangi Rekam
+                  {t('enrollment.retake')}
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Step 3: Consent & Submit ── */}
         {activeStep === 3 && (
           <div className="enrollment-section">
-            <h3>Persetujuan &amp; Submit</h3>
+            <h3>{t('enrollment.consent_title')}</h3>
             {userName && (
               <div className="user-confirm-banner"><span className="dot"/>{userName}</div>
             )}
@@ -432,29 +426,28 @@ export function EnrollmentPage() {
               <div className="enroll-previews enroll-previews--sm" style={{ marginBottom:'1rem' }}>
                 {capturedUrls.map((url, i) => (
                   <div key={i} className="enroll-preview-thumb">
-                    <img src={url} alt={`Sudut ${i + 1}`}/>
-                    <span>{['Depan','Kiri','Kanan'][i]}</span>
+                    <img src={url} alt={t('enrollment.preview_alt', { index: i + 1 })}/>
+                    <span>{previewLabels[i]}</span>
                   </div>
                 ))}
               </div>
             )}
             <label className="consent-row">
               <input type="checkbox" checked={consentGranted} onChange={(e) => setConsentGranted(e.target.checked)}/>
-              Saya menyetujui penggunaan data biometrik wajah pengguna ini untuk keperluan absensi
-              otomatis sesuai UU Perlindungan Data Pribadi (UU PDP).
+              {t('enrollment.consent_checkbox')}
             </label>
             {submitState === 'error' && errorMessage && (
               <div className="enrollment-result error">{errorMessage}</div>
             )}
             <div className="enrollment-submit-row">
               <button className="btn btn-primary" onClick={handleSubmit} disabled={!canSubmit}>
-                {submitState === 'loading' ? <><span className="spinner"/>Menyimpan…</> : 'Submit Enrollment'}
+                {submitState === 'loading' ? <><span className="spinner"/>{t('enrollment.submit_loading')}</> : t('enrollment.submit_btn')}
               </button>
-              {!consentGranted && <span className="enrollment-hint">Centang persetujuan terlebih dahulu</span>}
+              {!consentGranted && <span className="enrollment-hint">{t('enrollment.consent_hint')}</span>}
             </div>
             <div className="step-nav-row">
               <button className="btn btn-ghost btn-sm" onClick={retake} disabled={submitState === 'loading'}>
-                ← Ulangi Rekam
+                {t('enrollment.retake')}
               </button>
             </div>
           </div>

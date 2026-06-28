@@ -92,6 +92,56 @@ export function useRegenerateDeviceToken(onSuccess?: () => void) {
   })
 }
 
+// ---- API keys (integration) ----
+export function useCreateApiKey(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { name: string; scopes: string[]; expires_in_days?: number | null }) =>
+      api.createApiKey(token!, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.apiKeys() })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useRotateApiKey(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (keyId: string) => api.rotateApiKey(token!, keyId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.apiKeys() })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useRevokeApiKey(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (keyId: string) => api.revokeApiKey(token!, keyId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.apiKeys() })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useDeleteApiKey(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (keyId: string) => api.deleteApiKey(token!, keyId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.apiKeys() })
+      onSuccess?.()
+    },
+  })
+}
+
 export function useDeleteDevice(onSuccess?: () => void) {
   const token = useAuthStore((s) => s.accessToken)
   const qc = useQueryClient()

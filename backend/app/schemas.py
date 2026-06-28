@@ -8,6 +8,7 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models import (
+    ApiKeyStatus,
     AttendanceStatus,
     AttendanceType,
     DeviceStatus,
@@ -244,6 +245,53 @@ class DeviceRegistered(DeviceOut):
     """
 
     token: str
+
+
+# --------------------------------------------------------------------------- #
+# API keys (server-to-server integration)
+# --------------------------------------------------------------------------- #
+# The scopes a tenant API key may be granted. Keep names "resource:action" so
+# they read clearly in the dashboard and stay extensible.
+API_SCOPES: dict[str, str] = {
+    "attendance:read": "Baca catatan & laporan kehadiran",
+}
+
+
+class ApiKeyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    scopes: list[str] = Field(default_factory=lambda: ["attendance:read"])
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+
+    @model_validator(mode="after")
+    def _validate_scopes(self) -> ApiKeyCreate:
+        if not self.scopes:
+            raise ValueError("At least one scope is required")
+        invalid = [s for s in self.scopes if s not in API_SCOPES]
+        if invalid:
+            raise ValueError(f"Unknown scope(s): {', '.join(invalid)}")
+        return self
+
+
+class ApiKeyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    status: ApiKeyStatus
+    last_used_at: datetime | None
+    expires_at: datetime | None
+    created_at: datetime
+
+
+class ApiKeyCreated(ApiKeyOut):
+    """Returned ONCE on creation / rotation — carries the plaintext key.
+
+    Only the hash is persisted, so the key can never be retrieved again.
+    """
+
+    key: str
 
 
 # --------------------------------------------------------------------------- #
