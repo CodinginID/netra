@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ToastProvider } from '@/components/Toast'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
+import { OnboardingTooltips } from '@/components/OnboardingTooltips'
 import { ProtectedRoute } from '@/router/ProtectedRoute'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RootRedirect } from '@/pages/RootRedirect'
@@ -19,6 +21,7 @@ import { EnrollmentPage } from '@/pages/tenant-admin/EnrollmentPage'
 import { DevicesPage } from '@/pages/tenant-admin/DevicesPage'
 import { SchedulesPage } from '@/pages/tenant-admin/SchedulesPage'
 import { AttendancePage } from '@/pages/tenant-admin/AttendancePage'
+import { DailyStatusPage } from '@/pages/tenant-admin/DailyStatusPage'
 import { TrashPage } from '@/pages/tenant-admin/TrashPage'
 
 // Kiosk (public — device token auth)
@@ -52,6 +55,8 @@ function AppRoutes() {
 
   return (
     <ToastProvider>
+      <KeyboardShortcuts />
+      <OnboardingTooltips />
       <BrowserRouter>
         <Routes>
         {/* Public */}
@@ -78,6 +83,7 @@ function AppRoutes() {
           <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
           <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
           <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+          <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 
@@ -98,6 +104,7 @@ function AppRoutes() {
           <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
           <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
           <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+          <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Monitor, Wifi, WifiOff, Plus, Copy, RefreshCw, Trash2 } from 'lucide-react'
+import { Monitor, Wifi, WifiOff, Plus, Copy, RefreshCw, Trash2, KeyRound } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
@@ -8,8 +8,11 @@ import {
   type DeviceRegistered,
 } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
+import { SwipeCard } from '@/components/SwipeCard'
+import { PullToRefresh } from '@/components/PullToRefresh'
+import { MobileFab } from '@/components/MobileFab'
 import { useDevices } from '@/hooks/useApiQueries'
-import { useRegisterDevice, useRevokeDevice, useDeleteDevice, useRestoreDevice } from '@/hooks/useApiMutations'
+import { useRegisterDevice, useRevokeDevice, useDeleteDevice, useRestoreDevice, useRegenerateDeviceToken } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -81,11 +84,13 @@ function AddDeviceModal({
   )
 }
 
-function NewTokenBanner({ device, onDismiss }: { device: DeviceRegistered; onDismiss: () => void }) {
+function NewTokenBanner({ device, regenerated, onDismiss }: { device: DeviceRegistered; regenerated?: boolean; onDismiss: () => void }) {
   return (
     <div className="data-card" style={{ border: '1px solid var(--color-success)', padding: 16, marginBottom: 24 }}>
       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text)', marginBottom: 6 }}>
-        Perangkat "{device.name}" berhasil dibuat
+        {regenerated
+          ? `Token baru untuk "${device.name}" berhasil dibuat`
+          : `Perangkat "${device.name}" berhasil dibuat`}
       </div>
       <div style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 10 }}>
         Salin token ini sekarang — token tidak dapat ditampilkan lagi setelah ditutup.
@@ -156,9 +161,10 @@ export function DevicesPage() {
   const [limit, setLimit] = useState(10)
   const [showForm, setShowForm] = useState(false)
   const [newDevice, setNewDevice] = useState<DeviceRegistered | null>(null)
+  const [tokenRegenerated, setTokenRegenerated] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeviceOut | null>(null)
 
-  const { data: paginatedDevices, isLoading, error } = useDevices({ page, limit })
+  const { data: paginatedDevices, isLoading, error, refetch } = useDevices({ page, limit })
   const devices = paginatedDevices?.items ?? []
   const total = paginatedDevices?.total ?? 0
   const pages = paginatedDevices?.pages ?? 0
@@ -174,13 +180,30 @@ export function DevicesPage() {
 
   const deleteMutation = useDeleteDevice()
   const restoreMutation = useRestoreDevice()
+  const regenerateMutation = useRegenerateDeviceToken()
 
   const handleAdd = (name: string) => {
     // Per-call onSuccess receives the created device (incl. the one-time token)
     // so we can surface it in the banner — the hook-level onSuccess only handles
     // toast/cache invalidation and gets no data.
     registerMutation.mutate(name, {
-      onSuccess: (device) => setNewDevice(device),
+      onSuccess: (device) => {
+        setTokenRegenerated(false)
+        setNewDevice(device)
+      },
+    })
+  }
+
+  const handleRegenerate = (deviceId: string) => {
+    regenerateMutation.mutate(deviceId, {
+      onSuccess: (device) => {
+        setTokenRegenerated(true)
+        setNewDevice(device)
+        show('Token baru berhasil dibuat — token lama tidak berlaku lagi', 'success')
+      },
+      onError: (err) => {
+        show(err instanceof Error ? err.message : 'Gagal membuat token baru', 'error')
+      },
     })
   }
 
@@ -222,12 +245,14 @@ export function DevicesPage() {
     <div>
       <div className="page-toolbar" style={{ marginBottom: '1.5rem' }}>
         <h2 className="page-title">Perangkat Kiosk</h2>
-        <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
+        <button className="btn btn-primary add-fab-twin" onClick={() => setShowForm((v) => !v)}>
           <Plus size={16} /> Tambah Perangkat
         </button>
       </div>
 
-      {newDevice && <NewTokenBanner device={newDevice} onDismiss={() => setNewDevice(null)} />}
+      {newDevice && (
+        <NewTokenBanner device={newDevice} regenerated={tokenRegenerated} onDismiss={() => setNewDevice(null)} />
+      )}
 
       {showForm && (
         <AddDeviceModal onSubmit={handleAdd} onCancel={() => setShowForm(false)} submitting={registerMutation.isPending} />
@@ -276,48 +301,75 @@ export function DevicesPage() {
           />
         </div>
       ) : (
-        <div>
+        <PullToRefresh onRefresh={() => refetch()}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {devices.map((device) => (
-              <div
+              <SwipeCard
                 key={device.id}
-                className="stat-card"
-                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
+                left={
+                  device.status === 'active'
+                    ? { icon: <WifiOff size={20} />, label: 'Cabut', variant: 'primary', onAction: () => handleRevoke(device.id) }
+                    : undefined
+                }
+                right={{ icon: <Trash2 size={20} />, label: 'Hapus', variant: 'danger', onAction: () => setDeleteTarget(device) }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
-                  <StatusBadge active={device.status === 'active'} />
-                </div>
+                <div
+                  className="stat-card"
+                  style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
+                    <StatusBadge active={device.status === 'active'} />
+                  </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
-                  <RefreshCw size={13} /> Terakhir aktif: {formatLastSeen(device.last_seen_at)}
-                </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
+                    <RefreshCw size={13} /> Terakhir aktif: {formatLastSeen(device.last_seen_at)}
+                  </div>
 
-                {device.status === 'active' && (
-                  <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8 }}>
+                  <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => handleRevoke(device.id)}
-                      disabled={revokeMutation.isPending && revokeMutation.variables === device.id}
+                      className="btn btn-ghost btn-sm"
+                      title={device.status === 'active'
+                        ? 'Buat token baru (token lama langsung tidak berlaku)'
+                        : 'Buat token baru & aktifkan kembali perangkat'}
+                      onClick={() => handleRegenerate(device.id)}
+                      disabled={regenerateMutation.isPending && regenerateMutation.variables === device.id}
                     >
-                      {revokeMutation.isPending && revokeMutation.variables === device.id ? 'Mencabut...' : 'Cabut'}
+                      <KeyRound size={15} />
+                      {regenerateMutation.isPending && regenerateMutation.variables === device.id
+                        ? 'Membuat...'
+                        : device.status === 'active' ? 'Reset Token' : 'Pulihkan Token'}
                     </button>
+                    {device.status === 'active' && (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => handleRevoke(device.id)}
+                        disabled={revokeMutation.isPending && revokeMutation.variables === device.id}
+                      >
+                        {revokeMutation.isPending && revokeMutation.variables === device.id ? 'Mencabut...' : 'Cabut'}
+                      </button>
+                    )}
                     <button
                       className="btn-icon btn-icon-danger"
                       title="Hapus perangkat"
                       aria-label="Hapus perangkat"
                       onClick={() => setDeleteTarget(device)}
+                      style={{ marginLeft: 'auto' }}
                     >
                       <Trash2 size={15} />
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              </SwipeCard>
             ))}
           </div>
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
-        </div>
+        </PullToRefresh>
       )}
+
+      <MobileFab onClick={() => setShowForm(true)} label="Tambah Perangkat">
+        <Plus size={24} />
+      </MobileFab>
 
       {deleteTarget && (
         <DeleteConfirmModal

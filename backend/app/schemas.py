@@ -222,6 +222,10 @@ class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
 
+class DeviceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class DeviceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -251,6 +255,14 @@ class ScheduleCreate(BaseModel):
     grace_minutes: int = Field(default=0, ge=0, le=240)
     geofence: dict | None = None
     is_default: bool = False
+
+
+class ScheduleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    rules: dict | None = None
+    grace_minutes: int | None = Field(default=None, ge=0, le=240)
+    geofence: dict | None = None
+    is_default: bool | None = None
 
 
 class ScheduleOut(BaseModel):
@@ -284,6 +296,8 @@ class AttendanceOut(BaseModel):
     occurred_at: datetime
     liveness_score: float | None
     device_id: str | None
+    # {"lat": float, "lng": float, "outside_geofence": bool} — captured at punch.
+    location: dict | None = None
     created_at: datetime
 
 

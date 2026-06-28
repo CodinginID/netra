@@ -7,6 +7,7 @@ import {
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
 import { Pagination } from '@/components/Pagination'
+import { MobileFab } from '@/components/MobileFab'
 import { useTenants } from '@/hooks/useApiQueries'
 import { useCreateTenant, useSuspendTenant, useActivateTenant } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
@@ -327,7 +328,7 @@ export function TenantsPage() {
               aria-label="Cari tenant"
             />
           </div>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+          <button className="btn btn-primary add-fab-twin" onClick={() => setModalOpen(true)}>
             <Plus size={16} />
             Tambah Tenant
           </button>
@@ -408,6 +409,10 @@ export function TenantsPage() {
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         )}
       </div>
+
+      <MobileFab onClick={() => setModalOpen(true)} label="Tambah Tenant">
+        <Plus size={24} />
+      </MobileFab>
 
       {modalOpen && (
         <CreateTenantModal onClose={() => setModalOpen(false)} onCreated={handleCreated} />

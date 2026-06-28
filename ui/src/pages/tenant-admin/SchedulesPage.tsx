@@ -10,6 +10,10 @@ import {
   type ScheduleRules,
 } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
+import { SwipeCard } from '@/components/SwipeCard'
+import { PullToRefresh } from '@/components/PullToRefresh'
+import { MobileFab } from '@/components/MobileFab'
+import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
 import { useSchedules } from '@/hooks/useApiQueries'
 import { useCreateSchedule, useUpdateSchedule, useDeleteSchedule, useRestoreSchedule } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
@@ -193,13 +197,14 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
 
 export function SchedulesPage() {
   const { show } = useToast()
+  useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState<ScheduleOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduleOut | null>(null)
 
-  const { data: paginatedSchedules, isLoading, error } = useSchedules({ page, limit })
+  const { data: paginatedSchedules, isLoading, error, refetch } = useSchedules({ page, limit })
   const schedules = paginatedSchedules?.items ?? []
   const total = paginatedSchedules?.total ?? 0
   const pages = paginatedSchedules?.pages ?? 0
@@ -262,7 +267,7 @@ export function SchedulesPage() {
       <div className="page-toolbar" style={{ marginBottom: '1.5rem' }}>
         <h2 className="page-title">Jadwal Kerja</h2>
         {!showForm && (
-          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+          <button className="btn btn-primary add-fab-twin" onClick={() => setShowForm(true)}>
             <Plus size={16} /> Tambah Jadwal
           </button>
         )}
@@ -311,9 +316,14 @@ export function SchedulesPage() {
       )}
 
       {!isLoading && schedules.length > 0 && (
-        <div>
+        <PullToRefresh onRefresh={() => refetch()}>
           {schedules.map((s) => (
-            <div key={s.id} className="data-card schedule-row">
+            <SwipeCard
+              key={s.id}
+              left={{ icon: <Edit2 size={20} />, label: 'Edit', variant: 'primary', onAction: () => setEditTarget(s) }}
+              right={{ icon: <Trash2 size={20} />, label: 'Hapus', variant: 'danger', onAction: () => setDeleteTarget(s) }}
+            >
+            <div className="data-card schedule-row">
               <div className="schedule-row-name">
                 <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {s.name}
@@ -350,10 +360,15 @@ export function SchedulesPage() {
                 </button>
               </div>
             </div>
+            </SwipeCard>
           ))}
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
-        </div>
+        </PullToRefresh>
       )}
+
+      <MobileFab onClick={() => setShowForm(true)} label="Tambah Jadwal">
+        <Plus size={24} />
+      </MobileFab>
 
       {editTarget && (
         <EditScheduleModal

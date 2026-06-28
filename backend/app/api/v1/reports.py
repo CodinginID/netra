@@ -20,8 +20,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_db, require_staff
-from app.schemas import Envelope
-from app.services import report_service
+from app.schemas import Envelope, TenantConfig
+from app.services import report_service, tenant_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -135,6 +135,42 @@ async def monthly_report(
     return Envelope(data=_to_recap_out(recap))
 
 
+class DailyStatusOut(BaseModel):
+    user_id: str
+    full_name: str
+    external_id: str | None
+    status: Literal["absent", "present", "late", "checked_out"]
+    check_in_at: datetime | None
+    check_out_at: datetime | None
+
+
+@router.get("/attendance/status", response_model=Envelope[list[DailyStatusOut]])
+async def daily_status(
+    date_str: str = Query(..., alias="date", description="YYYY-MM-DD"),
+    principal: Principal = Depends(require_staff),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[list[DailyStatusOut]]:
+    """Roster of every active end-user with their attendance state for the day,
+    including those who haven't shown up ('absent')."""
+    day = _parse_date(date_str)
+    tenant = await tenant_service.get_tenant(session, principal.tenant_id)
+    cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
+    rows = await report_service.daily_status(session, day, cfg.attendance.timezone)
+    return Envelope(
+        data=[
+            DailyStatusOut(
+                user_id=r.user_id,
+                full_name=r.full_name,
+                external_id=r.external_id,
+                status=r.status,  # type: ignore[arg-type]
+                check_in_at=r.check_in_at,
+                check_out_at=r.check_out_at,
+            )
+            for r in rows
+        ]
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Export (CSV / XLSX)
 # --------------------------------------------------------------------------- #
@@ -187,11 +223,92 @@ def _xlsx_bytes(rows: list[report_service.ExportRow]) -> bytes:
     return buf.getvalue()
 
 
+def _pdf_bytes(rows: list[report_service.ExportRow]) -> bytes:
+    # Lazy import: reportlab is a heavy, optional export dependency. Importing it
+    # here (not at module load) keeps the whole API bootable even if it isn't
+    # installed; only PDF export fails, with a clear 503.
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+    except ImportError as exc:  # pragma: no cover - depends on optional dep
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PDF export unavailable (reportlab not installed).",
+        ) from exc
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+
+    elements = []
+    elements.append(
+        Table(
+            [["Attendance Report"]],
+            colWidths=[7 * inch],
+            style=TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1a73e8")),
+                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 14),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ]
+            ),
+        )
+    )
+
+    header_data = [col.replace("_", " ").title() for col in _EXPORT_COLUMNS]
+    data = [header_data]
+    for r in rows:
+        data.append(
+            [
+                _cell(r.occurred_at),
+                r.user_id,
+                r.full_name,
+                r.type,
+                r.status,
+                _cell(r.liveness_score),
+                _cell(r.device_id),
+            ]
+        )
+
+    col_widths = [
+        1.2 * inch, 1.0 * inch, 1.5 * inch, 0.8 * inch,
+        0.8 * inch, 0.8 * inch, 0.9 * inch,
+    ]
+    tbl = Table(data, colWidths=col_widths)
+    tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f4")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTSIZE", (0, 1), (-1, -1), 7),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    elements.append(tbl)
+
+    doc.build(elements)
+    return buf.getvalue()
+
+
 @router.get("/attendance/export")
 async def export_report(
     from_str: str = Query(..., alias="from", description="YYYY-MM-DD (inclusive)"),
     to_str: str = Query(..., alias="to", description="YYYY-MM-DD (inclusive)"),
-    fmt: Literal["csv", "xlsx"] = Query("csv", alias="format"),
+    fmt: Literal["csv", "xlsx", "pdf"] = Query("csv", alias="format"),
     _: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -209,9 +326,12 @@ async def export_report(
     if fmt == "csv":
         payload = _csv_bytes(rows)
         media_type = "text/csv"
-    else:
+    elif fmt == "xlsx":
         payload = _xlsx_bytes(rows)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        payload = _pdf_bytes(rows)
+        media_type = "application/pdf"
 
     return StreamingResponse(
         io.BytesIO(payload),

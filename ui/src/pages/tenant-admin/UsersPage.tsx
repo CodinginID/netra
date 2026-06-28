@@ -8,6 +8,11 @@ import { useCreateUser, useUpdateUser, useDeleteUser, useRestoreUser } from '@/h
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
 import { Pagination } from '@/components/Pagination'
+import { SwipeCard } from '@/components/SwipeCard'
+import { PullToRefresh } from '@/components/PullToRefresh'
+import { MobileFab } from '@/components/MobileFab'
+import { ExpandableCard } from '@/components/ExpandableCard'
+import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
 import type { UserOut, UserCreate, UserUpdate } from '@/api/adminApi'
 
 // ── Badges ──────────────────────────────────────────────────────────────────
@@ -267,6 +272,7 @@ export function UsersPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { show } = useToast()
+  useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   // Derive base path from current route so this page works under both /tenant and /admin
   const basePath = location.pathname.startsWith('/admin') ? '/admin' : '/tenant'
 
@@ -293,7 +299,7 @@ export function UsersPage() {
   }, [])
 
   // React Query
-  const { data: paginatedUsers, isLoading, error } = useUsers({ page, limit, search: searchParam || undefined })
+  const { data: paginatedUsers, isLoading, error, refetch } = useUsers({ page, limit, search: searchParam || undefined })
   const users = paginatedUsers?.items ?? null
   const total = paginatedUsers?.total ?? 0
   const pages = paginatedUsers?.pages ?? 1
@@ -378,13 +384,13 @@ export function UsersPage() {
             Kelola pengguna tenant
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+        <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
           <UserPlus size={16} /> Tambah Pengguna
         </button>
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         {isLoading && !error
           ? [0, 1, 2].map((i) => (
               <div key={i} className="stat-card">
@@ -426,8 +432,8 @@ export function UsersPage() {
         />
       </div>
 
-      {/* Table */}
-      <div className="data-card">
+      {/* Table — desktop */}
+      <div className="data-card users-table-wrap">
         <table className="data-table">
           <thead>
             <tr>
@@ -523,6 +529,64 @@ export function UsersPage() {
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         )}
       </div>
+
+      {/* Card list — mobile (swipe actions + pull-to-refresh + expandable detail) */}
+      {!isLoading && sorted !== null && sorted.length > 0 && (
+        <PullToRefresh onRefresh={() => refetch()}>
+          <div className="users-card-list">
+            {sorted.map((row) => (
+              <SwipeCard
+                key={row.id}
+                left={{ icon: <Edit2 size={20} />, label: 'Edit', variant: 'primary', onAction: () => setEditTarget(row) }}
+                right={{ icon: <Trash2 size={20} />, label: 'Hapus', variant: 'danger', onAction: () => setDeleteTarget(row) }}
+              >
+                <ExpandableCard
+                  header={
+                    <div>
+                      <div className="user-card-title">{row.full_name}</div>
+                      <div className="user-card-badges">
+                        <RoleBadge role={row.role} />
+                        <EnrolledBadge enrolled={row.enrolled} />
+                      </div>
+                    </div>
+                  }
+                >
+                  <div className="user-card-detail-row">
+                    <span className="label">Username</span>
+                    <span className="value">{row.username ?? '-'}</span>
+                  </div>
+                  <div className="user-card-detail-row">
+                    <span className="label">Role</span>
+                    <span className="value"><RoleBadge role={row.role} /></span>
+                  </div>
+                  <div className="user-card-detail-row">
+                    <span className="label">Status Enrolled</span>
+                    <span className="value"><EnrolledBadge enrolled={row.enrolled} /></span>
+                  </div>
+                  <div className="user-card-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(row)}>
+                      <Edit2 size={15} /> Edit
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleEnroll(row)}>
+                      <ScanFace size={15} /> {row.enrolled ? 'Update' : 'Enroll'}
+                    </button>
+                    <button className="btn btn-danger btn-sm" onClick={() => setDeleteTarget(row)}>
+                      <Trash2 size={15} /> Hapus
+                    </button>
+                  </div>
+                </ExpandableCard>
+              </SwipeCard>
+            ))}
+          </div>
+          <div className="users-card-list">
+            <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
+          </div>
+        </PullToRefresh>
+      )}
+
+      <MobileFab onClick={() => setShowCreate(true)} label="Tambah Pengguna">
+        <UserPlus size={24} />
+      </MobileFab>
 
       {showCreate && (
         <CreateUserModal onSubmit={handleCreate} onClose={() => setShowCreate(false)} />

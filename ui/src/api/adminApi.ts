@@ -185,6 +185,11 @@ export async function revokeDevice(token: string, deviceId: string): Promise<Dev
   return apiFetch<DeviceOut>(`${API_BASE}/devices/${deviceId}/revoke`, token, { method: 'POST' })
 }
 
+/** Re-issue a fresh one-time token for an existing device (old token invalidated). */
+export async function regenerateDeviceToken(token: string, deviceId: string): Promise<DeviceRegistered> {
+  return apiFetch<DeviceRegistered>(`${API_BASE}/devices/${deviceId}/regenerate-token`, token, { method: 'POST' })
+}
+
 export async function deleteDevice(token: string, deviceId: string): Promise<void> {
   return apiFetch<void>(`${API_BASE}/devices/${deviceId}`, token, { method: 'DELETE' })
 }
@@ -261,6 +266,12 @@ export async function deleteSchedule(token: string, scheduleId: string): Promise
 // --------------------------------------------------------------------------- //
 // Attendance
 // --------------------------------------------------------------------------- //
+export interface AttendanceLocation {
+  lat?: number
+  lng?: number
+  outside_geofence?: boolean
+}
+
 export interface AttendanceOut {
   id: string
   user_id: string
@@ -269,6 +280,7 @@ export interface AttendanceOut {
   occurred_at: string
   liveness_score: number | null
   device_id: string | null
+  location: AttendanceLocation | null
   created_at: string
 }
 
@@ -320,6 +332,25 @@ export async function dailyReport(token: string, date: string): Promise<Attendan
     `${API_BASE}/reports/attendance/daily?date=${date}`,
     token,
   )
+}
+
+// --------------------------------------------------------------------------- //
+// Daily roster status (who's attended / absent today)
+// --------------------------------------------------------------------------- //
+export type DailyStatusValue = 'absent' | 'present' | 'late' | 'checked_out'
+
+export interface DailyStatus {
+  user_id: string
+  full_name: string
+  external_id: string | null
+  status: DailyStatusValue
+  check_in_at: string | null
+  check_out_at: string | null
+}
+
+export async function dailyStatus(token: string, date: string): Promise<DailyStatus[]> {
+  const raw = await apiFetch<unknown>(`${API_BASE}/reports/attendance/status?date=${date}`, token)
+  return Array.isArray(raw) ? (raw as DailyStatus[]) : []
 }
 
 // --------------------------------------------------------------------------- //

@@ -17,7 +17,7 @@ from app.api.deps import Principal, get_db, require_tenant_admin
 from app.core.logging import get_logger
 from app.core.security import generate_device_token, hash_device_token
 from app.models import Device, DeviceStatus
-from app.schemas import DeviceCreate, DeviceOut, DeviceRegistered, Envelope
+from app.schemas import DeviceCreate, DeviceOut, DeviceRegistered, DeviceUpdate, Envelope
 from app.services import audit_service
 from app.services.soft_delete import restore as soft_restore, soft_delete
 from app.websocket import manager
@@ -116,6 +116,67 @@ async def revoke_device(
     except Exception:
         log.exception("device_event_publish_failed")
 
+    return Envelope(data=DeviceOut.model_validate(device))
+
+
+@router.post("/{device_id}/regenerate-token", response_model=Envelope[DeviceRegistered])
+async def regenerate_device_token(
+    device_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[DeviceRegistered]:
+    """Issue a FRESH one-time token for an existing device.
+
+    Use when the kiosk lost its token (e.g. browser storage cleared) — the
+    device keeps its identity/history. The previous token is invalidated
+    immediately (the hash is overwritten) and the device is (re)activated.
+    The new plaintext token is returned ONCE.
+    """
+    device = (
+        await session.execute(select(Device).where(Device.id == device_id))
+    ).scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    token = generate_device_token()
+    device.token_hash = hash_device_token(token)
+    device.status = DeviceStatus.active
+    await session.flush()
+    await audit_service.record(
+        session,
+        action="device.token_regenerated",
+        actor=principal.subject,
+        tenant_id=device.tenant_id,
+        detail={"device_id": device.id},
+    )
+    out = DeviceRegistered.model_validate(
+        {**DeviceOut.model_validate(device).model_dump(), "token": token}
+    )
+    return Envelope(data=out)
+
+
+@router.patch("/{device_id}", response_model=Envelope[DeviceOut])
+async def update_device(
+    device_id: str,
+    payload: DeviceUpdate,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[DeviceOut]:
+    device = (
+        await session.execute(select(Device).where(Device.id == device_id))
+    ).scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if payload.name is not None:
+        device.name = payload.name
+    await session.flush()
+    await audit_service.record(
+        session,
+        action="device.updated",
+        actor=principal.subject,
+        tenant_id=device.tenant_id,
+        detail={"device_id": device.id},
+    )
     return Envelope(data=DeviceOut.model_validate(device))
 
 

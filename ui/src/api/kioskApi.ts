@@ -78,12 +78,22 @@ export async function postAttendance(
   return json.data ?? json
 }
 
+export interface Coords {
+  lat: number
+  lng: number
+}
+
 export async function postAutoAttendance(
   deviceToken: string,
   imageBlob: Blob,
+  coords?: Coords | null,
 ): Promise<AttendanceResult> {
   const form = new FormData()
   form.append('image', imageBlob, 'frame.jpg')
+  if (coords) {
+    form.append('lat', String(coords.lat))
+    form.append('lng', String(coords.lng))
+  }
 
   const res = await fetch(`${API_BASE}/attendance/auto`, {
     method: 'POST',

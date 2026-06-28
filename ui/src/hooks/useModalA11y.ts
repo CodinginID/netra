@@ -53,6 +53,49 @@ export function useModalA11y({ isOpen, onClose }: UseModalA11yOptions): UseModal
     }
   }, [isOpen])
 
+  // Drag-to-dismiss (mobile bottom sheets): drag the top of the card down to
+  // close. Only engages on small screens and only when the gesture starts in
+  // the top handle zone, so it never fights inputs/scrolling inside the card.
+  useEffect(() => {
+    const card = modalRef.current
+    if (!isOpen || !card) return
+    if (window.matchMedia('(min-width: 769px)').matches) return
+
+    let startY = 0
+    let dy = 0
+    let dragging = false
+
+    const onStart = (e: TouchEvent) => {
+      const top = card.getBoundingClientRect().top
+      if (e.touches[0].clientY - top > 48) return // only the handle zone
+      dragging = true
+      startY = e.touches[0].clientY
+      card.style.transition = 'none'
+    }
+    const onMove = (e: TouchEvent) => {
+      if (!dragging) return
+      dy = Math.max(0, e.touches[0].clientY - startY)
+      card.style.transform = `translateY(${dy}px)`
+    }
+    const onEnd = () => {
+      if (!dragging) return
+      dragging = false
+      card.style.transition = 'transform 0.25s cubic-bezier(0.4,0,0.2,1)'
+      if (dy > 100) onClose()
+      else card.style.transform = 'translateY(0)'
+      dy = 0
+    }
+
+    card.addEventListener('touchstart', onStart, { passive: true })
+    card.addEventListener('touchmove', onMove, { passive: true })
+    card.addEventListener('touchend', onEnd)
+    return () => {
+      card.removeEventListener('touchstart', onStart)
+      card.removeEventListener('touchmove', onMove)
+      card.removeEventListener('touchend', onEnd)
+    }
+  }, [isOpen, onClose])
+
   // Focus trap: prevent Tab from escaping the modal
   const handleBackdropKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Tab' && modalRef.current) {

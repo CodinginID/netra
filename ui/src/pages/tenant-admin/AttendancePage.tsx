@@ -10,12 +10,14 @@ import {
   Clock,
   LogIn,
   LogOut,
+  MapPin,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { EmptyState } from '@/components/EmptyState'
 import {
   exportAttendanceUrl,
   type AttendanceOut,
+  type AttendanceLocation,
 } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
 import { useAttendance, useUsers } from '@/hooks/useApiQueries'
@@ -54,6 +56,28 @@ function StatusBadge({ status }: { status: AttendanceOut['status'] }) {
     <span className={`badge ${cls}`}>
       <Icon size={13} />
       {STATUS_LABELS[status]}
+    </span>
+  )
+}
+
+function LocationCell({ location }: { location: AttendanceLocation | null }) {
+  if (!location || location.lat == null || location.lng == null) {
+    return <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <a
+        href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
+        target="_blank"
+        rel="noreferrer"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--color-brand)' }}
+        title={`${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`}
+      >
+        <MapPin size={13} /> Peta
+      </a>
+      {location.outside_geofence && (
+        <span className="badge badge-red" title="Absen di luar radius lokasi">Luar lokasi</span>
+      )}
     </span>
   )
 }
@@ -134,6 +158,7 @@ export function AttendancePage() {
       </div>
 
       <div
+        className="stat-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -192,11 +217,12 @@ export function AttendancePage() {
 
       {error && <div className="error-banner">{error.message}</div>}
 
-      <div className="data-card">
+      {/* Desktop: table */}
+      <div className="data-card responsive-table">
         <table className="data-table">
           <thead>
             <tr>
-              {['Pengguna', 'Tipe', 'Waktu', 'Status', 'Skor Liveness'].map((h) => (
+              {['Pengguna', 'Tipe', 'Waktu', 'Status', 'Lokasi', 'Skor Liveness'].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -204,13 +230,13 @@ export function AttendancePage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty-state">Memuat...</div>
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <EmptyState
                     icon="clipboard"
                     title="Belum ada data kehadiran"
@@ -229,14 +255,58 @@ export function AttendancePage() {
                   <td>
                     <StatusBadge status={row.status} />
                   </td>
+                  <td><LocationCell location={row.location} /></td>
                   <td>{row.liveness_score != null ? row.liveness_score.toFixed(2) : '—'}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-        <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
       </div>
+
+      {/* Mobile: cards */}
+      <div className="responsive-cards">
+        {isLoading ? (
+          <div className="empty-state">Memuat...</div>
+        ) : filteredRows.length === 0 ? (
+          <div className="data-card">
+            <EmptyState
+              icon="clipboard"
+              title="Belum ada data kehadiran"
+              description="Data absensi akan muncul setelah kiosk mulai digunakan"
+            />
+          </div>
+        ) : (
+          filteredRows.map((row) => (
+            <div key={row.id} className="record-card">
+              <div className="record-card-top">
+                <span className="record-card-name">{userMap.get(row.user_id) ?? row.user_id.slice(0, 8)}</span>
+                <TypeBadge type={row.type} />
+              </div>
+              <div className="record-card-row">
+                <span className="label">Waktu</span>
+                <span className="value">{formatTime(row.occurred_at)}</span>
+              </div>
+              <div className="record-card-row">
+                <span className="label">Status</span>
+                <StatusBadge status={row.status} />
+              </div>
+              <div className="record-card-row">
+                <span className="label">Lokasi</span>
+                <LocationCell location={row.location} />
+              </div>
+              {row.liveness_score != null && (
+                <div className="record-card-row">
+                  <span className="label">Skor Liveness</span>
+                  <span className="value">{row.liveness_score.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
     </div>
   )
 }

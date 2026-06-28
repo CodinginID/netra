@@ -18,6 +18,9 @@ import { useAttendance, useDailyReport, useUsers, useOnboardingStatus } from '@/
 import { useAuthStore } from '@/store/authStore'
 import { OnboardingWizard } from '@/components/OnboardingWizard'
 import { OnboardingBanner } from '@/components/OnboardingBanner'
+import { Sparkline } from '@/components/charts/Sparkline'
+import { AttendanceHeatmap } from '@/components/charts/AttendanceHeatmap'
+import { StepProgress } from '@/components/charts/StepProgress'
 
 const NAV_ITEMS = [
   { label: 'Pengguna', to: '/tenant/users', icon: Users },
@@ -25,6 +28,7 @@ const NAV_ITEMS = [
   { label: 'Perangkat', to: '/tenant/devices', icon: Monitor },
   { label: 'Jadwal', to: '/tenant/schedules', icon: CalendarDays },
   { label: 'Kehadiran', to: '/tenant/attendance', icon: ClipboardList },
+  { label: 'Status Harian', to: '/tenant/status', icon: UserCheck },
   { label: 'Tempat Sampah', to: '/tenant/trash', icon: Trash2 },
 ]
 
@@ -46,7 +50,16 @@ interface StatCard {
   Icon: typeof CheckCircle2
   fg: string
   bg: string
+  spark?: number[]
 }
+
+const ONBOARDING_STEPS: { key: 'welcome' | 'schedule' | 'device' | 'users' | 'test'; label: string }[] = [
+  { key: 'welcome', label: 'Selamat Datang' },
+  { key: 'schedule', label: 'Jadwal' },
+  { key: 'device', label: 'Perangkat' },
+  { key: 'users', label: 'Pengguna' },
+  { key: 'test', label: 'Uji Coba' },
+]
 
 interface RecentItem {
   name: string
@@ -84,7 +97,7 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
         })
         return (
           <g key={d.day}>
-            <rect x={x} y={H - barH} width={BAR_W} height={barH} rx={4} fill="rgba(124,58,237,0.18)" />
+            <rect x={x} y={H - barH} width={BAR_W} height={barH} rx={4} fill="rgba(13,148,136,0.18)" />
             <rect x={x} y={H - lateH} width={BAR_W} height={lateH} rx={4} fill="rgba(217,119,6,0.7)" />
             <text x={x + BAR_W / 2} y={H - barH - 4} textAnchor="middle" fill="var(--color-text)" fontSize={11}>
               {d.check_in}
@@ -207,10 +220,21 @@ export function TenantAdminHomePage() {
     isCheckIn: a.type === 'check_in',
   }))
 
+  // 7-day series for sparklines / heatmap, derived from the trend data.
+  const checkInSeries = trend.map((t) => t.check_in)
+  const lateSeries = trend.map((t) => t.late)
+  const heatmapData = trend.map((t) => ({ date: t.day, count: t.check_in }))
+
+  const onboardingSteps = ONBOARDING_STEPS.map((s) => ({
+    label: s.label,
+    done: onboardingData?.steps?.[s.key] ?? false,
+  }))
+  const showOnboardingSteps = !!onboardingData && !onboardingData.completed
+
   const stats: StatCard[] = [
-    { label: 'Hadir', value: report?.check_in ?? 0, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
+    { label: 'Hadir', value: report?.check_in ?? 0, Icon: CheckCircle2, fg: 'var(--color-brand)', bg: 'rgba(13,148,136,0.08)', spark: checkInSeries },
     { label: 'Di Kantor', value: inOfficeCount, Icon: UserCheck, fg: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
-    { label: 'Terlambat', value: report?.late ?? 0, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+    { label: 'Terlambat', value: report?.late ?? 0, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)', spark: lateSeries },
     { label: 'Tidak Hadir', value: absent, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
   ]
 
@@ -227,6 +251,15 @@ export function TenantAdminHomePage() {
           onClose={() => setShowWizard(false)}
           onComplete={() => { setShowWizard(false); setShowBanner(false) }}
         />
+      )}
+
+      {showOnboardingSteps && (
+        <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 18 }}>
+            Progres Penyiapan
+          </div>
+          <StepProgress steps={onboardingSteps} />
+        </div>
       )}
 
       <div className="page-header">
@@ -261,12 +294,12 @@ export function TenantAdminHomePage() {
                 </div>
               </div>
             ))
-          : stats.map(({ label, value, Icon, fg, bg }) => (
+          : stats.map(({ label, value, Icon, fg, bg, spark }) => (
               <div key={label} className="stat-card">
                 <div className="stat-icon" style={{ background: bg }}>
                   <Icon size={22} color={fg} />
                 </div>
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="stat-value">{value}</div>
                   {label === 'Hadir' && (
                     <div style={{ marginTop: 2 }}>
@@ -279,6 +312,11 @@ export function TenantAdminHomePage() {
                     </div>
                   )}
                   <div className="stat-label">{label}</div>
+                  {spark && spark.length > 1 && (
+                    <div style={{ marginTop: 8 }}>
+                      <Sparkline data={spark} color={fg} width={120} height={24} />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -302,7 +340,7 @@ export function TenantAdminHomePage() {
           <TrendChart data={trend} />
           <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--color-text-muted)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(124,58,237,0.18)' }} />
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(13,148,136,0.18)' }} />
               Hadir
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -310,6 +348,15 @@ export function TenantAdminHomePage() {
               Terlambat
             </span>
           </div>
+        </div>
+      )}
+
+      {heatmapData.length > 0 && (
+        <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 14, color: 'var(--color-text)' }}>
+            Pola Kehadiran Bulan Ini
+          </div>
+          <AttendanceHeatmap data={heatmapData} />
         </div>
       )}
 

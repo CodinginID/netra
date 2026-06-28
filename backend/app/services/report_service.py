@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AttendanceRecord, AttendanceStatus, AttendanceType, User
+from app.models import AttendanceRecord, AttendanceStatus, AttendanceType, Role, User
 
 
 @dataclass
@@ -57,6 +58,19 @@ class ExportRow:
     status: str
     liveness_score: float | None
     device_id: str | None
+
+
+@dataclass
+class DailyStatus:
+    """One roster row: a user's attendance state for a single day."""
+
+    user_id: str
+    full_name: str
+    external_id: str | None
+    # absent | present | late | checked_out
+    status: str
+    check_in_at: datetime | None
+    check_out_at: datetime | None
 
 
 def _day_bounds(day: date) -> tuple[datetime, datetime]:
@@ -167,3 +181,82 @@ async def export_rows(session: AsyncSession, start_day: date, end_day: date) -> 
             )
         )
     return rows
+
+
+async def daily_status(
+    session: AsyncSession, day: date, tz_name: str = "Asia/Jakarta"
+) -> list[DailyStatus]:
+    """Roster of EVERY active end-user with their attendance state for ``day``.
+
+    Unlike the recaps (which only count users who punched), this LEFT-JOINs the
+    full roster against the day's records, so users who never showed up appear as
+    'absent'. The day window is the tenant's local calendar day.
+    """
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = UTC
+    day_start = datetime(day.year, day.month, day.day, tzinfo=tz)
+    day_end = day_start + timedelta(days=1)
+
+    users = (
+        await session.execute(
+            select(User)
+            .where(
+                User.role == Role.end_user,
+                User.is_active.is_(True),
+                User.deleted_at.is_(None),
+            )
+            .order_by(User.full_name.asc())
+        )
+    ).scalars().all()
+
+    records = (
+        await session.execute(
+            select(
+                AttendanceRecord.user_id,
+                AttendanceRecord.type,
+                AttendanceRecord.status,
+                AttendanceRecord.occurred_at,
+            )
+            .where(
+                AttendanceRecord.occurred_at >= day_start,
+                AttendanceRecord.occurred_at < day_end,
+            )
+            .order_by(AttendanceRecord.occurred_at.asc())
+        )
+    ).all()
+
+    # Fold records → first check-in (with its status) + last check-out per user.
+    folded: dict[str, dict] = {}
+    for user_id, att_type, att_status, occurred_at in records:
+        f = folded.setdefault(user_id, {"in": None, "in_status": None, "out": None})
+        if att_type == AttendanceType.check_in and f["in"] is None:
+            f["in"] = occurred_at
+            f["in_status"] = att_status
+        elif att_type == AttendanceType.check_out:
+            f["out"] = occurred_at  # keep the latest
+
+    roster: list[DailyStatus] = []
+    for u in users:
+        f = folded.get(u.id)
+        if not f or f["in"] is None:
+            status = "absent"
+            check_in_at = check_out_at = None
+        elif f["out"] is not None:
+            status = "checked_out"
+            check_in_at, check_out_at = f["in"], f["out"]
+        else:
+            status = "late" if f["in_status"] == AttendanceStatus.late else "present"
+            check_in_at, check_out_at = f["in"], None
+        roster.append(
+            DailyStatus(
+                user_id=u.id,
+                full_name=u.full_name,
+                external_id=u.external_id,
+                status=status,
+                check_in_at=check_in_at,
+                check_out_at=check_out_at,
+            )
+        )
+    return roster

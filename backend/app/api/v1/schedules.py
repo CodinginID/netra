@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_db, require_staff, require_tenant_admin
 from app.models import Schedule
-from app.schemas import Envelope, ScheduleCreate, ScheduleOut
+from app.schemas import Envelope, ScheduleCreate, ScheduleOut, ScheduleUpdate
 from app.services import audit_service, schedule_service
 from app.services.soft_delete import restore as soft_restore, soft_delete
 
@@ -61,6 +61,49 @@ async def list_schedules(
     items = [ScheduleOut.model_validate(s) for s in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
     return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})
+
+
+@router.patch("/{schedule_id}", response_model=Envelope[ScheduleOut])
+async def update_schedule(
+    schedule_id: str,
+    payload: ScheduleUpdate,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[ScheduleOut]:
+    schedule = await session.get(Schedule, schedule_id)
+    if schedule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
+    if payload.name is not None:
+        schedule.name = payload.name
+    if payload.rules is not None:
+        schedule.rules = payload.rules
+    if payload.grace_minutes is not None:
+        schedule.grace_minutes = payload.grace_minutes
+    if payload.geofence is not None:
+        schedule.geofence = payload.geofence
+    if payload.is_default is not None and payload.is_default:
+        # Demote any existing default for this tenant
+        existing_defaults = (
+            await session.execute(
+                select(Schedule).where(
+                    Schedule.is_default.is_(True),
+                    Schedule.tenant_id == schedule.tenant_id,
+                    Schedule.id != schedule_id,
+                )
+            )
+        ).scalars()
+        for s in existing_defaults:
+            s.is_default = False
+        schedule.is_default = True
+    await session.flush()
+    await audit_service.record(
+        session,
+        action="schedule.updated",
+        actor=principal.subject,
+        tenant_id=schedule.tenant_id,
+        detail={"schedule_id": schedule_id},
+    )
+    return Envelope(data=ScheduleOut.model_validate(schedule))
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

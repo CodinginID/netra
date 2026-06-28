@@ -9,10 +9,12 @@ import {
   Monitor,
   CalendarDays,
   ClipboardList,
+  UserCheck,
   Trash2,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { TenantSwitcher } from '@/components/TenantSwitcher'
+import { DonutChart } from '@/components/charts/DonutChart'
 import { useTenants, useUsers, useDailyReport } from '@/hooks/useApiQueries'
 
 const NAV_ITEMS = [
@@ -24,6 +26,7 @@ const NAV_ITEMS = [
   { label: 'Perangkat', to: '/admin/devices', icon: Monitor },
   { label: 'Jadwal', to: '/admin/schedules', icon: CalendarDays },
   { label: 'Kehadiran', to: '/admin/attendance', icon: ClipboardList },
+  { label: 'Status Harian', to: '/admin/status', icon: UserCheck },
   { label: 'Tempat Sampah', to: '/admin/trash', icon: Trash2 },
 ]
 
@@ -61,6 +64,7 @@ export function SuperAdminHomePage() {
 
   const tenants = tenantsData?.items ?? []
   const activeTenants = tenants.filter((t) => t.status === 'active').length
+  const suspendedTenants = tenants.filter((t) => t.status === 'suspended').length
 
   const stats: StatCard[] = [
     { label: 'Total Tenant', value: tenantsData?.total ?? 0, Icon: Building2, fg: 'var(--color-brand)', bg: 'rgba(124,58,237,0.08)' },
@@ -93,6 +97,22 @@ export function SuperAdminHomePage() {
           </div>
         ))}
       </div>
+
+      {tenants.length > 0 && (
+        <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
+            Status Tenant
+          </div>
+          <DonutChart
+            centerLabel="Tenant"
+            centerValue={tenants.length}
+            data={[
+              { label: 'Aktif', value: activeTenants, color: '#16a34a' },
+              { label: 'Ditangguhkan', value: suspendedTenants, color: '#dc2626' },
+            ]}
+          />
+        </div>
+      )}
 
       <div className="data-card">
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>

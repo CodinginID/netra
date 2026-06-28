@@ -7,6 +7,7 @@ geofence enforcement -> record with schedule-derived status -> webhook dispatch.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
@@ -33,9 +34,38 @@ from app.services import (
 )
 from app.services.face import NoFaceDetectedError
 from app.services.liveness import LivenessError, get_liveness_engine
+from app.services.soft_delete import restore as soft_restore, soft_delete
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 log = get_logger("netra.attendance")
+
+
+async def _today_attendance_summary(
+    session: AsyncSession,
+    user_id: str,
+    now_local: datetime,
+) -> dict:
+    """Today's (tenant-local day) attendance flags for a user.
+
+    Returns has_checkin / has_checkout / last_record_at so the rule engine can
+    enforce one-in-one-out, cooldown, and schedule windows.
+    """
+    day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    rows = (
+        await session.execute(
+            select(AttendanceRecord.type, AttendanceRecord.occurred_at).where(
+                AttendanceRecord.user_id == user_id,
+                AttendanceRecord.occurred_at >= day_start,
+                AttendanceRecord.occurred_at < day_end,
+            )
+        )
+    ).all()
+    return {
+        "has_checkin": any(t == AttendanceType.check_in for t, _ in rows),
+        "has_checkout": any(t == AttendanceType.check_out for t, _ in rows),
+        "last_record_at": max((ts for _, ts in rows), default=None),
+    }
 
 
 async def _get_open_checkin(
@@ -145,14 +175,12 @@ async def _capture(
 
     schedule = await schedule_service.get_default_schedule(session)
 
-    # 3. Geofence enforcement (if the schedule defines one).
+    # 3. Geofence (FLAG mode — record always; tag out-of-area punches).
     location = {"lat": lat, "lng": lng} if lat is not None and lng is not None else None
-    try:
-        attendance_service.enforce_geofence(schedule, location)
-    except attendance_service.GeofenceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
+    if location is not None:
+        outside = attendance_service.is_outside_geofence(schedule, location)
+        if outside is not None:
+            location["outside_geofence"] = outside
 
     # 4. Record.
     rec = await attendance_service.record(
@@ -246,11 +274,18 @@ async def auto_attend(
     if principal.tenant_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required")
 
-    now = occurred_at or datetime.now(UTC)
+    now_utc = occurred_at or datetime.now(UTC)
     image_bytes = await image.read()
 
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
+
+    # Schedule windows and late/early status are evaluated in the tenant's local
+    # time. occurred_at is stored as this (timezone-aware) local instant.
+    try:
+        now = now_utc.astimezone(ZoneInfo(cfg.attendance.timezone))
+    except Exception:  # unknown tz string → fall back to UTC
+        now = now_utc
 
     log.info(
         "auto_attend_image_received",
@@ -288,17 +323,28 @@ async def auto_attend(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    # 3. Auto-determine att_type: open check-in today → check_out; otherwise → check_in
-    open_checkin = await _get_open_checkin(session, match.user_id, now)
-    att_type = AttendanceType.check_out if open_checkin is not None else AttendanceType.check_in
-
-    # 4. Schedule + geofence
+    # 3. Schedule + geofence (FLAG mode — never blocks; out-of-area punches are
+    #    still recorded, just tagged so admins can audit "absen dari luar lokasi").
     schedule = await schedule_service.get_default_schedule(session)
     location = {"lat": lat, "lng": lng} if lat is not None and lng is not None else None
+    if location is not None:
+        outside = attendance_service.is_outside_geofence(schedule, location)
+        if outside is not None:
+            location["outside_geofence"] = outside
+
+    # 4. Dedup + schedule-window validation (one in/out per day, cooldown,
+    #    no check-in too early, no check-out before the scheduled end).
+    summary = await _today_attendance_summary(session, match.user_id, now)
     try:
-        attendance_service.enforce_geofence(schedule, location)
-    except attendance_service.GeofenceError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        att_type = attendance_service.evaluate_scan(
+            schedule,
+            has_checkin=summary["has_checkin"],
+            has_checkout=summary["has_checkout"],
+            last_record_at=summary["last_record_at"],
+            now=now,
+        )
+    except attendance_service.AttendanceRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     # 5. Record + audit + webhook
     rec = await attendance_service.record(
@@ -352,11 +398,11 @@ async def list_attendance(
     _: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(AttendanceRecord)
+    base = select(AttendanceRecord).where(AttendanceRecord.deleted_at.is_(None))
     if user_id is not None:
         base = base.where(AttendanceRecord.user_id == user_id)
 
-    count_stmt = select(func.count(AttendanceRecord.id))
+    count_stmt = select(func.count(AttendanceRecord.id)).where(AttendanceRecord.deleted_at.is_(None))
     if user_id is not None:
         count_stmt = count_stmt.where(AttendanceRecord.user_id == user_id)
     total = (await session.execute(count_stmt)).scalar() or 0
@@ -368,3 +414,59 @@ async def list_attendance(
     items = [AttendanceOut.model_validate(r) for r in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
     return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})
+
+
+@router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_attendance_record(
+    record_id: str,
+    principal: Principal = Depends(require_staff),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Soft-delete an attendance record (moves to trash)."""
+    await soft_delete(session, AttendanceRecord, record_id)
+    await audit_service.record(
+        session,
+        action="attendance.deleted",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"record_id": record_id},
+    )
+
+
+@router.get("/trash", response_model=Envelope[list[AttendanceOut]])
+async def list_deleted_attendance(
+    _: Principal = Depends(require_staff),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[list[AttendanceOut]]:
+    """List soft-deleted attendance records (recycle bin)."""
+    result = await session.execute(
+        select(AttendanceRecord)
+        .where(AttendanceRecord.deleted_at.isnot(None))
+        .order_by(AttendanceRecord.deleted_at.desc())
+    )
+    return Envelope(data=[AttendanceOut.model_validate(r) for r in result.scalars()])
+
+
+@router.post("/{record_id}/restore", response_model=Envelope[AttendanceOut])
+async def restore_attendance_record(
+    record_id: str,
+    principal: Principal = Depends(require_staff),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[AttendanceOut]:
+    """Restore a soft-deleted attendance record."""
+    restored = await soft_restore(session, AttendanceRecord, record_id)
+    if not restored:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Record not found or not deleted"
+        )
+    record = (
+        await session.execute(select(AttendanceRecord).where(AttendanceRecord.id == record_id))
+    ).scalar_one()
+    await audit_service.record(
+        session,
+        action="attendance.restored",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"record_id": record_id},
+    )
+    return Envelope(data=AttendanceOut.model_validate(record))

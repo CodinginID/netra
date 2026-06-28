@@ -1,0 +1,397 @@
+/* ── Mobile-specific overrides — native app feel ── */
+/* Loaded only on screens <= 768px */
+
+/* ── Swipeable card ── */
+.swipe-card {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.swipe-card-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 20px;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.swipe-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 100%;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 0;
+}
+
+.swipe-action--danger { background: #dc2626; }
+.swipe-action--primary { background: #0d9488; }
+
+.swipe-card-content {
+  position: relative;
+  z-index: 1;
+  background: var(--color-surface);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Pull to refresh ── */
+.pull-to-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+}
+
+@keyframes pullSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.pull-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-brand);
+  border-radius: 50%;
+  animation: pullSpin 0.8s linear infinite;
+}
+
+/* ── Pagination mobile ── */
+.pagination {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 8px;
+}
+.pagination button,
+.pagination .page-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+/* ── Stat cards mobile: compact 2-column grid (overrides inline auto-fit) ── */
+.stat-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+.stat-card {
+  padding: 0.8rem 0.85rem;
+  gap: 0.6rem;
+}
+.stat-card .stat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+}
+.stat-card .stat-value { font-size: 1.35rem; }
+.stat-card .stat-label { font-size: 0.7rem; }
+
+/* ── Empty state mobile ── */
+.empty-state {
+  padding: 32px 16px;
+}
+
+/* ── Data card mobile ── */
+.data-card {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* ── Responsive table → cards (Attendance, Status Harian) ──
+   Desktop shows the .responsive-table; mobile swaps to .responsive-cards. */
+.responsive-cards { display: none; }
+@media (max-width: 768px) {
+  .responsive-table { display: none; }
+  .responsive-cards { display: flex; flex-direction: column; gap: 10px; }
+}
+.record-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.record-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.record-card-name { font-weight: 600; font-size: 15px; color: var(--color-text); }
+.record-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.record-card-row .label { color: var(--color-text-muted); }
+.record-card-row .value { color: var(--color-text); font-weight: 500; }
+
+/* ── Schedule row cards mobile ── */
+.schedule-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px;
+}
+/* Reset ALL flex children — otherwise .schedule-row-name (flex: 1 1 180px)
+   grows vertically in a column and leaves a big empty gap. */
+.schedule-row-name,
+.schedule-row-time,
+.schedule-row-grace,
+.schedule-row-badge,
+.schedule-row-actions {
+  flex: 0 0 auto !important;
+  font-size: 13px;
+}
+.schedule-row-actions { margin-top: 4px; }
+
+/* ── Activity row mobile ── */
+.activity-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 16px;
+}
+.activity-meta {
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* ── Device chip mobile ── */
+.device-chip {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ── Tenant banner mobile ── */
+.tenant-banner {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+}
+.tenant-banner select {
+  width: 100%;
+}
+
+/* ── Schedule form mobile ── */
+.schedule-form-card {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 14px 16px;
+}
+.schedule-form-field {
+  width: 100%;
+}
+
+/* ── Toast mobile — show at bottom above nav ── */
+.toast-container {
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  max-width: unset;
+}
+
+/* ── Prevent horizontal scroll on mobile ── */
+body {
+  overflow-x: hidden;
+}
+
+/* ── Smooth scrolling ── */
+.page-content {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── iOS input fix — prevent zoom on focus ── */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Bottom FAB (floating action button) — mobile only ── */
+.mobile-fab {
+  display: none;
+}
+@media (max-width: 768px) {
+  .mobile-fab {
+    position: fixed;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    right: 16px;
+    z-index: 55;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--gradient-brand);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 16px rgba(13, 148, 136, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+.mobile-fab:active {
+  transform: scale(0.9);
+}
+
+.mobile-fab:hover {
+  box-shadow: 0 6px 24px rgba(13, 148, 136, 0.5);
+  transform: translateY(-2px);
+}
+
+/* ── Expandable card (3.7) ── */
+.expandable-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.expandable-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.expandable-card-header-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.expandable-card-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.expandable-card--open .expandable-card-chevron {
+  transform: rotate(180deg);
+}
+
+/* CSS-grid 0fr→1fr trick gives a smooth, content-sized height transition. */
+.expandable-card-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
+}
+
+.expandable-card-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.expandable-card--open .expandable-card-body-inner {
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Users responsive list: table on desktop, cards on mobile ── */
+.users-card-list { display: none; }
+
+@media (max-width: 768px) {
+  .users-table-wrap { display: none; }
+  .users-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.user-card-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.user-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.user-card-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+}
+
+.user-card-detail-row .label { color: var(--color-text-muted); }
+.user-card-detail-row .value { color: var(--color-text); font-weight: 500; text-align: right; }
+
+.user-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+/* ── Haptic-like visual feedback (3.6) — spring/scale on press, mobile only ── */
+@media (max-width: 768px) {
+  .btn,
+  .btn-icon,
+  .btn-sm,
+  .stat-card,
+  .data-card,
+  .swipe-card-content,
+  .device-chip,
+  .schedule-type-btn,
+  .expandable-card-header,
+  .mobile-nav-item {
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.18s ease;
+  }
+
+  .btn:active,
+  .btn-icon:active,
+  .btn-sm:active,
+  .schedule-type-btn:active {
+    transform: scale(0.94);
+  }
+
+  .stat-card:active,
+  .expandable-card-header:active,
+  .device-chip:active {
+    transform: scale(0.985);
+  }
+
+  .swipe-card:active .swipe-card-content {
+    transform: scale(0.99);
+  }
+}
+

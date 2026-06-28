@@ -112,6 +112,19 @@ export function KioskPage() {
   useEffect(() => { cameraStateRef.current = cameraState }, [cameraState])
   useEffect(() => { savedTokenRef.current = savedToken }, [savedToken])
 
+  // Geolocation: keep the latest fix in a ref and send it with each punch.
+  // Best-effort — if the user denies permission, attendance still works (no loc).
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null)
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const id = navigator.geolocation.watchPosition(
+      (pos) => { coordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude } },
+      () => { /* denied / unavailable — proceed without location */ },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+    )
+    return () => navigator.geolocation.clearWatch(id)
+  }, [])
+
   // Real-time face detection overlay
   const detectionActive = cameraState === 'active' && resultState.status === 'idle'
   const { hasFace, detectorReady } = useFaceDetection(videoRef, overlayCanvasRef, detectionActive)
@@ -236,7 +249,7 @@ export function KioskPage() {
     if (!blob) { setResultState({ status: 'idle' }); return }
 
     try {
-      const result = await postAutoAttendance(tok, blob)
+      const result = await postAutoAttendance(tok, blob, coordsRef.current)
       setIsOffline(false)
       const action = result.attendance.type === 'check_in' ? 'Check In' : 'Check Out'
       show(`${action} berhasil — ${result.full_name}`, 'success')
@@ -303,7 +316,7 @@ export function KioskPage() {
     if (resultState.status === 'processing') return
     setResultState({ status: 'processing' })
 
-    postAutoAttendance(savedToken, file)
+    postAutoAttendance(savedToken, file, coordsRef.current)
       .then((result) => {
         const label = result.attendance.type === 'check_in' ? 'Check In' : 'Check Out'
         show(`${label} berhasil — ${result.full_name}`, 'success')

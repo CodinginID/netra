@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, LogOut, Menu, X, KeyRound } from 'lucide-react'
+import { Eye, LogOut, KeyRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { NotificationBell } from '@/components/NotificationBell'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { ChangePasswordModal } from '@/components/ChangePasswordModal'
+import { MobileBottomNav } from '@/components/MobileBottomNav'
 import '@/styles/layout.css'
 
 interface NavItem {
@@ -38,10 +40,9 @@ function roleLabel(role?: string | null): string {
 }
 
 export function DashboardLayout({ title, navItems, children, headerSlot }: DashboardLayoutProps) {
-  const { role, username, logout } = useAuthStore()
+  const { role, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showChangePw, setShowChangePw] = useState(false)
 
   // Derive active page label from current route
@@ -55,16 +56,11 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
     navigate('/login', { replace: true })
   }
 
-  function closeSidebar() {
-    setSidebarOpen(false)
-  }
-
   return (
-    <div className={`layout${sidebarOpen ? ' sidebar-open' : ''}`}>
+    <div className="layout">
       <a href="#main-content" className="skip-link">
         Langsung ke konten utama
       </a>
-      <div className="sidebar-backdrop" onClick={closeSidebar} />
 
       <aside className="sidebar">
         <div className="sidebar-header">
@@ -93,7 +89,6 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
               <li key={item.to}>
                 <NavLink
                   to={item.to}
-                  onClick={closeSidebar}
                   className={({ isActive }) => `sidebar-nav-link${isActive ? ' active' : ''}`}
                 >
                   {item.icon && <item.icon size={16} />}
@@ -115,42 +110,44 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
       <div className="main-content">
         <header className="topbar">
           <div className="topbar-left">
-            <button
-              className="topbar-menu-btn"
-              onClick={() => setSidebarOpen((open) => !open)}
-              aria-label="Toggle navigation"
-            >
-              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
             <span className="topbar-title">{pageTitle}</span>
             {headerSlot}
           </div>
           <div className="topbar-user">
-            <button
-              className="btn-icon"
-              title="Ubah password"
-              aria-label="Ubah password"
-              onClick={() => setShowChangePw(true)}
-            >
-              <KeyRound size={18} />
-            </button>
             <NotificationBell />
-            <div className="topbar-avatar">{initials(username, role)}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+            {/* Desktop-only cluster — on mobile these live in the bottom-nav "Lainnya" sheet */}
+            <div className="topbar-user-desktop">
+              <ThemeToggle />
+              <button
+                className="btn-icon"
+                title="Ubah password"
+                aria-label="Ubah password"
+                onClick={() => setShowChangePw(true)}
+              >
+                <KeyRound size={18} />
+              </button>
+              <div className="topbar-avatar">{initials(roleLabel(role))}</div>
               <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.2 }}>
-                {username ?? roleLabel(role)}
+                {roleLabel(role)}
               </span>
-              {username && (
-                <span className="topbar-role">{roleLabel(role)}</span>
-              )}
             </div>
           </div>
         </header>
 
-        <main className="page-content" id="main-content" tabIndex={-1} key={location.pathname}>{children}</main>
+        <main className="page-content page-enter" id="main-content" tabIndex={-1} key={location.pathname}>{children}</main>
       </div>
 
       {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
+
+      {/* Mobile bottom navigation — the ONLY nav on mobile (sidebar is hidden). */}
+      <MobileBottomNav
+        items={navItems
+          .filter((item) => !item.divider)
+          .map((item) => ({ label: item.label, to: item.to, icon: item.icon! }))
+        }
+        onLogout={handleLogout}
+        onChangePassword={() => setShowChangePw(true)}
+      />
     </div>
   )
 }

@@ -22,6 +22,7 @@ dependencies = [
     "pydantic[email]>=2.13.4",
     "python-jose[cryptography]>=3.3",
     "python-multipart>=0.0.12",
+    "reportlab>=4.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.4",
     "uvicorn[standard]>=0.32",

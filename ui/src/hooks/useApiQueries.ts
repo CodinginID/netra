@@ -23,6 +23,7 @@ export const queryKeys = {
     ['trash', type] as readonly unknown[],
   onboarding: () => ['onboarding'] as readonly unknown[],
   dailyReport: (date: string) => ['dailyReport', date] as readonly unknown[],
+  dailyStatus: (date: string) => ['dailyStatus', date] as readonly unknown[],
 }
 
 // ---- Query Hooks ----
@@ -117,6 +118,15 @@ export function useDailyReport(date: string) {
   return useQuery({
     queryKey: queryKeys.dailyReport(date),
     queryFn: () => api.dailyReport(token!, date),
+    enabled: !!token,
+  })
+}
+
+export function useDailyStatus(date: string) {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.dailyStatus(date),
+    queryFn: () => api.dailyStatus(token!, date),
     enabled: !!token,
   })
 }

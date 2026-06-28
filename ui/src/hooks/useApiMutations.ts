@@ -80,6 +80,18 @@ export function useRevokeDevice(onSuccess?: () => void) {
   })
 }
 
+export function useRegenerateDeviceToken(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (deviceId: string) => api.regenerateDeviceToken(token!, deviceId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.devices() })
+      onSuccess?.()
+    },
+  })
+}
+
 export function useDeleteDevice(onSuccess?: () => void) {
   const token = useAuthStore((s) => s.accessToken)
   const qc = useQueryClient()

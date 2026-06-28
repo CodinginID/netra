@@ -212,6 +212,7 @@ class AttendanceRecord(Base, TimestampMixin):
     device_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("devices.id"), nullable=True
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Device(Base, TimestampMixin):
