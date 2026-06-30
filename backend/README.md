@@ -84,7 +84,7 @@ DATABASE_URL=postgresql+asyncpg://netra_app:netra_app@localhost:5436/netra \
   uv run uvicorn app.main:app --reload --reload-dir app
 ```
 
-The API is available at `http://localhost:8000`.  Interactive docs at `/docs`.
+The API is available at `http://localhost:5170`.  Interactive docs at `/docs`.
 
 ### Full stack via Docker Compose
 

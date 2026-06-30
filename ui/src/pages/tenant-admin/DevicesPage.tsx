@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Monitor, Wifi, WifiOff, Plus, Copy, RefreshCw, Trash2, KeyRound } from 'lucide-react'
+import { WifiOff, Plus, Copy, Clock, Trash2, KeyRound, Search, Monitor, Wifi } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
@@ -26,8 +26,7 @@ function StatusBadge({ active }: { active: boolean }) {
   )
 }
 
-function formatLastSeen(value: string | null): string {
-  const { t } = useI18n()
+function formatLastSeen(value: string | null, t: (key: string) => string): string {
   if (!value) return t('devices.never_seen')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return t('devices.never_seen')
@@ -170,11 +169,16 @@ export function DevicesPage() {
   const [newDevice, setNewDevice] = useState<DeviceRegistered | null>(null)
   const [tokenRegenerated, setTokenRegenerated] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeviceOut | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const { data: paginatedDevices, isLoading, error, refetch } = useDevices({ page, limit })
   const devices = paginatedDevices?.items ?? []
   const total = paginatedDevices?.total ?? 0
   const pages = paginatedDevices?.pages ?? 0
+
+  const filteredDevices = searchQuery
+    ? devices.filter((d) => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : devices
 
   const registerMutation = useRegisterDevice(() => {
     setShowForm(false)
@@ -242,16 +246,56 @@ export function DevicesPage() {
     })
   }
 
-  const onlineCount = devices.filter((d) => d.status === 'active').length
-  const offlineCount = devices.length - onlineCount
+  const onlineCount = filteredDevices.filter((d) => d.status === 'active').length
+  const offlineCount = filteredDevices.length - onlineCount
 
   return (
     <div>
-      <div className="page-toolbar" style={{ marginBottom: '1.5rem' }}>
-        <h2 className="page-title">{t('devices.title')}</h2>
-        <button className="btn btn-primary add-fab-twin" onClick={() => setShowForm((v) => !v)}>
-          <Plus size={16} /> {t('devices.add')}
-        </button>
+      {/* Header: title row + search/indicators row */}
+      <div style={{ marginBottom: 20 }}>
+        {/* Row 1: title */}
+        <h2 className="page-title" style={{ margin: 0, marginBottom: 12 }}>{t('devices.title')}</h2>
+
+        {/* Row 2: search + indicators */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
+            <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder="Cari perangkat..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '7px 10px 7px 32px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-subtle)',
+                borderRadius: 8,
+                fontSize: 13,
+                color: 'var(--color-text)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 8, fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Monitor size={12} />
+              {total}
+            </span>
+            <span style={{ width: 1, height: 12, background: 'var(--color-border-subtle)' }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Wifi size={12} color="#16a34a" />
+              {onlineCount}
+            </span>
+            <span style={{ width: 1, height: 12, background: 'var(--color-border-subtle)' }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <WifiOff size={12} color="#dc2626" />
+              {offlineCount}
+            </span>
+          </div>
+        </div>
       </div>
 
       {newDevice && (
@@ -263,18 +307,6 @@ export function DevicesPage() {
       )}
 
       {error && <div className="error-banner">{error.message}</div>}
-
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <span className="device-chip">
-          <Monitor size={15} /> {t('devices.chip_total', { count: total })}
-        </span>
-        <span className="device-chip">
-          <Wifi size={15} color="#16a34a" /> {t('devices.chip_active', { count: onlineCount })}
-        </span>
-        <span className="device-chip">
-          <WifiOff size={15} color="#dc2626" /> {t('devices.chip_revoked', { count: offlineCount })}
-        </span>
-      </div>
 
       {isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -291,23 +323,23 @@ export function DevicesPage() {
             </div>
           ))}
         </div>
-      ) : devices.length === 0 ? (
+      ) : filteredDevices.length === 0 ? (
         <div className="data-card">
           <EmptyState
             icon="monitor"
-            title={t('devices.empty')}
-            description={t('devices.empty_desc')}
+            title={searchQuery ? 'Tidak ditemukan' : t('devices.empty')}
+            description={searchQuery ? 'Coba kata kunci lain' : t('devices.empty_desc')}
             action={
-              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                {t('devices.add')}
-              </button>
+              searchQuery
+                ? <button className="btn btn-ghost" onClick={() => setSearchQuery('')}>Hapus pencarian</button>
+                : <button className="btn btn-primary" onClick={() => setShowForm(true)}>{t('devices.add')}</button>
             }
           />
         </div>
       ) : (
         <PullToRefresh onRefresh={() => refetch()}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {devices.map((device) => (
+            {filteredDevices.map((device) => (
               <SwipeCard
                 key={device.id}
                 left={
@@ -319,7 +351,14 @@ export function DevicesPage() {
               >
                 <div
                   className="stat-card"
-                  style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
+                  style={{
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    gap: 12,
+                    borderLeft: device.status === 'active'
+                      ? '3px solid #16a34a'
+                      : '3px solid var(--color-border)',
+                  }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
@@ -327,7 +366,7 @@ export function DevicesPage() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    <RefreshCw size={13} /> {t('devices.last_active')}: {formatLastSeen(device.last_seen_at)}
+                    <Clock size={13} /> {t('devices.last_active')}: {formatLastSeen(device.last_seen_at, t)}
                   </div>
 
                   <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -353,15 +392,6 @@ export function DevicesPage() {
                         {revokeMutation.isPending && revokeMutation.variables === device.id ? t('devices.revoking') : t('devices.revoke')}
                       </button>
                     )}
-                    <button
-                      className="btn-icon btn-icon-danger"
-                      title={t('devices.delete_tooltip')}
-                      aria-label={t('devices.delete_aria')}
-                      onClick={() => setDeleteTarget(device)}
-                      style={{ marginLeft: 'auto' }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
                   </div>
                 </div>
               </SwipeCard>

@@ -67,6 +67,16 @@ class ApiKeyStatus(str, enum.Enum):
     revoked = "revoked"
 
 
+class EmbedSessionStatus(str, enum.Enum):
+    pending = "pending"     # minted, not yet used
+    consumed = "consumed"   # enrollment succeeded, token dead
+
+
+class EmbedPurpose(str, enum.Enum):
+    enroll = "enroll"
+    # kiosk = "kiosk"  # future phase
+
+
 # --------------------------------------------------------------------------- #
 # Platform-level
 # --------------------------------------------------------------------------- #
@@ -267,6 +277,40 @@ class ApiKey(Base, TimestampMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class EmbedSession(Base, TimestampMixin):
+    """One-time, short-lived session for embedding a netra flow (enrollment) in a
+    tenant's own app via iframe/WebView.
+
+    The full token is shown ONCE inside the embed URL; only its hash is stored.
+    Bound to one tenant + one subject (external_id) + one purpose. Single-use:
+    flipped to ``consumed`` once the enrollment succeeds. See docs embed plan §6.
+    """
+
+    __tablename__ = "embed_sessions"
+    __table_args__ = (Index("ix_embed_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    purpose: Mapped[EmbedPurpose] = mapped_column(
+        Enum(EmbedPurpose, name="embed_purpose"), default=EmbedPurpose.enroll, nullable=False
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_minor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    return_origin: Mapped[str] = mapped_column(String(1024), nullable=False)
+    status: Mapped[EmbedSessionStatus] = mapped_column(
+        Enum(EmbedSessionStatus, name="embed_session_status"),
+        default=EmbedSessionStatus.pending,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SSOConnection(Base, TimestampMixin):
     """Per-tenant Identity Provider config (Phase 2 wiring)."""
 
@@ -343,4 +387,5 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "consents",
     "webhook_endpoints",
     "api_keys",
+    "embed_sessions",
 )

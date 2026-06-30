@@ -83,6 +83,16 @@ class Settings(BaseSettings):
     # In Docker, set to /app/models/insightface (model baked in at build time).
     insightface_model_root: str = Field(default="")
 
+    # --- Embed integration (render netra flows inside a client app) ---
+    # Public base URL of netra used to build embed URLs (e.g. https://netra.app).
+    # Empty => derived from the incoming request at mint time.
+    embed_base_url: str = Field(default="")
+    # Minutes an embed session token stays valid after minting.
+    embed_ttl_minutes: int = Field(default=15, ge=1, le=1440)
+    # Where the built SPA assets live, used by the FastAPI embed shell HTML to
+    # load the frontend bundle. In dev this is the Vite dev server.
+    spa_asset_base: str = Field(default="http://localhost:5173")
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

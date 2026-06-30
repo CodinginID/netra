@@ -12,9 +12,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import tenant_id_ctx
-from app.core.security import JWTError, decode_token, hash_api_key, hash_device_token
+from app.core.security import (
+    JWTError,
+    decode_token,
+    hash_api_key,
+    hash_device_token,
+    hash_embed_token,
+)
 from app.db.session import SessionFactory, _set_tenant
-from app.models import ApiKey, ApiKeyStatus, Device, DeviceStatus, Role
+from app.models import (
+    ApiKey,
+    ApiKeyStatus,
+    Device,
+    DeviceStatus,
+    EmbedSession,
+    EmbedSessionStatus,
+    Role,
+)
 
 # Security schemes — registered with OpenAPI so Swagger UI renders an "Authorize"
 # button. auto_error=False lets us return our own 401 (instead of 403) and keep
@@ -33,6 +47,11 @@ api_key_scheme = APIKeyHeader(
     auto_error=False,
     description="Tenant API key (ntr_live_…) for server-to-server integration. "
     "May also be sent as 'Authorization: Bearer ntr_live_…'.",
+)
+embed_token_scheme = APIKeyHeader(
+    name="X-Embed-Token",
+    auto_error=False,
+    description="One-time embed session token (ntr_embed_…) for the embed flow.",
 )
 
 
@@ -281,3 +300,77 @@ def require_scope(scope: str):
         return principal
 
     return _checker
+
+
+# --------------------------------------------------------------------------- #
+# Embed session auth (render netra flows inside a client app)
+# --------------------------------------------------------------------------- #
+@dataclass
+class EmbedPrincipal:
+    """Authenticated identity for a one-time embed session."""
+
+    session_id: str
+    tenant_id: str
+    purpose: str
+    external_id: str | None
+    full_name: str | None
+    user_id: str | None
+    is_minor: bool
+    return_origin: str
+
+
+async def _embed_principal_from_token(token: str | None) -> EmbedPrincipal:
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing embed token"
+        )
+    token_hash = hash_embed_token(token)
+    async with SessionFactory() as session:
+        await _set_tenant(session, None)  # platform context: search across tenants
+        embed = (
+            await session.execute(
+                select(EmbedSession).where(EmbedSession.token_hash == token_hash)
+            )
+        ).scalar_one_or_none()
+        if embed is None or embed.status != EmbedSessionStatus.pending:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or used embed session"
+            )
+        if embed.expires_at < datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Embed session expired"
+            )
+        principal = EmbedPrincipal(
+            session_id=embed.id,
+            tenant_id=embed.tenant_id,
+            purpose=embed.purpose.value,
+            external_id=embed.external_id,
+            full_name=embed.full_name,
+            user_id=embed.user_id,
+            is_minor=embed.is_minor,
+            return_origin=embed.return_origin,
+        )
+    tenant_id_ctx.set(principal.tenant_id)
+    return principal
+
+
+async def get_embed_principal(
+    x_embed_token: str | None = Depends(embed_token_scheme),
+) -> EmbedPrincipal:
+    """Authenticate an embed API request via the ``X-Embed-Token`` header."""
+    return await _embed_principal_from_token(x_embed_token)
+
+
+async def get_embed_db(
+    principal: EmbedPrincipal = Depends(get_embed_principal),
+) -> AsyncIterator[AsyncSession]:
+    """Tenant-bound (RLS-scoped) session for an authenticated embed session."""
+    tenant_id_ctx.set(principal.tenant_id)
+    async with SessionFactory() as session:
+        await _set_tenant(session, principal.tenant_id)
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

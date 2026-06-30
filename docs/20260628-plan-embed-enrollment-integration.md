@@ -4,9 +4,18 @@
 |---|---|
 | **Tanggal** | 2026-06-28 |
 | **Penulis** | Tim Netra |
-| **Status** | DRAFT — menunggu review |
+| **Status** | DRAFT v2 — direvisi setelah review teknis |
 | **Branch target** | `feat/phase-implementation-websocket` (atau branch baru `feat/embed-enrollment`) |
 | **Dependensi** | Fitur API Key per-tenant (sudah ada: `app/api/v1/api_keys.py`, `app/api/v1/integration.py`) |
+
+> **Catatan revisi (v2, 2026-06-28)** — hasil review terhadap kode asli:
+> - **Cacat arsitektur diperbaiki**: SPA disajikan terpisah dari FastAPI (tidak ada nginx/Dockerfile UI), jadi `frame-ancestors` **tidak bisa** di-set FastAPI pada HTML SPA. Ditambah **§6.10**: FastAPI menyajikan *shell HTML* khusus untuk embed + CSP dinamis.
+> - Ditambah endpoint **`GET /embed/session`** (§6.5/§10) agar halaman bisa bootstrap `return_origin`.
+> - **Consent minor (wali, UU PDP)** ditangani — kasus utama adalah siswa (§6.6, decision Q9).
+> - Koreksi referensi: **tidak ada** `consent_service`/`user_service`; consent = model `Consent` + `recognition_service._has_consent`, pembuatan user inline di `users.py` (§6.6).
+> - Liveness **tidak** berjalan saat enrollment (hanya saat attendance) — wording diperbaiki.
+> - Ditambah `Referrer-Policy: no-referrer`, koreksi klaim CORS, estimasi direvisi.
+> - **Ditambah §5.1 Sinkronisasi Data ke Dashboard Client** — embed = input; data mengalir keluar via API Key (pull) + Webhook (push) + postMessage (instan). Gap: webhook `enrollment.completed` & endpoint `GET /integration/users` belum ada.
 
 ---
 
@@ -99,6 +108,48 @@ Pola analoginya: **Midtrans Snap** untuk pembayaran, tapi untuk rekam wajah.
 
 ---
 
+## 5.1 Sinkronisasi Data ke Dashboard Client (embed = input, ini = output)
+
+**Penting dipahami:** embed hanya menaruh **aksi** (rekam wajah / absen) di dalam app client. Embed **bukan** mekanisme sinkronisasi data. Setelah aksi terjadi, datanya masuk **DB netra** (sumber kebenaran), lalu mengalir ke dashboard client lewat **lapisan terpisah**: API Key (pull) + Webhook (push) + postMessage (instan). Embed dan sinkronisasi saling melengkapi, bukan satu hal.
+
+```
+[Embed iframe / Kiosk] → rekam wajah / absen
+            │
+            ▼
+      DATA MASUK DB NETRA  (sumber kebenaran, RLS per-tenant)
+            │
+ ┌──────────┼───────────────────────────────┐
+ ▼ TARIK    ▼ DORONG                          ▼ INSTAN
+ API Key    Webhook (real-time)               postMessage
+ (pull)     netra push event ke endpoint      iframe lapor "barusan
+ on-demand  client tiap ada kejadian          sukses" ke app induk
+```
+
+### Tiga kanal sinkronisasi
+
+| Kanal | Arah | Untuk apa | Status saat ini |
+|---|---|---|---|
+| **API Key (pull)** | client → netra | Dashboard menampilkan riwayat/laporan saat dibuka | ✅ ada untuk absensi (`GET /integration/attendance`, `/attendance/daily-status`) |
+| **Webhook (push)** | netra → client | Dashboard update real-time tiap ada kejadian | ✅ ada untuk absensi (`attendance.check_in`, `attendance.check_out`, HMAC-signed) |
+| **postMessage (instan)** | iframe → app induk | Konfirmasi seketika saat aksi embed selesai | direncanakan (bagian dari embed, §6.8) |
+
+### Gap yang harus ditutup agar enrollment ikut tersinkron
+
+Absensi sudah lengkap dua arah (pull + push). **Enrollment belum**:
+
+1. **Webhook `enrollment.completed` belum ada.** Netra baru push event untuk absensi; enrollment hanya broadcast WebSocket internal (`user.enrolled`), tidak dikirim ke endpoint client. → Tambahkan `webhook_service.dispatch(event="enrollment.completed", ...)` di endpoint embed-enroll (dan idealnya juga di enrollment biasa) supaya dashboard client tahu otomatis saat ada wajah baru terdaftar.
+2. **Endpoint pull untuk user/enrollment belum ada.** `/integration/*` baru punya endpoint absensi. Dashboard client tidak bisa menarik "daftar user + status enrolled". → Tambahkan `GET /integration/users` (scope `users:read`) berisi daftar end-user + flag `enrolled` + `external_id`, tenant-scoped via API key.
+
+### Rekomendasi kombinasi (per kebutuhan dashboard client)
+
+- Menampilkan **laporan / riwayat** (absensi & daftar user) → **API Key pull**.
+- **Update real-time** tiap absen / enrollment → **Webhook** (`attendance.*` sudah ada; tambah `enrollment.completed`).
+- Konfirmasi **seketika** di dalam iframe → **postMessage** (cukup untuk UX embed, bukan untuk sinkronisasi andal — jangan andalkan ini sebagai satu-satunya jalur data).
+
+> Catatan keandalan: postMessage hanya jalan saat iframe terbuka dan hanya menjangkau frontend client. Untuk data yang **harus** sampai ke backend client secara andal, gunakan **Webhook** (push) atau **API Key pull**, bukan postMessage.
+
+---
+
 ## 6. Desain Detail
 
 ### 6.1 Data Model — tabel `embed_sessions`
@@ -146,10 +197,11 @@ class EmbedSession(Base, TimestampMixin):
 API_SCOPES = {
     "attendance:read": "Baca catatan & laporan kehadiran",
     "embed:enroll": "Mint sesi embed untuk enrollment wajah",
+    "users:read": "Baca daftar pengguna + status enrolled",  # untuk sinkronisasi (§5.1)
 }
 ```
 
-Hanya API key dengan scope `embed:enroll` yang boleh memanggil mint endpoint.
+Hanya API key dengan scope `embed:enroll` yang boleh memanggil mint endpoint. Scope `users:read` dipakai endpoint pull `GET /integration/users` (§5.1).
 
 ### 6.3 Helper keamanan
 
@@ -211,8 +263,16 @@ async def get_embed_principal(token: str (query/header)) -> EmbedPrincipal:
     # set tenant context, return principal
 ```
 
-- Token diterima via query string (`?token=`) karena halaman dibuka oleh browser di iframe. Untuk panggilan `POST /embed/enroll`, token dikirim via header `X-Embed-Token` (lebih aman daripada query untuk request data).
+- Token diterima via query string (`?token=`) karena halaman dibuka oleh browser di iframe. Untuk panggilan `POST /embed/enroll` & `GET /embed/session`, token dikirim via header `X-Embed-Token` (lebih aman daripada query untuk request data).
 - `get_embed_db`: session terikat tenant (RLS) untuk embed principal.
+
+**Endpoint bootstrap — `GET /embed/session`** (auth `X-Embed-Token`):
+Halaman embed (SPA) butuh konteks sesi untuk merender UI dan tahu ke mana `postMessage` ditujukan. Endpoint ini mengembalikan:
+```json
+{ "data": { "purpose": "enroll", "external_id": "NIS123", "full_name": "Budi",
+            "return_origin": "https://app.sekolah.id", "expires_at": "..." } }
+```
+Tanpa endpoint ini, halaman tidak bisa menentukan `targetOrigin` untuk `postMessage` (lihat §6.8) maupun menampilkan nama subjek.
 
 ### 6.6 Endpoint Enrollment Embed — `POST /embed/enroll`
 
@@ -222,15 +282,19 @@ async def get_embed_principal(token: str (query/header)) -> EmbedPrincipal:
 - **Alur**:
   1. Pastikan `purpose == "enroll"`.
   2. **Resolve / provision user**:
-     - Cari `User` by `(tenant_id, external_id)`.
-     - Bila tidak ada dan `full_name` tersedia → buat `end_user` baru (provision). Bila tidak ada dan tanpa nama → 422.
-     - (Keputusan provisioning lihat §18 Q3.)
-  3. **Consent**: bila `consent != true` → 403. Catat consent (pakai consent service / tabel `consents`). Enrollment memang menuntut consent (lihat `recognition_service.ConsentRequiredError` di [enrollment.py](../backend/app/api/v1/enrollment.py)).
+     - Cari `User` by `(tenant_id, external_id)` — lewat `external_id_digest` (external_id disimpan terenkripsi, lihat `app/db/types.py`).
+     - Bila tidak ada dan `full_name` tersedia → buat `end_user` baru. Bila tidak ada dan tanpa nama → 422.
+     - **Catatan akurasi**: **tidak ada `user_service.py`** — pembuatan user saat ini inline `User(...)` di [users.py](../backend/app/api/v1/users.py). Sebelum implementasi, **faktorkan** logika create-user (termasuk enkripsi `external_id` + `external_id_digest` + keunikan) ke `app/services/user_service.py` agar dipakai bersama embed + users router. (Keputusan provisioning lihat §18 Q3.)
+  3. **Consent** (kritis untuk kasus sekolah):
+     - **Tidak ada `consent_service.py`**. Mekanisme nyata: model `Consent` + cek `recognition_service._has_consent(user_id)` yang mensyaratkan baris `Consent(granted=True)`. Pola penulisan ada di [consent.py](../backend/app/api/v1/consent.py) `grant_consent`.
+     - Alur embed harus **menulis baris `Consent(granted=True)` SEBELUM** memanggil `enroll_multi` (kalau tidak → `ConsentRequiredError` → 403).
+     - **Minor / siswa di bawah umur**: `consent.py` sudah mendukung **wali (guardian)** sesuai UU PDP. Checkbox sederhana **tidak cukup** untuk minor. Halaman embed harus menampilkan field wali (nama + hubungan) bila subjek minor, dan menyimpannya. (Keputusan lihat §18 **Q9**.)
   4. Panggil `recognition_service.enroll_multi(session, tenant_id, user_id, image_bytes)` (reuse).
   5. Tandai `EmbedSession.status = consumed`, `consumed_at = now` (sekali-pakai).
   6. Audit `face.enrolled_embed`. Broadcast WS `user.enrolled` (best-effort, seperti endpoint lain).
 - **Response**: `EnrollmentResult` (user_id, embedding_id, enrolled).
 - **Error mapping**: samakan dengan endpoint enrollment yang ada (422 no-face, 403 consent, 404 user).
+- **Catatan liveness**: enrollment **tidak** menjalankan liveness — `enroll_multi` hanya menghitung embedding dari foto berkualitas. Liveness/anti-spoof hanya di alur **attendance**. (Diagram §5 jangan dibaca sebagai "liveness saat enroll".)
 
 ### 6.7 Frontend — halaman chromeless `/embed/enroll`
 
@@ -246,7 +310,7 @@ async def get_embed_principal(token: str (query/header)) -> EmbedPrincipal:
   - State: loading / kamera / sukses / gagal / token-invalid / token-expired.
   - Saat sukses/gagal → `postMessage` ke induk (lihat §6.8).
 - **Theming**: dukung query `?accent=%23RRGGBB` (opsional) untuk menyamakan warna brand. Default tema netra. (Lihat §6.9.)
-- **API base**: panggil same-origin (`/api/v1/embed/enroll`) supaya tidak ada masalah CORS dalam iframe.
+- **API base & CORS**: SPA netra disajikan dari host berbeda dengan API (lihat §6.10), jadi panggilan `POST /api/v1/embed/*` adalah **cross-origin** → kena CORS + preflight (apalagi multipart + header `X-Embed-Token`). `CORSMiddleware` sudah ada di [main.py](../backend/app/main.py) (`allow_origins=settings.cors_origins`) — pastikan origin SPA netra masuk daftar itu. (Koreksi: bukan "same-origin".)
 
 ### 6.8 Protokol postMessage
 
@@ -271,15 +335,36 @@ Dokumentasikan di panduan integrasi (§11) agar developer client tahu cara `addE
 - Param `accent` untuk warna utama.
 - Logo tenant bisa diambil dari `tenant.config` bila ingin lebih menyatu. Default: minimal, netral.
 
+### 6.10 Penyajian HTML embed & CSP dinamis (BLOCKER — wajib diselesaikan dulu)
+
+**Masalah**: SPA netra (Vite) disajikan **terpisah** dari FastAPI — tidak ada nginx/Dockerfile untuk UI. Maka saat iframe memuat `https://netra.app/embed/enroll?token=...`, HTML dikembalikan oleh **host SPA**, bukan FastAPI. Akibatnya FastAPI **tidak bisa** menyetel `Content-Security-Policy: frame-ancestors` pada HTML itu — padahal itulah satu-satunya proteksi yang mencegah pihak lain menempel embed kita (§7).
+
+Selain itu `frame-ancestors` harus **dinamis per-tenant** (dari `allowed_origins` tenant yang dibawa token), jadi penyaji HTML harus bisa: baca token → lookup tenant → set header. Static host tidak bisa.
+
+**Solusi (rekomendasi): FastAPI menyajikan *shell HTML* khusus embed.**
+- Route backend `GET /embed/enroll` (HTMLResponse) yang:
+  1. Baca `token` dari query, validasi (pending + belum expired), ambil `return_origin` + tenant.
+  2. Kembalikan HTML minimal yang memuat bundle SPA (script/css dari host SPA) + menanam `window.__EMBED__ = { return_origin, ... }`.
+  3. Set header **dinamis**:
+     - `Content-Security-Policy: frame-ancestors <return_origin>` (atau daftar allowlist tenant).
+     - `Referrer-Policy: no-referrer` (cegah token bocor via Referer).
+     - **Tanpa** `X-Frame-Options` (header itu tak mendukung allowlist multi-origin; cukup CSP).
+  4. Token tidak valid → render halaman "sesi tidak valid/kedaluwarsa" (tetap 200 agar pesan tampil di iframe).
+- Komponen React `EmbedEnrollPage` tetap di SPA, tapi di-*mount* oleh shell ini (membaca `window.__EMBED__`).
+
+**Alternatif** (bila tidak mau SSR shell): reverse-proxy (nginx/edge) yang inject `frame-ancestors` per-tenant berdasar lookup token. Lebih banyak infrastruktur, kurang portabel. → **Rekomendasi tetap shell HTML dari FastAPI.**
+
+> Implikasi: butuh menambah penyajian aset SPA agar terjangkau dari shell (path bundle), dan FastAPI perlu tahu URL aset SPA (env `SPA_ASSET_BASE`). Ini menambah scope dibanding draft v1 — tercermin di estimasi (§19).
+
 ---
 
 ## 7. Keamanan (kritis — fokus review)
 
 | Risiko | Mitigasi |
 |---|---|
-| Pihak lain menempel embed kita | `Content-Security-Policy: frame-ancestors <allowed_origins tenant>` di response route `/embed/*`. Tanpa allowlist match → tidak bisa di-iframe. |
+| Pihak lain menempel embed kita | `Content-Security-Policy: frame-ancestors <allowed_origins tenant>` — **di-set oleh shell HTML yang disajikan FastAPI** (lihat §6.10), BUKAN oleh host SPA. Header dinamis per-tenant dari token. Tanpa match → tidak bisa di-iframe. |
 | Token dicuri / replay | Token **sekali-pakai** (status consumed) + **umur pendek** (EMBED_TTL 15 menit) + disimpan sebagai hash. |
-| Token via URL bocor di log/history | Untuk panggilan data (`POST /embed/enroll`) pakai header `X-Embed-Token`, bukan query. URL iframe tetap query (tak terhindar), karena itu umur token pendek + single-use. |
+| Token via URL bocor di log/history/Referer | Untuk panggilan data (`POST/GET /embed/*`) pakai header `X-Embed-Token`, bukan query. URL iframe tetap query (tak terhindar) → mitigasi: `Referrer-Policy: no-referrer` di shell + umur pendek + single-use. |
 | `postMessage` ke origin salah | `targetOrigin` = `return_origin` yang sudah divalidasi terhadap allowlist saat mint. |
 | Clickjacking balik | Halaman embed hanya boleh dari origin allowlist (frame-ancestors). |
 | Enrollment tanpa izin | Consent wajib (`consent=true`) sebelum simpan embedding; dicatat. |
@@ -313,11 +398,14 @@ UI: di [IntegrationPage.tsx](../ui/src/pages/tenant-admin/IntegrationPage.tsx) t
 
 ## 10. Kontrak API (ringkas, untuk dokumentasi)
 
-| Method | Path | Auth | Scope | Fungsi |
-|---|---|---|---|---|
-| POST | `/integration/embed-sessions` | API key | `embed:enroll` | Mint token embed |
-| GET | `/embed/enroll` (HTML) | Embed token (query) | — | Halaman capture (chromeless) |
-| POST | `/embed/enroll` | Embed token (header) | — | Submit foto → enroll |
+Catatan: path HTML dan path API **beda host** (shell HTML dari FastAPI vs API `/api/v1/*`). Jangan dianggap path yang sama.
+
+| Method | Path | Disajikan oleh | Auth | Scope | Fungsi |
+|---|---|---|---|---|---|
+| POST | `/api/v1/integration/embed-sessions` | FastAPI | API key | `embed:enroll` | Mint token embed |
+| GET | `/embed/enroll?token=…` | FastAPI (shell HTML, §6.10) | Embed token (query) | — | Shell chromeless + CSP dinamis, memuat SPA |
+| GET | `/api/v1/embed/session` | FastAPI | Embed token (header `X-Embed-Token`) | — | Bootstrap konteks sesi (return_origin, external_id, …) |
+| POST | `/api/v1/embed/enroll` | FastAPI | Embed token (header `X-Embed-Token`) | — | Submit foto → enroll |
 
 ---
 
@@ -413,17 +501,22 @@ curl -X POST https://netra.app/api/v1/integration/embed-sessions \
 - [ ] `embed_session_service.py` (create/lookup/consume/expire + validasi origin)
 - [ ] `deps.py`: `EmbedPrincipal`, `get_embed_principal`, `get_embed_db`
 - [ ] `integration.py`: `POST /integration/embed-sessions`
-- [ ] `embed.py`: `POST /embed/enroll` + (server-side render token context bila perlu)
-- [ ] Middleware/response header CSP `frame-ancestors` untuk route `/embed/*`
-- [ ] Provisioning user dari external_id + consent wiring
+- [ ] `embed.py`: `GET /embed/enroll` (shell HTML + CSP/Referrer dinamis, §6.10), `GET /api/v1/embed/session`, `POST /api/v1/embed/enroll`
+- [ ] **Penyajian shell HTML embed via FastAPI** + env `SPA_ASSET_BASE` untuk path bundle (§6.10) — BLOCKER
+- [ ] CSP `frame-ancestors` dinamis per-tenant + `Referrer-Policy: no-referrer` di shell
+- [ ] **Faktorkan `user_service.create`** (enkripsi external_id + digest + keunikan), lalu provisioning user di embed pakai itu
+- [ ] **Consent wiring**: tulis `Consent(granted=True)` sebelum `enroll_multi`; dukung **wali untuk minor** (UU PDP)
+- [ ] Pastikan origin SPA netra masuk `settings.cors_origins`
 - [ ] Audit + WS broadcast
+- [ ] **Sinkronisasi (§5.1)**: webhook `enrollment.completed` di endpoint embed-enroll (+ idealnya enrollment biasa)
+- [ ] **Sinkronisasi (§5.1)**: endpoint pull `GET /integration/users` (scope `users:read`) — daftar end-user + flag `enrolled` + `external_id`
 - [ ] Register router di `app/api/v1/__init__.py`
 
 **Frontend**
-- [ ] `EmbedEnrollPage.tsx` (chromeless, consent, capture, postMessage)
-- [ ] Route `/embed/enroll` di `App.tsx` (publik)
+- [ ] `EmbedEnrollPage.tsx` (chromeless, baca `window.__EMBED__`, `GET /embed/session`, consent + field wali untuk minor, capture, postMessage)
+- [ ] Mount oleh shell HTML §6.10 (bukan route SPA biasa berproteksi)
 - [ ] Reuse komponen kamera dari `SelfEnrollPage.tsx`
-- [ ] Section "Embed" di `IntegrationPage.tsx` (kelola allowed_origins + panduan iframe)
+- [ ] Section "Embed" di `IntegrationPage.tsx` (kelola `allowed_origins` + panduan iframe)
 - [ ] State error: token invalid/expired/consumed, kamera ditolak
 
 **Verifikasi**
@@ -463,18 +556,25 @@ curl -X POST https://netra.app/api/v1/integration/embed-sessions \
 5. **TTL token**: default 15 menit cukup?
 6. **Branding**: perlu theming (accent/logo) di fase 1 atau cukup tampilan default netra?
 7. **allowed_origins**: dikelola tenant-admin sendiri di dashboard, atau di-set super-admin saat onboarding?
+8. **(BARU) Penyajian HTML embed + CSP dinamis** (§6.10): shell HTML dari FastAPI (rekomendasi) vs reverse-proxy inject header? Ini **blocker** — menentukan apakah proteksi frame-ancestors bisa ada sama sekali. → **Rekomendasi: shell HTML dari FastAPI.**
+9. **(BARU) Consent untuk minor/siswa** (§6.6): alur embed wajib mendukung **persetujuan wali** (UU PDP), bukan hanya checkbox. Bagaimana UX-nya — field wali muncul bila `is_minor`, atau selalu? Siapa yang menandai minor (mint payload vs profil user)? → **Rekomendasi: tandai minor di mint payload; halaman embed tampilkan field wali bila minor.**
 
 ---
 
 ## 19. Estimasi Kasar
 
+Direvisi naik dari draft v1 (~3.5–4.5 hari) karena scope shell HTML + CSP dinamis + consent-minor + faktorisasi user/consent service yang sebelumnya diremehkan.
+
 | Bagian | Estimasi |
 |---|---|
-| Backend (model, migrasi, service, deps, 2 endpoint, CSP) | 1.5–2 hari |
-| Frontend (embed page + capture reuse + integrasi panduan) | 1–1.5 hari |
+| Backend (model, migrasi, service, deps, mint + 3 endpoint embed) | 2 hari |
+| **Shell HTML embed + CSP/Referrer dinamis + penyajian aset SPA (§6.10)** | 1 hari |
+| Faktorisasi `user_service` + consent (termasuk wali/minor) | 0.5–1 hari |
+| Sinkronisasi data (§5.1): webhook `enrollment.completed` + `GET /integration/users` | 0.5 hari |
+| Frontend (embed page + bootstrap + capture reuse + panduan) | 1–1.5 hari |
 | Test + smoke + hardening keamanan | 1 hari |
-| **Total** | **~3.5–4.5 hari** |
+| **Total** | **~6–7 hari** |
 
 ---
 
-*Akhir dokumen. Mohon review bagian §7 (Keamanan) dan §18 (Keputusan) lebih dulu — keduanya menentukan implementasi.*
+*Akhir dokumen. Prioritas review: **§6.10 + §18 Q8** (cara serve HTML embed — blocker, tanpa ini proteksi frame-ancestors tidak ada), lalu **§6.6 + §18 Q9** (consent minor/wali), baru §7 keamanan umum.*

@@ -23,7 +23,6 @@
   "company": "Perusahaan",
   "school": "Sekolah",
   "university": "Universitas",
-
   "nav.dashboard": "Dasbor",
   "nav.tenant": "Tenant",
   "nav.users": "Pengguna",
@@ -40,7 +39,6 @@
   "nav.skip_link": "Langsung ke konten utama",
   "title.super_admin": "Super Admin",
   "title.manage_tenant": "Kelola Tenant",
-
   "global.welcome_title": "Dasbor Global — Super Admin 👋",
   "global.overview_desc": "Overview seluruh tenant dalam sistem.",
   "stat.total_tenants": "Total Tenant",
@@ -53,7 +51,6 @@
   "btn.manage": "Kelola",
   "btn.manage_all": "Kelola Semua",
   "btn.view_all_tenants": "Lihat semua {{count}} tenant →",
-
   "tenant.title": "Tenants",
   "tenant.add": "Tambah Tenant",
   "tenant.search_placeholder": "Cari tenant...",
@@ -91,46 +88,38 @@
   "tenant.option_company": "Perusahaan",
   "tenant.option_school": "Sekolah (K-12)",
   "tenant.option_university": "Universitas / Kampus",
-
   "banner.back_tooltip": "Kembali ke daftar tenant",
   "banner.switch_tooltip": "Ganti tenant",
   "banner.loading": "Memuat...",
-
   "users.title": "Pengguna",
   "users.subtitle": "Kelola pengguna tenant",
   "users.add": "Tambah Pengguna",
   "users.empty": "Belum ada pengguna",
   "users.empty_desc": "Tambahkan pengguna pertama Anda untuk mulai mengelola absensi",
   "users.search_placeholder": "Cari pengguna...",
-
-  "devices.title": "Perangkat Kiosk",
+  "devices.title": "Perangkat Absensi",
   "devices.add": "Tambah Perangkat",
   "devices.empty": "Belum ada perangkat",
   "devices.empty_desc": "Daftarkan perangkat kiosk pertama Anda untuk mulai absensi",
-
   "schedules.title": "Jadwal Kerja",
   "schedules.add": "Tambah Jadwal",
   "schedules.empty": "Belum ada jadwal",
   "schedules.empty_desc": "Buat jadwal kehadiran default untuk tenant Anda",
   "schedules.shift": "Shift Harian",
   "schedules.session": "Sesi / Periode",
-
   "attendance.title": "Kehadiran",
   "attendance.subtitle": "Lihat dan ekspor catatan kehadiran",
   "attendance.empty": "Belum ada data kehadiran",
   "attendance.empty_desc": "Data absensi akan muncul setelah kiosk mulai digunakan",
-
   "daily_status.title": "Status Kehadiran Harian",
   "daily_status.subtitle": "Siapa yang sudah absen dan siapa yang belum, per hari.",
   "daily_status.empty": "Belum ada pengguna",
   "daily_status.empty_desc": "Tambahkan & daftarkan wajah pengguna untuk mulai memantau kehadiran.",
-
   "integration.title": "Integrasi & API",
   "integration.subtitle": "Buat API key agar aplikasi Anda bisa menarik data kehadiran dari netra.",
   "integration.add": "Buat API Key",
   "integration.empty": "Belum ada API key",
   "integration.empty_desc": "Buat API key pertama untuk menghubungkan aplikasi Anda dengan data kehadiran netra.",
-
   "trash.title": "Tempat Sampah",
   "trash.subtitle": "Item yang dihapus dapat dipulihkan dalam 30 hari",
   "trash.tab_users": "Pengguna",
@@ -140,13 +129,11 @@
   "trash.empty_devices": "Tidak ada perangkat yang dihapus",
   "trash.empty_schedules": "Tidak ada jadwal yang dihapus",
   "trash.restore": "Pulihkan",
-
   "settings.title": "Pengaturan",
   "settings.language": "Bahasa",
   "settings.language_en": "English",
   "settings.language_id": "Bahasa Indonesia",
   "settings.language_desc": "Pilih bahasa tampilan untuk aplikasi.",
-
   "login.welcome": "Selamat datang kembali",
   "login.subtitle": "Sign in to manage your organization's attendance.",
   "login.email": "Email",
@@ -161,12 +148,10 @@
   "login.cannot_verify": "Tidak dapat memverifikasi. Coba lagi.",
   "login.show_password": "Tampilkan password",
   "login.hide_password": "Sembunyikan password",
-
   "theme.light": "Mode terang",
   "theme.dark": "Mode gelap",
   "theme.change_password": "Ubah Password",
   "theme.sign_out": "Keluar",
-
   "password.current": "Password Saat Ini",
   "password.new": "Password Baru",
   "password.confirm": "Konfirmasi Password Baru",
@@ -176,7 +161,6 @@
   "password.error_invalid_session": "Sesi tidak valid, silakan login ulang",
   "password.error_failed": "Gagal mengubah password",
   "password.success": "Password berhasil diubah",
-
   "error.404_title": "404",
   "error.404_desc": "Halaman tidak ditemukan.",
   "error.403_title": "403",
@@ -184,20 +168,16 @@
   "error.go_home": "Kembali ke beranda",
   "error.something_wrong": "Terjadi kesalahan",
   "error.reload_page": "Muat ulang halaman",
-
   "notification.late_title": "Terlambat hari ini ({{count}})",
   "notification.no_late": "Tidak ada keterlambatan",
-
   "pagination.per_page": "/ halaman",
   "pagination.first": "Halaman pertama",
   "pagination.prev": "Halaman sebelumnya",
   "pagination.page": "Halaman {{page}}",
   "pagination.next": "Halaman berikutnya",
   "pagination.last": "Halaman terakhir",
-
   "pull_refresh.release": "Lepaskan untuk memuat ulang",
   "pull_refresh.pull": "Tarik untuk memuat ulang",
-
   "keyboard_shortcuts.title": "Pintasan Keyboard",
   "keyboard_shortcuts.general": "Umum",
   "keyboard_shortcuts.show": "Tampilkan pintasan keyboard",
@@ -208,16 +188,12 @@
   "keyboard_shortcuts.to_schedules": "Ke Jadwal",
   "keyboard_shortcuts.then": "lalu",
   "keyboard_shortcuts.hint": "Tekan ? kapan saja untuk membuka panel ini",
-
   "onboarding.complete_title": "Setup selesai! Selamat menggunakan Netra.",
   "onboarding.save_failed": "Gagal menyimpan setup",
-
   "profile.menu_account": "Menu akun",
-
   "mobile.more": "Lainnya",
   "mobile.more_menu": "Menu lainnya",
   "mobile.dark_theme": "Tema gelap",
-
   "onboarding.step1_title": "Selamat datang di Netra",
   "onboarding.step1_body": "Kelola kehadiran berbasis pengenalan wajah dari satu dasbor. Mari kenali beberapa hal cepat.",
   "onboarding.step2_title": "Cari & filter di mana saja",
@@ -228,16 +204,13 @@
   "onboarding.got_it": "Mengerti",
   "onboarding.next": "Lanjut",
   "onboarding.guide_label": "Panduan pengenalan",
-
   "banner.cta_start": "Mulai Setup",
   "banner.dismiss_label": "Tutup banner",
   "banner.setup_title": "Selesaikan setup awal",
   "banner.setup_body": "Buat jadwal, daftarkan perangkat, dan tambahkan pengguna agar absensi bisa berjalan.",
-
   "donut.no_data": "Belum ada data untuk ditampilkan.",
   "donut.chart_label": "Diagram lingkaran: total {{total}}",
   "donut.no_data_label": "Tidak ada data",
-
   "heatmap.mon": "Sen",
   "heatmap.tue": "Sel",
   "heatmap.wed": "Rab",
@@ -249,10 +222,8 @@
   "heatmap.attendance": "kehadiran",
   "heatmap.few": "Sedikit",
   "heatmap.many": "Banyak",
-
   "pagination.items": "item",
   "pagination.per_page_label": "Item per halaman",
-
   "login.access_granted": "Akses Diberikan",
   "login.sign_in_with_arrow": "Sign In",
   "login.powered_by": "Ditenagai oleh",
@@ -263,7 +234,6 @@
   "login.liveness_meta": "Liveness 99,2% · 6 ms",
   "login.show_password_aria": "Tampilkan sandi",
   "login.hide_password_aria": "Sembunyikan sandi",
-
   "kiosk.setup": "Setup",
   "kiosk.setup_title": "Konfigurasi Token Perangkat",
   "kiosk.setup_desc": "Masukkan token perangkat kiosk yang diberikan oleh administrator tenant. Token disimpan di localStorage perangkat ini.",
@@ -312,7 +282,6 @@
   "kiosk.early_leave": "Pulang Awal",
   "kiosk.checkin_success": "{{label}} berhasil — {{name}}",
   "kiosk.error_occurred": "Terjadi kesalahan.",
-
   "selfenroll.title": "Pendaftaran Wajah Mandiri",
   "selfenroll.step_login": "1. Masuk",
   "selfenroll.step_capture": "2. Rekam Wajah",
@@ -345,9 +314,7 @@
   "selfenroll.turn_left_hint": "Putar kepala perlahan ke kiri",
   "selfenroll.turn_right": "Putar ke KANAN",
   "selfenroll.turn_right_hint": "Putar kepala perlahan ke kanan",
-
   "tenant_admin.title": "Tenant Admin",
-
   "dashboard.today_attendance": "Absensi Hari Ini",
   "dashboard.today_subtitle": "Rekap kehadiran tenggat hari ini",
   "dashboard.live": "LIVE",
@@ -365,7 +332,6 @@
   "dashboard.trend_late": "Terlambat",
   "dashboard.action_check_in": "Check In",
   "dashboard.action_check_out": "Check Out",
-
   "onboarding.step_welcome": "Selamat Datang",
   "onboarding.step_schedule": "Jadwal",
   "onboarding.step_device": "Perangkat",
@@ -373,7 +339,6 @@
   "onboarding.step_test": "Uji Coba",
   "onboarding.test_step_check": "Periksa hasil absensi — pastikan statusnya \"Tepat Waktu\"",
   "onboarding.device_step_name": "Masukkan nama perangkat (mis. \"Kiosk Lantai 1\")",
-
   "users.role_admin": "Admin",
   "users.role_employee": "Karyawan",
   "users.enrolled": "Enrolled",
@@ -408,12 +373,10 @@
   "users.username_placeholder": "Username (opsional)",
   "users.show_password": "Tampilkan password",
   "users.hide_password": "Sembunyikan password",
-  "users.subtitle": "Kelola pengguna tenant",
   "users.stat_total": "Total Pengguna",
   "users.stat_enrolled": "Sudah Enrolled",
   "users.stat_not_enrolled": "Belum Enrolled",
   "users.load_error": "Gagal memuat pengguna",
-  "users.search_placeholder": "Cari pengguna...",
   "users.search_label": "Cari pengguna",
   "users.th_name": "Nama",
   "users.th_username": "Username",
@@ -440,12 +403,7 @@
   "users.card_edit": "Edit",
   "users.swipe_edit": "Edit",
   "users.swipe_delete": "Hapus",
-
-  "devices.title": "Perangkat Kiosk",
-  "devices.add": "Tambah Perangkat",
   "devices.add_title": "Tambah Perangkat",
-  "devices.empty": "Belum ada perangkat",
-  "devices.empty_desc": "Daftarkan perangkat kiosk pertama Anda untuk mulai absensi",
   "devices.status_active": "Aktif",
   "devices.status_revoked": "Dicabut",
   "devices.never_seen": "Belum pernah",
@@ -484,15 +442,8 @@
   "devices.toast_restore_failed": "Gagal membatalkan penghapusan",
   "devices.reset_title_active": "Buat token baru (token lama langsung tidak berlaku)",
   "devices.reset_title_inactive": "Buat token baru & aktifkan kembali perangkat",
-
-  "schedules.title": "Jadwal Kerja",
-  "schedules.add": "Tambah Jadwal",
-  "schedules.empty": "Belum ada jadwal",
-  "schedules.empty_desc": "Buat jadwal kehadiran default untuk tenant Anda",
   "schedules.status_default": "Default",
   "schedules.status_normal": "Normal",
-  "schedules.shift": "Shift Harian",
-  "schedules.session": "Sesi / Periode",
   "schedules.time_in": "Jam Masuk",
   "schedules.time_out": "Jam Pulang",
   "schedules.session_name": "Nama sesi",
@@ -531,11 +482,6 @@
   "schedules.delete_aria": "Hapus jadwal",
   "schedules.swipe_edit": "Edit",
   "schedules.swipe_delete": "Hapus",
-
-  "attendance.title": "Kehadiran",
-  "attendance.subtitle": "Lihat dan ekspor catatan kehadiran",
-  "attendance.empty": "Belum ada data kehadiran",
-  "attendance.empty_desc": "Data absensi akan muncul setelah kiosk mulai digunakan",
   "attendance.loading": "Memuat...",
   "attendance.stat_total": "Total Catatan",
   "attendance.stat_on_time": "Tepat Waktu",
@@ -564,11 +510,6 @@
   "attendance.card_status": "Status",
   "attendance.card_location": "Lokasi",
   "attendance.card_liveness": "Skor Liveness",
-
-  "daily_status.title": "Status Kehadiran Harian",
-  "daily_status.subtitle": "Siapa yang sudah absen dan siapa yang belum, per hari.",
-  "daily_status.empty": "Belum ada pengguna",
-  "daily_status.empty_desc": "Tambahkan & daftarkan wajah pengguna untuk mulai memantau kehadiran.",
   "daily_status.loading": "Memuat...",
   "daily_status.stat_total": "Total",
   "daily_status.stat_present": "Hadir",
@@ -592,12 +533,6 @@
   "daily_status.status_late": "Terlambat",
   "daily_status.status_checked_out": "Sudah Pulang",
   "daily_status.status_absent": "Belum Hadir",
-
-  "integration.title": "Integrasi & API",
-  "integration.subtitle": "Buat API key agar aplikasi Anda bisa menarik data kehadiran dari netra.",
-  "integration.add": "Buat API Key",
-  "integration.empty": "Belum ada API key",
-  "integration.empty_desc": "Buat API key pertama untuk menghubungkan aplikasi Anda dengan data kehadiran netra.",
   "integration.loading": "Memuat...",
   "integration.load_error": "Gagal memuat API key",
   "integration.create_title": "Buat API Key",
@@ -648,23 +583,12 @@
   "integration.guide_notes_li2": "Key otomatis terikat ke organisasi Anda; data tenant lain tidak akan pernah ikut terbawa.",
   "integration.guide_notes_li3": "Kalau key bocor, klik Reset untuk membuat key baru (key lama langsung mati), atau Cabut.",
   "integration.guide_notes_li4": "Respons 401 = key salah/dicabut/kedaluwarsa. Respons 403 = key tidak punya scope yang diperlukan.",
-
-  "trash.title": "Tempat Sampah",
-  "trash.subtitle": "Item yang dihapus dapat dipulihkan dalam 30 hari",
-  "trash.tab_users": "Pengguna",
-  "trash.tab_devices": "Perangkat",
-  "trash.tab_schedules": "Jadwal",
-  "trash.empty_users": "Tidak ada pengguna yang dihapus",
-  "trash.empty_devices": "Tidak ada perangkat yang dihapus",
-  "trash.empty_schedules": "Tidak ada jadwal yang dihapus",
   "trash.loading": "Memuat...",
   "trash.th_name": "Nama",
   "trash.th_deleted_at": "Dihapus Pada",
   "trash.th_actions": "Aksi",
-  "trash.restore": "Pulihkan",
   "toast_restored": "{{name}} berhasil dipulihkan",
   "toast_restore_failed": "Gagal memulihkan",
-
   "enrollment.title": "Enrollment Wajah",
   "enrollment.subtitle": "Rekam wajah pengguna dari 3 sudut untuk identifikasi yang akurat",
   "enrollment.step1": "Pilih Pengguna",
@@ -705,5 +629,26 @@
   "enrollment.consent_hint": "Centang persetujuan terlebih dahulu",
   "enrollment.toast_success": "Enrollment berhasil — {{count}} sudut wajah terdaftar.",
   "enrollment.toast_error": "Enrollment gagal.",
-  "enrollment.preview_alt": "Sudut {{index}}"
+  "enrollment.preview_alt": "Sudut {{index}}",
+  "integration.tab_ai": "Bangun dengan AI",
+  "integration.tab_api": "Langkah via API Key",
+  "integration.ai_intro": "Cara tercepat: salin prompt di bawah, tempel ke AI coding assistant (Claude, Cursor, dsb), ganti placeholder dengan API key Anda. AI akan membangun backend-proxy + frontend integrasi di aplikasi Anda.",
+  "integration.ai_prompt_label": "Prompt untuk AI agent",
+  "integration.ai_note": "Penting: API key bersifat rahasia. Simpan & panggil dari backend aplikasi Anda, jangan pernah ditaruh di kode browser.",
+  "integration.guide_users_title": "6. Tarik daftar pengguna + status enroll",
+  "integration.guide_users_desc": "Untuk menampilkan siapa yang sudah/belum rekam wajah (scope users:read).",
+  "integration.guide_embed_title": "7. Embed enrollment (rekam wajah di dalam app Anda)",
+  "integration.guide_embed_desc": "Backend Anda mint sesi sekali-pakai, lalu frontend menampilkan URL-nya di <iframe>. Dengarkan hasilnya via postMessage.",
+  "integration.guide_webhook_title": "8. Webhook (opsional, real-time)",
+  "integration.guide_webhook_desc": "Daftarkan endpoint untuk menerima event attendance.check_in / attendance.check_out / enrollment.completed secara real-time (ditandatangani HMAC).",
+  "integration.step1_title": "Langkah 1 — Buat API Key",
+  "integration.step1_body": "Klik \"Buat API Key\" di atas. Token muncul sekali saja — salin, simpan aman, lalu berikan ke developer aplikasi Anda.",
+  "integration.step2_title": "Langkah 2 — Bangun integrasi di aplikasi Anda",
+  "integration.step2_choose": "Pilih salah satu cara:",
+  "integration.mode_ai": "🚀 Pakai AI (cepat)",
+  "integration.mode_manual": "🔧 Manual (API)",
+  "integration.step3_title": "Langkah 3 — Embed enrollment (rekam wajah di dalam app Anda)",
+  "integration.step3_note": "Catatan: domain aplikasi Anda harus terdaftar di allowlist embed agar iframe diizinkan tampil. Bila mint mengembalikan 403, daftarkan origin Anda dulu.",
+  "integration.step4_title": "Langkah 4 — Uji, real-time, lalu go-live",
+  "integration.step4_body": "Tarik data dengan contoh di Langkah 2 untuk memastikan koneksi. Untuk update otomatis (tanpa polling), daftarkan webhook agar menerima event secara real-time."
 }

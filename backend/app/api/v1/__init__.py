@@ -10,6 +10,7 @@ from app.api.v1 import (
     auth,
     consent,
     devices,
+    embed,
     enrollment,
     health,
     integration,
@@ -37,4 +38,5 @@ api_router.include_router(reports.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(api_keys.router)
 api_router.include_router(integration.router)
+api_router.include_router(embed.router)
 api_router.include_router(trash.router)

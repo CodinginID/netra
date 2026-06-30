@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, type ChangeEvent } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { Eye, ScanLine, Settings } from 'lucide-react'
 import {
   postAutoAttendance,
@@ -305,29 +305,6 @@ export function KioskPage() {
     return () => clearInterval(id)
   }, [idleForCountdown])
 
-  function handleFileAttendance(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !savedToken) return
-    e.target.value = ''
-    if (resultState.status === 'processing') return
-    setResultState({ status: 'processing' })
-
-    postAutoAttendance(savedToken, file, coordsRef.current)
-      .then((result) => {
-        const label = result.attendance.type === 'check_in' ? t('kiosk.check_in') : t('kiosk.check_out')
-        show(t('kiosk.checkin_success', { label, name: result.full_name }), 'success')
-        setResultState({ status: 'success', result })
-        scheduleReset()
-      })
-      .catch((err) => {
-        const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : t('kiosk.error_occurred'))
-        const code = err instanceof KioskError ? err.code : 'server_error'
-        show(msg, 'error')
-        setResultState({ status: 'error', errorCode: code, errorMsg: msg })
-        scheduleReset()
-      })
-  }
-
   const isProcessing = resultState.status === 'processing'
   const showResult =
     resultState.status === 'success' || resultState.status === 'error'
@@ -424,11 +401,6 @@ export function KioskPage() {
                   ? t('kiosk.camera_unavailable')
                   : t('kiosk.camera_loading')}
               </p>
-              {(cameraState === 'denied' || cameraState === 'unavailable') && (
-                <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                  {t('kiosk.use_upload_hint')}
-                </p>
-              )}
             </div>
           )}
 
@@ -510,19 +482,6 @@ export function KioskPage() {
 
         </div>
 
-
-        {/* File fallback — only shown when camera is unavailable */}
-        {(cameraState === 'denied' || cameraState === 'unavailable') && savedToken && (
-          <label className="kiosk-btn kiosk-btn-checkin" style={{ cursor: 'pointer', textAlign: 'center' }}>
-            {t('kiosk.upload_photo')}
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleFileAttendance}
-            />
-          </label>
-        )}
 
         {/* Status bar */}
         <div className="kiosk-status-bar">

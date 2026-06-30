@@ -28,6 +28,9 @@ import { TrashPage } from '@/pages/tenant-admin/TrashPage'
 // Kiosk (public — device token auth)
 import { KioskPage } from '@/pages/kiosk/KioskPage'
 
+// Embed (public — one-time embed-token auth, rendered inside a client app)
+import { EmbedEnrollPage } from '@/pages/embed/EmbedEnrollPage'
+
 // Super Admin
 import {
   SuperAdminDashboard,
@@ -66,6 +69,7 @@ function AppRoutes() {
         <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
         <Route path="/403" element={<ErrorBoundary><ForbiddenPage /></ErrorBoundary>} />
         <Route path="/attendance" element={<ErrorBoundary><KioskPage /></ErrorBoundary>} />
+        <Route path="/embed/enroll" element={<ErrorBoundary><EmbedEnrollPage /></ErrorBoundary>} />
 
         {/* Root redirect */}
         <Route path="/" element={<ErrorBoundary><RootRedirect /></ErrorBoundary>} />

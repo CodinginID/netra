@@ -26,7 +26,7 @@ services:
       - --host
       - "0.0.0.0"
       - --port
-      - "8000"
+      - "5170"
       - --reload
       - --reload-dir
       - /app/app

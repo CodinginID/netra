@@ -28,7 +28,7 @@ npm run preview
 
 | Variable | Default | Description |
 |---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` | Backend API base URL |
+| `VITE_API_BASE_URL` | `http://localhost:5170/api/v1` | Backend API base URL |
 
 ## Project Structure
 

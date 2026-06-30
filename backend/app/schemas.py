@@ -132,6 +132,14 @@ class VerticalConfig(BaseModel):
     mode: Literal["company", "school", "university"] = "company"
 
 
+class EmbedConfig(BaseModel):
+    """Embed integration prefs. ``allowed_origins`` are the client app origins
+    permitted to iframe netra's embed pages (frame-ancestors) and receive
+    postMessage. Exact-match scheme+host(+port), e.g. 'https://app.sekolah.id'."""
+
+    allowed_origins: list[str] = Field(default_factory=list)
+
+
 class TenantConfig(BaseModel):
     """Per-tenant config space. Stored in tenants.config (JSONB)."""
 
@@ -140,6 +148,7 @@ class TenantConfig(BaseModel):
     attendance: AttendanceDefaults = Field(default_factory=AttendanceDefaults)
     kiosk: KioskPrefs = Field(default_factory=KioskPrefs)
     recognition: RecognitionConfig = Field(default_factory=RecognitionConfig)
+    embed: EmbedConfig = Field(default_factory=EmbedConfig)
 
 
 # --------------------------------------------------------------------------- #
@@ -254,6 +263,8 @@ class DeviceRegistered(DeviceOut):
 # they read clearly in the dashboard and stay extensible.
 API_SCOPES: dict[str, str] = {
     "attendance:read": "Baca catatan & laporan kehadiran",
+    "users:read": "Baca daftar pengguna + status enrolled",
+    "embed:enroll": "Mint sesi embed untuk enrollment wajah",
 }
 
 
@@ -292,6 +303,49 @@ class ApiKeyCreated(ApiKeyOut):
     """
 
     key: str
+
+
+# --------------------------------------------------------------------------- #
+# Embed sessions (render netra enrollment inside a client app)
+# --------------------------------------------------------------------------- #
+class EmbedSessionCreate(BaseModel):
+    external_id: str = Field(min_length=1, max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
+    return_origin: str = Field(min_length=1, max_length=1024)
+    is_minor: bool = False
+    purpose: Literal["enroll"] = "enroll"
+
+
+class EmbedSessionMinted(BaseModel):
+    """Returned ONCE on mint — the token lives only inside ``url``."""
+
+    token: str
+    url: str
+    expires_at: datetime
+
+
+class EmbedSessionInfo(BaseModel):
+    """Bootstrap context for the embed page (no secret)."""
+
+    purpose: str
+    external_id: str | None
+    full_name: str | None
+    is_minor: bool
+    return_origin: str
+    expires_at: datetime | None = None
+
+
+class IntegrationUserOut(BaseModel):
+    """End-user row exposed to the integration pull API (subset of UserOut)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    full_name: str
+    external_id: str | None
+    enrolled: bool
+    is_active: bool
+    created_at: datetime
 
 
 # --------------------------------------------------------------------------- #

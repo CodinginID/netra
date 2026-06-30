@@ -34,8 +34,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${APP_DB_USER:-netra_app}:${APP_DB_PASSWORD:-netra_app}@postgres:5432/${POSTGRES_DB:-netra}
       DATABASE_ADMIN_URL: postgresql+asyncpg://${POSTGRES_USER:-netra}:${POSTGRES_PASSWORD:-netra}@postgres:5432/${POSTGRES_DB:-netra}
     ports:
-      # Host 8001 (8000 is used by another local project); container stays 8000.
-      - "8001:8000"
+      # 8000 is taken by other local projects — netra backend uses 5170 (host + container).
+      - "5170:5170"
 
 volumes:
   netra_pgdata:

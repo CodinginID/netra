@@ -23,7 +23,6 @@
   "company": "Company",
   "school": "School",
   "university": "University",
-
   "nav.dashboard": "Dashboard",
   "nav.tenant": "Tenants",
   "nav.users": "Users",
@@ -40,7 +39,6 @@
   "nav.skip_link": "Skip to main content",
   "title.super_admin": "Super Admin",
   "title.manage_tenant": "Manage Tenant",
-
   "global.welcome_title": "Global Dashboard — Super Admin 👋",
   "global.overview_desc": "Overview of all tenants in the system.",
   "stat.total_tenants": "Total Tenants",
@@ -53,7 +51,6 @@
   "btn.manage": "Manage",
   "btn.manage_all": "Manage All",
   "btn.view_all_tenants": "View all {{count}} tenants →",
-
   "tenant.title": "Tenants",
   "tenant.add": "Add Tenant",
   "tenant.search_placeholder": "Search tenants...",
@@ -91,46 +88,38 @@
   "tenant.option_company": "Company",
   "tenant.option_school": "School (K-12)",
   "tenant.option_university": "University / Campus",
-
   "banner.back_tooltip": "Back to tenant list",
   "banner.switch_tooltip": "Switch tenant",
   "banner.loading": "Loading...",
-
   "users.title": "Users",
   "users.subtitle": "Manage tenant users",
   "users.add": "Add User",
   "users.empty": "No users yet",
   "users.empty_desc": "Add your first user to start managing attendance",
   "users.search_placeholder": "Search users...",
-
   "devices.title": "Kiosk Devices",
   "devices.add": "Add Device",
   "devices.empty": "No devices yet",
   "devices.empty_desc": "Register your first kiosk device to start attendance",
-
   "schedules.title": "Work Schedules",
   "schedules.add": "Add Schedule",
   "schedules.empty": "No schedules yet",
   "schedules.empty_desc": "Create a default attendance schedule for your tenant",
   "schedules.shift": "Daily Shift",
   "schedules.session": "Session / Period",
-
   "attendance.title": "Attendance",
   "attendance.subtitle": "View and export attendance records",
   "attendance.empty": "No attendance data yet",
   "attendance.empty_desc": "Attendance data will appear once kiosks are in use",
-
   "daily_status.title": "Daily Attendance Status",
   "daily_status.subtitle": "Who has checked in and who hasn't, per day.",
   "daily_status.empty": "No users yet",
   "daily_status.empty_desc": "Add users and enroll their faces to start monitoring attendance.",
-
   "integration.title": "Integration & API",
   "integration.subtitle": "Create API keys so your applications can pull attendance data from Netra.",
   "integration.add": "Create API Key",
   "integration.empty": "No API keys yet",
   "integration.empty_desc": "Create your first API key to connect your apps with Netra attendance data.",
-
   "trash.title": "Trash",
   "trash.subtitle": "Deleted items can be restored within 30 days",
   "trash.tab_users": "Users",
@@ -140,13 +129,11 @@
   "trash.empty_devices": "No deleted devices",
   "trash.empty_schedules": "No deleted schedules",
   "trash.restore": "Restore",
-
   "settings.title": "Settings",
   "settings.language": "Language",
   "settings.language_en": "English",
   "settings.language_id": "Bahasa Indonesia",
   "settings.language_desc": "Choose the display language for the application.",
-
   "login.welcome": "Welcome back",
   "login.subtitle": "Sign in to manage your organization's attendance.",
   "login.email": "Email",
@@ -161,12 +148,10 @@
   "login.cannot_verify": "Could not verify. Please try again.",
   "login.show_password": "Show password",
   "login.hide_password": "Hide password",
-
   "theme.light": "Light mode",
   "theme.dark": "Dark mode",
   "theme.change_password": "Change Password",
   "theme.sign_out": "Sign Out",
-
   "password.current": "Current Password",
   "password.new": "New Password",
   "password.confirm": "Confirm New Password",
@@ -176,7 +161,6 @@
   "password.error_invalid_session": "Invalid session, please log in again",
   "password.error_failed": "Failed to change password",
   "password.success": "Password changed successfully",
-
   "error.404_title": "404",
   "error.404_desc": "Page not found.",
   "error.403_title": "403",
@@ -184,20 +168,16 @@
   "error.go_home": "Go home",
   "error.something_wrong": "Something went wrong",
   "error.reload_page": "Reload page",
-
   "notification.late_title": "Late today ({{count}})",
   "notification.no_late": "No late check-ins",
-
   "pagination.per_page": "/ page",
   "pagination.first": "First page",
   "pagination.prev": "Previous page",
   "pagination.page": "Page {{page}}",
   "pagination.next": "Next page",
   "pagination.last": "Last page",
-
   "pull_refresh.release": "Release to reload",
   "pull_refresh.pull": "Pull to reload",
-
   "keyboard_shortcuts.title": "Keyboard Shortcuts",
   "keyboard_shortcuts.general": "General",
   "keyboard_shortcuts.show": "Show keyboard shortcuts",
@@ -208,10 +188,8 @@
   "keyboard_shortcuts.to_schedules": "Go to Schedules",
   "keyboard_shortcuts.then": "then",
   "keyboard_shortcuts.hint": "Press ? anytime to open this panel",
-
   "onboarding.complete_title": "Setup complete! Enjoy using Netra.",
   "onboarding.save_failed": "Failed to save setup",
-
   "login.access_granted": "Access Granted",
   "login.sign_in_with_arrow": "Sign In",
   "login.powered_by": "Powered by",
@@ -222,7 +200,6 @@
   "login.liveness_meta": "Liveness 99.2% · 6 ms",
   "login.show_password_aria": "Show password",
   "login.hide_password_aria": "Hide password",
-
   "kiosk.setup": "Setup",
   "kiosk.setup_title": "Device Token Configuration",
   "kiosk.setup_desc": "Enter the kiosk device token provided by your tenant administrator. The token is saved in this device's localStorage.",
@@ -271,7 +248,6 @@
   "kiosk.early_leave": "Early Leave",
   "kiosk.checkin_success": "{{label}} successful — {{name}}",
   "kiosk.error_occurred": "An error occurred.",
-
   "selfenroll.title": "Self Face Enrollment",
   "selfenroll.step_login": "1. Sign In",
   "selfenroll.step_capture": "2. Record Face",
@@ -304,13 +280,10 @@
   "selfenroll.turn_left_hint": "Turn your head slowly to the left",
   "selfenroll.turn_right": "Turn RIGHT",
   "selfenroll.turn_right_hint": "Turn your head slowly to the right",
-
   "profile.menu_account": "Account menu",
-
   "mobile.more": "More",
   "mobile.more_menu": "More menu",
   "mobile.dark_theme": "Dark theme",
-
   "onboarding.step1_title": "Welcome to Netra",
   "onboarding.step1_body": "Manage face-recognition-based attendance from one dashboard. Let's go through a few quick tips.",
   "onboarding.step2_title": "Search & filter anywhere",
@@ -321,16 +294,13 @@
   "onboarding.got_it": "Got it",
   "onboarding.next": "Next",
   "onboarding.guide_label": "Onboarding guide",
-
   "banner.cta_start": "Start Setup",
   "banner.dismiss_label": "Dismiss banner",
   "banner.setup_title": "Complete initial setup",
   "banner.setup_body": "Create a schedule, register a device, and add users so attendance can start running.",
-
   "donut.no_data": "No data to display yet.",
   "donut.chart_label": "Donut chart: total {{total}}",
   "donut.no_data_label": "No data",
-
   "heatmap.mon": "Mon",
   "heatmap.tue": "Tue",
   "heatmap.wed": "Wed",
@@ -342,12 +312,9 @@
   "heatmap.attendance": "attendance",
   "heatmap.few": "Few",
   "heatmap.many": "Many",
-
   "pagination.items": "items",
   "pagination.per_page_label": "Items per page",
-
   "tenant_admin.title": "Tenant Admin",
-
   "dashboard.today_attendance": "Today's Attendance",
   "dashboard.today_subtitle": "Attendance recap as of today",
   "dashboard.live": "LIVE",
@@ -365,7 +332,6 @@
   "dashboard.trend_late": "Late",
   "dashboard.action_check_in": "Check In",
   "dashboard.action_check_out": "Check Out",
-
   "onboarding.step_welcome": "Welcome",
   "onboarding.step_schedule": "Schedule",
   "onboarding.step_device": "Device",
@@ -373,7 +339,6 @@
   "onboarding.step_test": "Test Run",
   "onboarding.test_step_check": "Check attendance results — ensure status is \"On Time\"",
   "onboarding.device_step_name": "Enter device name (e.g. \"Lobby Kiosk\")",
-
   "users.role_admin": "Admin",
   "users.role_employee": "Employee",
   "users.enrolled": "Enrolled",
@@ -408,12 +373,10 @@
   "users.username_placeholder": "Username (optional)",
   "users.show_password": "Show password",
   "users.hide_password": "Hide password",
-  "users.subtitle": "Manage tenant users",
   "users.stat_total": "Total Users",
   "users.stat_enrolled": "Enrolled",
   "users.stat_not_enrolled": "Not Enrolled",
   "users.load_error": "Failed to load users",
-  "users.search_placeholder": "Search users...",
   "users.search_label": "Search users",
   "users.th_name": "Name",
   "users.th_username": "Username",
@@ -440,12 +403,7 @@
   "users.card_edit": "Edit",
   "users.swipe_edit": "Edit",
   "users.swipe_delete": "Delete",
-
-  "devices.title": "Kiosk Devices",
-  "devices.add": "Add Device",
   "devices.add_title": "Add Device",
-  "devices.empty": "No devices yet",
-  "devices.empty_desc": "Register your first kiosk device to start attendance",
   "devices.status_active": "Active",
   "devices.status_revoked": "Revoked",
   "devices.never_seen": "Never",
@@ -484,15 +442,8 @@
   "devices.toast_restore_failed": "Failed to cancel deletion",
   "devices.reset_title_active": "Create new token (old token will be immediately invalidated)",
   "devices.reset_title_inactive": "Create new token & re-activate device",
-
-  "schedules.title": "Work Schedules",
-  "schedules.add": "Add Schedule",
-  "schedules.empty": "No schedules yet",
-  "schedules.empty_desc": "Create a default attendance schedule for your tenant",
   "schedules.status_default": "Default",
   "schedules.status_normal": "Normal",
-  "schedules.shift": "Daily Shift",
-  "schedules.session": "Session / Period",
   "schedules.time_in": "Start Time",
   "schedules.time_out": "End Time",
   "schedules.session_name": "Session name",
@@ -531,11 +482,6 @@
   "schedules.delete_aria": "Delete schedule",
   "schedules.swipe_edit": "Edit",
   "schedules.swipe_delete": "Delete",
-
-  "attendance.title": "Attendance",
-  "attendance.subtitle": "View and export attendance records",
-  "attendance.empty": "No attendance data yet",
-  "attendance.empty_desc": "Attendance data will appear once kiosks are in use",
   "attendance.loading": "Loading...",
   "attendance.stat_total": "Total Records",
   "attendance.stat_on_time": "On Time",
@@ -564,11 +510,6 @@
   "attendance.card_status": "Status",
   "attendance.card_location": "Location",
   "attendance.card_liveness": "Liveness Score",
-
-  "daily_status.title": "Daily Attendance Status",
-  "daily_status.subtitle": "Who has checked in and who hasn't, per day.",
-  "daily_status.empty": "No users yet",
-  "daily_status.empty_desc": "Add users and enroll their faces to start monitoring attendance.",
   "daily_status.loading": "Loading...",
   "daily_status.stat_total": "Total",
   "daily_status.stat_present": "Present",
@@ -592,12 +533,6 @@
   "daily_status.status_late": "Late",
   "daily_status.status_checked_out": "Checked Out",
   "daily_status.status_absent": "Absent",
-
-  "integration.title": "Integration & API",
-  "integration.subtitle": "Create API keys so your applications can pull attendance data from Netra.",
-  "integration.add": "Create API Key",
-  "integration.empty": "No API keys yet",
-  "integration.empty_desc": "Create your first API key to connect your apps with Netra attendance data.",
   "integration.loading": "Loading...",
   "integration.load_error": "Failed to load API keys",
   "integration.create_title": "Create API Key",
@@ -648,23 +583,12 @@
   "integration.guide_notes_li2": "The key is automatically bound to your organization; other tenants' data will never be included.",
   "integration.guide_notes_li3": "If the key leaks, click Reset to create a new key (old key immediately dies), or Revoke.",
   "integration.guide_notes_li4": "Response 401 = key wrong/revoked/expired. Response 403 = key lacks required scope.",
-
-  "trash.title": "Trash",
-  "trash.subtitle": "Deleted items can be restored within 30 days",
-  "trash.tab_users": "Users",
-  "trash.tab_devices": "Devices",
-  "trash.tab_schedules": "Schedules",
-  "trash.empty_users": "No deleted users",
-  "trash.empty_devices": "No deleted devices",
-  "trash.empty_schedules": "No deleted schedules",
   "trash.loading": "Loading...",
   "trash.th_name": "Name",
   "trash.th_deleted_at": "Deleted At",
   "trash.th_actions": "Actions",
-  "trash.restore": "Restore",
   "toast_restored": "{{name}} restored successfully",
   "toast_restore_failed": "Failed to restore",
-
   "enrollment.title": "Face Enrollment",
   "enrollment.subtitle": "Record user faces from 3 angles for accurate identification",
   "enrollment.step1": "Select User",
@@ -705,5 +629,26 @@
   "enrollment.consent_hint": "Check consent first",
   "enrollment.toast_success": "Enrollment successful — {{count}} face angles enrolled.",
   "enrollment.toast_error": "Enrollment failed.",
-  "enrollment.preview_alt": "Angle {{index}}"
+  "enrollment.preview_alt": "Angle {{index}}",
+  "integration.tab_ai": "Build with AI",
+  "integration.tab_api": "Step-by-step (API Key)",
+  "integration.ai_intro": "Fastest path: copy the prompt below, paste it into an AI coding assistant (Claude, Cursor, etc.), replace the placeholders with your API key. The AI will build the backend proxy + frontend integration in your app.",
+  "integration.ai_prompt_label": "Prompt for your AI agent",
+  "integration.ai_note": "Important: the API key is a secret. Keep it on your backend and call Netra from there — never put it in browser code.",
+  "integration.guide_users_title": "6. Pull users + enrolled status",
+  "integration.guide_users_desc": "To show who has/hasn't enrolled their face (scope users:read).",
+  "integration.guide_embed_title": "7. Embed enrollment (capture face inside your app)",
+  "integration.guide_embed_desc": "Your backend mints a one-time session, your frontend renders the URL in an <iframe>. Listen for the result via postMessage.",
+  "integration.guide_webhook_title": "8. Webhook (optional, real-time)",
+  "integration.guide_webhook_desc": "Register an endpoint to receive attendance.check_in / attendance.check_out / enrollment.completed events in real time (HMAC-signed).",
+  "integration.step1_title": "Step 1 — Create an API Key",
+  "integration.step1_body": "Click \"Create API Key\" above. The token is shown once — copy it, store it safely, and hand it to your app's developer.",
+  "integration.step2_title": "Step 2 — Build the integration in your app",
+  "integration.step2_choose": "Pick one approach:",
+  "integration.mode_ai": "🚀 Use AI (fast)",
+  "integration.mode_manual": "🔧 Manual (API)",
+  "integration.step3_title": "Step 3 — Embed enrollment (capture faces inside your app)",
+  "integration.step3_note": "Note: your app's domain must be on the embed allowlist for the iframe to be allowed. If mint returns 403, register your origin first.",
+  "integration.step4_title": "Step 4 — Test, go real-time, then go live",
+  "integration.step4_body": "Pull data using the Step 2 examples to confirm the connection. For automatic updates (no polling), register a webhook to receive events in real time."
 }

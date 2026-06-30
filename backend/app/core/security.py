@@ -131,6 +131,22 @@ def api_key_display_prefix(key: str) -> str:
     return key[: len(API_KEY_PREFIX) + 6]
 
 
+# --------------------------------------------------------------------------- #
+# Embed session tokens (server-to-server tenant integration — embed flow)
+# --------------------------------------------------------------------------- #
+EMBED_TOKEN_PREFIX = "ntr_embed_"
+
+
+def generate_embed_token() -> str:
+    """High-entropy one-time token carried in the embed URL (shown once)."""
+    return f"{EMBED_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def hash_embed_token(token: str) -> str:
+    """SHA-256 digest for at-rest storage + lookup by hash."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 __all__ = [
     "hash_password",
     "verify_password",
@@ -147,5 +163,8 @@ __all__ = [
     "verify_api_key",
     "api_key_display_prefix",
     "API_KEY_PREFIX",
+    "generate_embed_token",
+    "hash_embed_token",
+    "EMBED_TOKEN_PREFIX",
     "JWTError",
 ]

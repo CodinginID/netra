@@ -468,3 +468,67 @@
 .kiosk-lock-icon { font-size: 3rem; margin-bottom: 1rem; }
 .kiosk-lock-text { font-size: 1.5rem; font-weight: 600; opacity: 0.8; letter-spacing: 0.05em; }
 
+/* ── Responsive: mobile / small screens ── */
+@media (max-width: 768px) {
+  .kiosk-page { padding: 1rem 0.75rem; }
+
+  /* Compact header: stack brand + clock, settings di kanan */
+  .kiosk-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .kiosk-brand { font-size: 1.15rem; }
+  .kiosk-brand-icon { width: 18px; height: 18px; }
+
+  .kiosk-clock { text-align: right; flex: unset; }
+  .kiosk-clock-time {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+  .kiosk-clock-date {
+    font-size: 0.65rem;
+    display: none; /* hide date on small screens to save space */
+  }
+
+  /* Camera area: full width, smaller aspect */
+  .kiosk-camera-area { max-width: 100%; }
+  .kiosk-camera-wrapper {
+    border-radius: 8px;
+    aspect-ratio: 3 / 4; /* portrait on mobile — better for selfie camera */
+  }
+
+  /* Status bar: stack vertically, smaller */
+  .kiosk-status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    font-size: 0.7rem;
+    padding: 0 0.5rem;
+  }
+
+  /* Countdown: hide label, keep bar */
+  .kiosk-countdown-label { display: none; }
+  .kiosk-countdown { max-width: 100%; padding: 0 0.5rem; }
+
+  /* Setup panel: full width */
+  .kiosk-setup-panel,
+  .kiosk-no-token-warning,
+  .kiosk-offline-banner { max-width: 100%; }
+
+  /* Result overlay: smaller text */
+  .kiosk-result-name { font-size: 1.35rem; }
+  .kiosk-result-time { font-size: 1.75rem; }
+  .kiosk-result-type-badge { font-size: 0.7rem; }
+  .kiosk-result-error-msg { font-size: 0.95rem; }
+  .kiosk-result-overlay { padding: 1rem; }
+
+  /* Processing: smaller */
+  .kiosk-scan-icon { width: 28px; height: 28px; }
+  .kiosk-processing p { font-size: 0.85rem; }
+
+  /* Token input: stack on very small screens */
+  .kiosk-token-row { flex-direction: column; }
+  .kiosk-token-save-btn { text-align: center; }
+}
+

@@ -12,19 +12,29 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ApiPrincipal, get_api_db, require_scope
 from app.api.v1.reports import DailyStatusOut
-from app.models import AttendanceRecord
-from app.schemas import AttendanceOut, Envelope, TenantConfig
-from app.services import report_service, tenant_service
+from app.core.config import settings
+from app.models import AttendanceRecord, Role, User
+from app.schemas import (
+    AttendanceOut,
+    EmbedSessionCreate,
+    EmbedSessionMinted,
+    Envelope,
+    IntegrationUserOut,
+    TenantConfig,
+)
+from app.services import audit_service, embed_session_service, report_service, tenant_service
 
 router = APIRouter(prefix="/integration", tags=["integration"])
 
 ATTENDANCE_READ = require_scope("attendance:read")
+USERS_READ = require_scope("users:read")
+EMBED_ENROLL = require_scope("embed:enroll")
 
 
 def _parse_day(value: str, field: str) -> datetime:
@@ -101,4 +111,79 @@ async def daily_status(
             )
             for r in rows
         ]
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Users (pull) — for syncing roster + enrolled status to the client dashboard
+# --------------------------------------------------------------------------- #
+@router.get("/users", response_model=Envelope[dict])
+async def list_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=1000),
+    _: ApiPrincipal = Depends(USERS_READ),
+    session: AsyncSession = Depends(get_api_db),
+) -> Envelope[dict]:
+    """Paginated end-users for the calling tenant, with their enrolled flag."""
+    filters = [User.role == Role.end_user, User.deleted_at.is_(None)]
+    total = (await session.execute(select(func.count(User.id)).where(*filters))).scalar() or 0
+    offset = (page - 1) * limit
+    rows = (
+        await session.execute(
+            select(User).where(*filters).order_by(User.full_name.asc()).offset(offset).limit(limit)
+        )
+    ).scalars()
+    items = [IntegrationUserOut.model_validate(u) for u in rows]
+    pages = (total + limit - 1) // limit if total > 0 else 0
+    return Envelope(
+        data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Embed sessions (mint) — render netra enrollment inside the client app
+# --------------------------------------------------------------------------- #
+@router.post(
+    "/embed-sessions",
+    response_model=Envelope[EmbedSessionMinted],
+    status_code=status.HTTP_201_CREATED,
+)
+async def mint_embed_session(
+    payload: EmbedSessionCreate,
+    request: Request,
+    principal: ApiPrincipal = Depends(EMBED_ENROLL),
+    session: AsyncSession = Depends(get_api_db),
+) -> Envelope[EmbedSessionMinted]:
+    """Mint a one-time embed session token + URL for the client to iframe."""
+    tenant = await tenant_service.get_tenant(session, principal.tenant_id)
+    cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
+    if not embed_session_service.origin_allowed(cfg.embed.allowed_origins, payload.return_origin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="return_origin is not in this tenant's embed allowlist",
+        )
+
+    embed, token = await embed_session_service.create(
+        session,
+        principal.tenant_id,
+        external_id=payload.external_id,
+        full_name=payload.full_name,
+        return_origin=payload.return_origin,
+        is_minor=payload.is_minor,
+        ttl_minutes=settings.embed_ttl_minutes,
+    )
+    await audit_service.record(
+        session,
+        action="embed.session_minted",
+        actor=principal.key_id,
+        tenant_id=principal.tenant_id,
+        detail={"embed_session_id": embed.id, "external_id": payload.external_id},
+    )
+
+    # Embed URL points at the frontend route /embed/enroll (the SPA serves the
+    # chromeless page). Falls back to spa_asset_base, then the request origin.
+    base = (settings.embed_base_url or settings.spa_asset_base or str(request.base_url)).rstrip("/")
+    url = f"{base}/embed/enroll?token={token}"
+    return Envelope(
+        data=EmbedSessionMinted(token=token, url=url, expires_at=embed.expires_at)
     )
