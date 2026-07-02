@@ -43,6 +43,13 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY app/ app/
 
+# Copy DB migrations + operational scripts so they are runnable in prod, e.g.
+#   docker exec netra-backend alembic upgrade head
+#   docker exec netra-backend python -m scripts.seed_superadmin --email ... --password ...
+COPY alembic/ alembic/
+COPY alembic.ini ./
+COPY scripts/ scripts/
+
 # Copy all pre-downloaded models from the builder stage
 COPY --from=builder /app/models/ /app/models/
 
