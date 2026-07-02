@@ -1,0 +1,40 @@
+# Standalone PostgreSQL + pgvector — for a dedicated DATABASE server.
+#
+# The netra backend (which may live on a different server) connects to this over
+# the network. Frontend never touches the DB.
+#
+# Usage on the DB server:
+#   cp .env.db.example .env        # then edit the passwords
+#   docker compose -f docker-compose.db.yml up -d
+#
+# Then, from the BACKEND server, point DATABASE_URL / DATABASE_ADMIN_URL at
+#   <this-server-ip>:5436  and run:  alembic upgrade head
+# (migrations create the `vector` extension, the netra_app role, and all tables —
+#  so no init-db.sql bind mount is needed here.)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: netra-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong password in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-netra}
+    ports:
+      # host:container — remote backend connects to <db-server-ip>:5436.
+      # SECURITY: firewall this port to the backend server's IP only, e.g.
+      #   ufw allow from <BACKEND_IP> to any port 5436
+      - "${DB_HOST_PORT:-5436}:5432"
+    volumes:
+      - netra_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -d avoids "database <user> does not exist" FATAL noise (pg_isready
+      # otherwise defaults dbname to the username).
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  netra_pgdata:

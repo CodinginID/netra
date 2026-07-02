@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -56,13 +57,31 @@ class Settings(BaseSettings):
     )
 
     # --- CORS ---
-    cors_origins: list[str] = Field(
+    # NoDecode: keep pydantic-settings from JSON-decoding the env value so our
+    # validator can accept BOTH a comma-separated list ("a,b,c") AND a JSON
+    # array ('["a","b"]'). Prevents SettingsError on the common comma format.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:5173",  # Vite dev server (default)
             "http://localhost:7002",
             "http://localhost:3000",
         ]
     )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v: object) -> object:
+        """Accept comma-separated string, JSON array string, or a real list."""
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                import json
+
+                return json.loads(s)
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v
 
     # --- Face recognition engine ---
     embedding_dim: int = 512  # InsightFace ArcFace buffalo_s

@@ -49,6 +49,7 @@ COPY app/ app/
 COPY alembic/ alembic/
 COPY alembic.ini ./
 COPY scripts/ scripts/
+RUN chmod +x scripts/entrypoint.sh
 
 # Copy all pre-downloaded models from the builder stage
 COPY --from=builder /app/models/ /app/models/
@@ -66,5 +67,9 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 EXPOSE 5170
+
+# Entrypoint optionally seeds a super admin from SUPERADMIN_EMAIL/PASSWORD, then
+# execs the CMD below. Idempotent + non-fatal — safe when unset.
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5170"]

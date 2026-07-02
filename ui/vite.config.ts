@@ -13,7 +13,7 @@ export default defineConfig({
         name: 'Netra — Face Attendance',
         short_name: 'Netra',
         description: 'Multi-tenant face-recognition attendance platform',
-        theme_color: '#1a56db',
+        theme_color: '#0d9488',
         background_color: '#f8f9ff',
         display: 'standalone',
         orientation: 'portrait',

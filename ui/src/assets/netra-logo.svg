@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="orb" cx="40%" cy="35%" r="55%">
+      <stop offset="0%" style="stop-color:#5eead4"/>
+      <stop offset="50%" style="stop-color:#0d9488"/>
+      <stop offset="100%" style="stop-color:#006387"/>
+    </radialGradient>
+  </defs>
+  <!-- Gradient orb background -->
+  <circle cx="64" cy="64" r="56" fill="url(#orb)"/>
+  <!-- Eye shape inside orb -->
+  <path d="M24 65c8-14 22-24 40-24s32 10 40 24a3 3 0 010 1.5c-8 14-22 24-40 24s-32-10-40-24a3 3 0 010-1.5z" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Pupil -->
+  <circle cx="64" cy="65" r="14" fill="#fff"/>
+  <!-- Inner pupil dot -->
+  <circle cx="64" cy="65" r="5" fill="url(#orb)"/>
+</svg>

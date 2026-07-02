@@ -186,42 +186,82 @@ function FaceScanVisual({ state }: { state: ScanState }) {
   const { t } = useI18n()
   return (
     <div className={`auth-face-scan ${state}`}>
-      <svg viewBox="0 0 220 240" className="face-scan-svg" aria-hidden="true">
-        {/* Corner brackets */}
-        <path d="M 32 86 L 32 56 L 62 56" fill="none" stroke="rgba(107,216,203,0.85)" strokeWidth="2.5" strokeLinecap="round" className="bracket"/>
-        <path d="M 188 86 L 188 56 L 158 56" fill="none" stroke="rgba(107,216,203,0.85)" strokeWidth="2.5" strokeLinecap="round" className="bracket"/>
-        <path d="M 32 178 L 32 208 L 62 208" fill="none" stroke="rgba(107,216,203,0.85)" strokeWidth="2.5" strokeLinecap="round" className="bracket"/>
-        <path d="M 188 178 L 188 208 L 158 208" fill="none" stroke="rgba(107,216,203,0.85)" strokeWidth="2.5" strokeLinecap="round" className="bracket"/>
-        {/* Face oval */}
-        <ellipse cx="110" cy="132" rx="58" ry="72" fill="none" stroke="rgba(107,216,203,0.3)" strokeWidth="1.5" strokeDasharray="5 4"/>
-        {/* Mesh lines */}
-        <line x1="52" y1="112" x2="168" y2="112" stroke="rgba(107,216,203,0.1)" strokeWidth="1"/>
-        <line x1="52" y1="132" x2="168" y2="132" stroke="rgba(107,216,203,0.1)" strokeWidth="1"/>
-        <line x1="52" y1="152" x2="168" y2="152" stroke="rgba(107,216,203,0.1)" strokeWidth="1"/>
-        <line x1="52" y1="172" x2="168" y2="172" stroke="rgba(107,216,203,0.1)" strokeWidth="1"/>
-        {/* Eyes */}
-        <ellipse cx="88" cy="118" rx="13" ry="8" fill="none" stroke="rgba(107,216,203,0.55)" strokeWidth="1.5" className="eye"/>
-        <ellipse cx="132" cy="118" rx="13" ry="8" fill="none" stroke="rgba(107,216,203,0.55)" strokeWidth="1.5" className="eye"/>
-        <circle cx="88" cy="118" r="2.5" fill="#6bd8cb"/>
-        <circle cx="132" cy="118" r="2.5" fill="#6bd8cb"/>
-        {/* Nose */}
-        <path d="M 100 134 L 110 146 L 120 134" fill="none" stroke="rgba(107,216,203,0.4)" strokeWidth="1.5" strokeLinejoin="round"/>
-        <circle cx="110" cy="146" r="2" fill="rgba(107,216,203,0.6)"/>
-        {/* Mouth */}
-        <path d="M 95 162 Q 110 172 125 162" fill="none" stroke="rgba(107,216,203,0.4)" strokeWidth="1.5"/>
-        {/* Top landmark */}
-        <circle cx="110" cy="62" r="3" fill="rgba(107,216,203,0.5)"/>
-        <line x1="110" y1="62" x2="110" y2="70" stroke="rgba(107,216,203,0.3)" strokeWidth="1"/>
-        {/* Side landmarks */}
-        <circle cx="52" cy="132" r="2" fill="rgba(107,216,203,0.4)"/>
-        <circle cx="168" cy="132" r="2" fill="rgba(107,216,203,0.4)"/>
-        {/* Scan glow */}
-        <rect x="38" y="90" width="144" height="6" fill="rgba(107,216,203,0.12)" rx="3" className="scan-glow"/>
-        {/* Scan line */}
-        <rect x="38" y="93" width="144" height="2" fill="rgba(107,216,203,0.9)" rx="1" className="scan-line"/>
-        {/* Verified overlay circle */}
-        <circle cx="110" cy="132" r="30" fill="none" stroke="rgba(107,216,203,0)" strokeWidth="2" className="verified-ring"/>
-      </svg>
+      {/* 3D ID Card with face */}
+      <div className="face-scan-card">
+        <div className="face-scan-card-inner">
+          {/* Card front face */}
+          <div className="face-scan-card-face">
+            {/* Card header */}
+            <div className="face-scan-card-header">
+              <div className="face-scan-card-chip" />
+              <span className="face-scan-card-label">netra</span>
+            </div>
+
+            {/* Face photo area */}
+            <div className="face-scan-photo">
+              <svg viewBox="0 0 120 140" className="face-scan-face-svg" aria-hidden="true">
+                {/* Living head — breathes & bobs subtly */}
+                <g className="face-head">
+                  {/* Face silhouette */}
+                  <ellipse cx="60" cy="55" rx="32" ry="40" fill="rgba(107,216,203,0.08)" stroke="rgba(107,216,203,0.3)" strokeWidth="1.5"/>
+
+                  {/* Eyes — blink together via scaleY */}
+                  <g className="face-eyes">
+                    <ellipse cx="48" cy="48" rx="7" ry="4.5" fill="none" stroke="rgba(107,216,203,0.6)" strokeWidth="1.2" className="face-eye"/>
+                    <ellipse cx="72" cy="48" rx="7" ry="4.5" fill="none" stroke="rgba(107,216,203,0.6)" strokeWidth="1.2" className="face-eye"/>
+                    {/* Pupils — glance around */}
+                    <g className="face-pupils">
+                      <circle cx="48" cy="48" r="2" fill="#6bd8cb" className="eye-pupil"/>
+                      <circle cx="72" cy="48" r="2" fill="#6bd8cb" className="eye-pupil"/>
+                    </g>
+                  </g>
+
+                  {/* Nose */}
+                  <path d="M 55 58 L 60 66 L 65 58" fill="none" stroke="rgba(107,216,203,0.35)" strokeWidth="1.2" strokeLinejoin="round"/>
+
+                  {/* Mouth — neutral by default, smiles when verified */}
+                  <path d="M 50 75 Q 60 82 70 75" fill="none" stroke="rgba(107,216,203,0.35)" strokeWidth="1.2" className="face-mouth face-mouth-neutral"/>
+                  <path d="M 48 74 Q 60 88 72 74" fill="none" stroke="rgba(52,211,153,0.7)" strokeWidth="1.4" strokeLinecap="round" className="face-mouth face-mouth-smile"/>
+
+                  {/* Face mesh points */}
+                  <g className="face-mesh">
+                    <circle cx="48" cy="48" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="72" cy="48" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="60" cy="58" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="52" cy="65" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="68" cy="65" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="60" cy="75" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="40" cy="58" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                    <circle cx="80" cy="58" r="1.5" fill="rgba(107,216,203,0.5)" className="mesh-dot"/>
+                  </g>
+                </g>
+
+                {/* Scan line across face — scanner overlay, stays in frame */}
+                <rect x="20" y="60" width="80" height="1.5" fill="rgba(107,216,203,0.8)" rx="0.75" className="scan-line"/>
+                <rect x="20" y="58" width="80" height="5" fill="rgba(107,216,203,0.1)" rx="2.5" className="scan-glow"/>
+
+                {/* Radar pulse */}
+                <circle cx="60" cy="60" r="0" fill="none" stroke="rgba(107,216,203,0.3)" strokeWidth="1" className="radar-scan"/>
+              </svg>
+            </div>
+
+            {/* Card info lines */}
+            <div className="face-scan-card-info">
+              <div className="face-scan-info-line short" />
+              <div className="face-scan-info-line long" />
+              <div className="face-scan-info-line medium" />
+            </div>
+
+            {/* Scan status indicator */}
+            <div className="face-scan-card-footer">
+              <div className={`face-scan-status-dot ${state === 'scanning' ? 'active' : state === 'verified' ? 'success' : state === 'failed' ? 'error' : 'idle'}`} />
+              <span className="face-scan-card-footer-text">
+                {state === 'scanning' ? 'Scanning...' : state === 'verified' ? 'Verified' : state === 'failed' ? 'Failed' : 'Ready'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="face-scan-status">
         {state === 'scanning' && (

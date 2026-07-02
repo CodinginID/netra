@@ -50,8 +50,14 @@
   gap: 0.5rem;
   font-size: 1.5rem;
   font-weight: 800;
-  color: #fff;
   letter-spacing: -0.5px;
+}
+
+.kiosk-brand span {
+  background: linear-gradient(135deg, #0d9488 0%, #006387 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .kiosk-brand-icon {
