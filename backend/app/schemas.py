@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -133,11 +134,9 @@ class VerticalConfig(BaseModel):
 
 
 class EmbedConfig(BaseModel):
-    """Embed integration prefs. ``allowed_origins`` are the client app origins
-    permitted to iframe netra's embed pages (frame-ancestors) and receive
-    postMessage. Exact-match scheme+host(+port), e.g. 'https://app.sekolah.id'."""
-
-    allowed_origins: list[str] = Field(default_factory=list)
+    """Embed integration prefs. Origin allowlisting lives per API key (see
+    ``ApiKeyCreate.allowed_origins``), not here — this is a placeholder for
+    future tenant-wide embed prefs."""
 
 
 class TenantConfig(BaseModel):
@@ -268,10 +267,25 @@ API_SCOPES: dict[str, str] = {
 }
 
 
+def _validate_origins(origins: list[str]) -> list[str]:
+    """Each origin must be scheme+host(+port) only, e.g. 'https://app.sekolah.id'
+    or 'http://localhost:7002' — no path/query/fragment (it's compared exactly
+    against the browser's Origin header, which never carries one)."""
+    cleaned = []
+    for raw in origins:
+        origin = raw.strip().rstrip("/")
+        parts = urlsplit(origin)
+        if parts.scheme not in ("http", "https") or not parts.netloc or parts.path:
+            raise ValueError(f"Invalid origin '{raw}': expected e.g. 'https://app.example.com'")
+        cleaned.append(origin)
+    return cleaned
+
+
 class ApiKeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     scopes: list[str] = Field(default_factory=lambda: ["attendance:read"])
     expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+    allowed_origins: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_scopes(self) -> ApiKeyCreate:
@@ -280,6 +294,18 @@ class ApiKeyCreate(BaseModel):
         invalid = [s for s in self.scopes if s not in API_SCOPES]
         if invalid:
             raise ValueError(f"Unknown scope(s): {', '.join(invalid)}")
+        self.allowed_origins = _validate_origins(self.allowed_origins)
+        return self
+
+
+class ApiKeyUpdate(BaseModel):
+    """Partial update — currently only the origin allowlist is editable."""
+
+    allowed_origins: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate(self) -> ApiKeyUpdate:
+        self.allowed_origins = _validate_origins(self.allowed_origins)
         return self
 
 
@@ -290,6 +316,7 @@ class ApiKeyOut(BaseModel):
     name: str
     prefix: str
     scopes: list[str]
+    allowed_origins: list[str]
     status: ApiKeyStatus
     last_used_at: datetime | None
     expires_at: datetime | None

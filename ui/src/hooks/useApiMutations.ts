@@ -106,6 +106,19 @@ export function useCreateApiKey(onSuccess?: () => void) {
   })
 }
 
+export function useUpdateApiKeyOrigins(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ keyId, allowedOrigins }: { keyId: string; allowedOrigins: string[] }) =>
+      api.updateApiKeyOrigins(token!, keyId, allowedOrigins),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.apiKeys() })
+      onSuccess?.()
+    },
+  })
+}
+
 export function useRotateApiKey(onSuccess?: () => void) {
   const token = useAuthStore((s) => s.accessToken)
   const qc = useQueryClient()

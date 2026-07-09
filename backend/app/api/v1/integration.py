@@ -155,12 +155,10 @@ async def mint_embed_session(
     session: AsyncSession = Depends(get_api_db),
 ) -> Envelope[EmbedSessionMinted]:
     """Mint a one-time embed session token + URL for the client to iframe."""
-    tenant = await tenant_service.get_tenant(session, principal.tenant_id)
-    cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
-    if not embed_session_service.origin_allowed(cfg.embed.allowed_origins, payload.return_origin):
+    if not embed_session_service.origin_allowed(principal.allowed_origins, payload.return_origin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="return_origin is not in this tenant's embed allowlist",
+            detail="return_origin is not in this API key's embed allowlist",
         )
 
     embed, token = await embed_session_service.create(

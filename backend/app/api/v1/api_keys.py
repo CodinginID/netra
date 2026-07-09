@@ -15,6 +15,7 @@ from app.schemas import (
     ApiKeyCreate,
     ApiKeyCreated,
     ApiKeyOut,
+    ApiKeyUpdate,
     Envelope,
 )
 from app.services import api_key_service, audit_service
@@ -48,6 +49,7 @@ async def create_api_key(
         name=payload.name,
         scopes=payload.scopes,
         expires_in_days=payload.expires_in_days,
+        allowed_origins=payload.allowed_origins,
     )
     await audit_service.record(
         session,
@@ -66,6 +68,28 @@ async def list_api_keys(
 ) -> Envelope[list[ApiKeyOut]]:
     keys = await api_key_service.list_keys(session)
     return Envelope(data=[ApiKeyOut.model_validate(k) for k in keys])
+
+
+@router.patch("/{key_id}", response_model=Envelope[ApiKeyOut])
+async def update_api_key(
+    key_id: str,
+    payload: ApiKeyUpdate,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[ApiKeyOut]:
+    """Edit a key's embed origin allowlist without rotating its secret."""
+    key = await api_key_service.get(session, key_id)
+    if key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+    key = await api_key_service.update_origins(session, key, payload.allowed_origins)
+    await audit_service.record(
+        session,
+        action="api_key.origins_updated",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"api_key_id": key.id, "allowed_origins": payload.allowed_origins},
+    )
+    return Envelope(data=ApiKeyOut.model_validate(key))
 
 
 @router.post("/{key_id}/rotate", response_model=Envelope[ApiKeyCreated])

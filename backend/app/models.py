@@ -270,6 +270,11 @@ class ApiKey(Base, TimestampMixin):
     prefix: Mapped[str] = mapped_column(String(20), nullable=False)  # non-secret display fragment
     key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     scopes: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    # Origins allowed to embed sessions minted by THIS key (frame-ancestors +
+    # return_origin check). Scoped per-key, like OAuth client redirect URIs,
+    # so it can be set at key-creation time and edited later without touching
+    # other keys on the same tenant.
+    allowed_origins: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     status: Mapped[ApiKeyStatus] = mapped_column(
         Enum(ApiKeyStatus, name="api_key_status"), default=ApiKeyStatus.active, nullable=False
     )

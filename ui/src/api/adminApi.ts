@@ -74,8 +74,24 @@ async function apiFetch<T>(url: string, token: string, init?: RequestInit): Prom
 
   if (res.status === 204) return undefined as T
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json.detail ?? json.error ?? `Request failed (${res.status})`)
+  if (!res.ok) throw new Error(extractErrorMessage(json, res.status))
   return (json.data ?? json) as T
+}
+
+/** Pydantic validation errors arrive as `detail: [{msg, loc, ...}]`, not a
+ * string — pull the human-readable message out instead of stringifying the
+ * array (which would render as "[object Object]"). */
+function extractErrorMessage(json: { detail?: unknown; error?: unknown }, status: number): string {
+  if (Array.isArray(json.detail)) {
+    const msgs = json.detail
+      .map((d) => (typeof d === 'object' && d && 'msg' in d ? String((d as { msg: unknown }).msg) : null))
+      .filter((m): m is string => Boolean(m))
+      .map((m) => m.replace(/^Value error, /, ''))
+    if (msgs.length) return msgs.join('; ')
+  }
+  if (typeof json.detail === 'string') return json.detail
+  if (typeof json.error === 'string' && json.error !== 'validation_error') return json.error
+  return `Request failed (${status})`
 }
 
 export interface PaginatedResponse<T> {
@@ -218,6 +234,7 @@ export interface ApiKeyOut {
   name: string
   prefix: string
   scopes: string[]
+  allowed_origins: string[]
   status: 'active' | 'revoked'
   last_used_at: string | null
   expires_at: string | null
@@ -238,11 +255,22 @@ export async function listApiKeyScopes(token: string): Promise<Record<string, st
 
 export async function createApiKey(
   token: string,
-  payload: { name: string; scopes: string[]; expires_in_days?: number | null },
+  payload: { name: string; scopes: string[]; expires_in_days?: number | null; allowed_origins?: string[] },
 ): Promise<ApiKeyCreated> {
   return apiFetch<ApiKeyCreated>(`${API_BASE}/api-keys`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export async function updateApiKeyOrigins(
+  token: string,
+  keyId: string,
+  allowedOrigins: string[],
+): Promise<ApiKeyOut> {
+  return apiFetch<ApiKeyOut>(`${API_BASE}/api-keys/${keyId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ allowed_origins: allowedOrigins }),
   })
 }
 

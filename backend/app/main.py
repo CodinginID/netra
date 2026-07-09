@@ -6,6 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -94,16 +95,25 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # pydantic leaves the raw exception object in errors()[i]["ctx"]["error"]
+        # for custom (e.g. model_validator ValueError) checks — not JSON-serializable
+        # on its own, so stringify it before it hits either the logger or the response.
+        def _stringify_ctx_error(e: dict) -> dict:
+            if not e.get("ctx", {}).get("error"):
+                return e
+            return {**e, "ctx": {**e["ctx"], "error": str(e["ctx"]["error"])}}
+
+        errors = [_stringify_ctx_error(e) for e in exc.errors()]
         log.warning(
             "request_validation_error",
             method=request.method,
             path=str(request.url.path),
             content_type=request.headers.get("content-type"),
-            errors=exc.errors(),
+            errors=errors,
         )
         return JSONResponse(
             status_code=422,
-            content={"data": None, "error": "validation_error", "detail": exc.errors()},
+            content=jsonable_encoder({"data": None, "error": "validation_error", "detail": errors}),
         )
 
     @app.exception_handler(Exception)

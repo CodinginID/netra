@@ -28,6 +28,7 @@ async def create(
     name: str,
     scopes: list[str],
     expires_in_days: int | None = None,
+    allowed_origins: list[str] | None = None,
 ) -> tuple[ApiKey, str]:
     """Create a key. Returns (ApiKey, plaintext_key) — surface the key once."""
     plaintext = generate_api_key()
@@ -40,6 +41,7 @@ async def create(
         prefix=api_key_display_prefix(plaintext),
         key_hash=hash_api_key(plaintext),
         scopes=scopes,
+        allowed_origins=allowed_origins or [],
         status=ApiKeyStatus.active,
         expires_at=expires_at,
     )
@@ -67,6 +69,12 @@ async def rotate(session: AsyncSession, key: ApiKey) -> str:
     key.status = ApiKeyStatus.active
     await session.flush()
     return plaintext
+
+
+async def update_origins(session: AsyncSession, key: ApiKey, allowed_origins: list[str]) -> ApiKey:
+    key.allowed_origins = allowed_origins
+    await session.flush()
+    return key
 
 
 async def revoke(session: AsyncSession, key: ApiKey) -> ApiKey:

@@ -12,6 +12,7 @@ import {
   useRotateApiKey,
   useRevokeApiKey,
   useDeleteApiKey,
+  useUpdateApiKeyOrigins,
 } from '@/hooks/useApiMutations'
 import '@/styles/layout.css'
 
@@ -118,6 +119,55 @@ function NewKeyBanner({ apiKey, rotated, onDismiss }: { apiKey: ApiKeyCreated; r
   )
 }
 
+// Editable list of origin strings, shared by the create-key form and the
+// edit-origins modal. Empty rows are dropped on submit (see callers).
+function OriginsField({ origins, onChange }: { origins: string[]; onChange: (next: string[]) => void }) {
+  const { t } = useI18n()
+  const rows = origins.length ? origins : ['']
+
+  const setAt = (i: number, value: string) => onChange(rows.map((v, idx) => (idx === i ? value : v)))
+  const removeAt = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
+
+  return (
+    <div className="field">
+      <label>{t('integration.origins_label')}</label>
+      <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 8px' }}>
+        {t('integration.origins_hint')}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map((origin, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6 }}>
+            <input
+              className="field-input"
+              type="text"
+              placeholder={t('integration.origins_placeholder')}
+              value={origin}
+              onChange={(e) => setAt(i, e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn-icon btn-icon-danger"
+              aria-label={t('integration.origins_remove')}
+              onClick={() => removeAt(i)}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        style={{ marginTop: 8 }}
+        onClick={() => onChange([...rows, ''])}
+      >
+        {t('integration.origins_add')}
+      </button>
+    </div>
+  )
+}
+
 function CreateKeyModal({
   scopes,
   onSubmit,
@@ -125,7 +175,7 @@ function CreateKeyModal({
   submitting,
 }: {
   scopes: Record<string, string>
-  onSubmit: (payload: { name: string; scopes: string[]; expires_in_days?: number | null }) => void
+  onSubmit: (payload: { name: string; scopes: string[]; expires_in_days?: number | null; allowed_origins: string[] }) => void
   onCancel: () => void
   submitting: boolean
 }) {
@@ -134,6 +184,7 @@ function CreateKeyModal({
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>(allScopes.length ? [allScopes[0]] : [])
   const [expiry, setExpiry] = useState<string>('')
+  const [origins, setOrigins] = useState<string[]>([])
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose: onCancel })
 
   const toggle = (s: string) =>
@@ -151,6 +202,7 @@ function CreateKeyModal({
                 name: name.trim(),
                 scopes: selected,
                 expires_in_days: expiry ? Number(expiry) : null,
+                allowed_origins: origins.map((o) => o.trim()).filter(Boolean),
               })
             }
           }}
@@ -192,12 +244,54 @@ function CreateKeyModal({
             </select>
           </div>
 
+          <OriginsField origins={origins} onChange={setOrigins} />
+
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost" onClick={onCancel}>
               {t('integration.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim() || !selected.length}>
               {submitting ? t('integration.creating') : t('integration.create_btn')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function EditOriginsModal({
+  apiKey,
+  onSubmit,
+  onCancel,
+  submitting,
+}: {
+  apiKey: ApiKeyOut
+  onSubmit: (allowedOrigins: string[]) => void
+  onCancel: () => void
+  submitting: boolean
+}) {
+  const { t } = useI18n()
+  const [origins, setOrigins] = useState<string[]>(apiKey.allowed_origins.length ? apiKey.allowed_origins : [])
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose: onCancel })
+
+  return (
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onCancel}>
+      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">{t('integration.edit_origins_title', { name: apiKey.name })}</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            onSubmit(origins.map((o) => o.trim()).filter(Boolean))
+          }}
+        >
+          <OriginsField origins={origins} onChange={setOrigins} />
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost" onClick={onCancel}>
+              {t('integration.cancel')}
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? t('integration.saving') : t('integration.save_btn')}
             </button>
           </div>
         </form>
@@ -474,6 +568,7 @@ export function IntegrationPage() {
   const [showForm, setShowForm] = useState(false)
   const [newKey, setNewKey] = useState<ApiKeyCreated | null>(null)
   const [rotated, setRotated] = useState(false)
+  const [editingOrigins, setEditingOrigins] = useState<ApiKeyOut | null>(null)
 
   const createMutation = useCreateApiKey(() => {
     setShowForm(false)
@@ -482,9 +577,23 @@ export function IntegrationPage() {
   const rotateMutation = useRotateApiKey()
   const revokeMutation = useRevokeApiKey(() => show(t('integration.toast_revoked'), 'success'))
   const deleteMutation = useDeleteApiKey(() => show(t('integration.toast_deleted'), 'success'))
+  const updateOriginsMutation = useUpdateApiKeyOrigins(() => {
+    setEditingOrigins(null)
+    show(t('integration.toast_origins_updated'), 'success')
+  })
 
-  const handleCreate = (payload: { name: string; scopes: string[]; expires_in_days?: number | null }) => {
-    createMutation.mutate(payload, { onSuccess: (k) => { setRotated(false); setNewKey(k) } })
+  const handleCreate = (payload: { name: string; scopes: string[]; expires_in_days?: number | null; allowed_origins: string[] }) => {
+    createMutation.mutate(payload, {
+      onSuccess: (k) => { setRotated(false); setNewKey(k) },
+      onError: (e) => show(e instanceof Error ? e.message : t('integration.toast_create_failed'), 'error'),
+    })
+  }
+  const handleUpdateOrigins = (allowedOrigins: string[]) => {
+    if (!editingOrigins) return
+    updateOriginsMutation.mutate(
+      { keyId: editingOrigins.id, allowedOrigins },
+      { onError: (e) => show(e instanceof Error ? e.message : t('integration.toast_origins_failed'), 'error') },
+    )
   }
   const handleRotate = (k: ApiKeyOut) => {
     if (!window.confirm(t('integration.reset_confirm', { name: k.name }))) return
@@ -529,6 +638,15 @@ export function IntegrationPage() {
         />
       )}
 
+      {editingOrigins && (
+        <EditOriginsModal
+          apiKey={editingOrigins}
+          onSubmit={handleUpdateOrigins}
+          onCancel={() => setEditingOrigins(null)}
+          submitting={updateOriginsMutation.isPending}
+        />
+      )}
+
       {error && <div className="error-banner">{error instanceof Error ? error.message : t('integration.load_error')}</div>}
 
       {isLoading ? (
@@ -565,12 +683,30 @@ export function IntegrationPage() {
               </code>
               <ScopeBadges scopes={k.scopes} />
 
+              <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+                <div style={{ marginBottom: 4 }}>{t('integration.origins_card_label')}:</div>
+                {k.allowed_origins.length ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {k.allowed_origins.map((o) => (
+                      <span key={o} className="badge badge-gray" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                        {o}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span>{t('integration.origins_none')}</span>
+                )}
+              </div>
+
               <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span>{t('integration.last_used')}: {formatDate(k.last_used_at)}</span>
                 <span>{t('integration.expires')}: {k.expires_at ? formatDate(k.expires_at) : t('integration.no_expiry')}</span>
               </div>
 
               <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditingOrigins(k)}>
+                  <KeyRound size={14} /> {t('integration.edit_origins_btn')}
+                </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => handleRotate(k)} title={t('integration.reset_title')}>
                   <RefreshCw size={14} /> {t('integration.reset_btn')}
                 </button>

@@ -224,6 +224,7 @@ class ApiPrincipal:
     key_id: str
     tenant_id: str
     scopes: list[str]
+    allowed_origins: list[str]
 
 
 async def get_api_principal(
@@ -266,9 +267,12 @@ async def get_api_principal(
         tenant_id = key.tenant_id
         key_id = key.id
         scopes = list(key.scopes or [])
+        allowed_origins = list(key.allowed_origins or [])
 
     tenant_id_ctx.set(tenant_id)
-    return ApiPrincipal(key_id=key_id, tenant_id=tenant_id, scopes=scopes)
+    return ApiPrincipal(
+        key_id=key_id, tenant_id=tenant_id, scopes=scopes, allowed_origins=allowed_origins
+    )
 
 
 async def get_api_db(
