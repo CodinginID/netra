@@ -179,8 +179,10 @@ async def mint_embed_session(
     )
 
     # Embed URL points at the frontend route /embed/enroll (the SPA serves the
-    # chromeless page). Falls back to spa_asset_base, then the request origin.
-    base = (settings.embed_base_url or settings.spa_asset_base or str(request.base_url)).rstrip("/")
+    # chromeless page). Falls back to the request origin if EMBED_BASE_URL isn't
+    # set — which is the API's own domain, not the SPA, so it's wrong for an
+    # iframe src too; EMBED_BASE_URL must be configured in staging/production.
+    base = (settings.embed_base_url or str(request.base_url)).rstrip("/")
     url = f"{base}/embed/enroll?token={token}"
     return Envelope(
         data=EmbedSessionMinted(token=token, url=url, expires_at=embed.expires_at)

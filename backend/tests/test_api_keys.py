@@ -139,6 +139,39 @@ async def test_embed_session_allowed_origin_succeeds(client: AsyncClient, super_
 
 
 @pytest.mark.asyncio
+async def test_embed_session_url_uses_configured_embed_base_url(
+    client: AsyncClient, super_admin, monkeypatch
+):
+    """Regression test for a prod incident: the minted url must come from
+    EMBED_BASE_URL, never a hardcoded dev default — a client saw `data.url`
+    point at http://localhost:5173 in production because that fallback used
+    to exist. There must be no such fallback left."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "embed_base_url", "https://netra.flowbiz.id")
+
+    headers = await _onboard_tenant_admin(client)
+    key = await _create_key(
+        client, headers, scopes=["embed:enroll"], allowed_origins=["https://app.acme.id"]
+    )
+
+    resp = await client.post(
+        "/api/v1/integration/embed-sessions",
+        headers={"X-API-Key": key["key"]},
+        json={
+            "external_id": "NIS123",
+            "full_name": "Budi",
+            "return_origin": "https://app.acme.id",
+            "is_minor": False,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    url = resp.json()["data"]["url"]
+    assert url.startswith("https://netra.flowbiz.id/embed/enroll?token="), url
+    assert "localhost" not in url
+
+
+@pytest.mark.asyncio
 async def test_embed_session_disallowed_origin_403(client: AsyncClient, super_admin):
     headers = await _onboard_tenant_admin(client)
     key = await _create_key(

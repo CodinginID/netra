@@ -103,14 +103,14 @@ class Settings(BaseSettings):
     insightface_model_root: str = Field(default="")
 
     # --- Embed integration (render netra flows inside a client app) ---
-    # Public base URL of netra used to build embed URLs (e.g. https://netra.app).
-    # Empty => derived from the incoming request at mint time.
+    # Public base URL of the netra FRONTEND (SPA), used to build the embed link
+    # returned by POST /integration/embed-sessions, e.g. https://netra.flowbiz.id.
+    # MUST be set in staging/production — empty falls back to the backend's own
+    # request URL, which is the API domain, not the SPA, and is almost never
+    # what you want for an iframe src.
     embed_base_url: str = Field(default="")
     # Minutes an embed session token stays valid after minting.
     embed_ttl_minutes: int = Field(default=15, ge=1, le=1440)
-    # Where the built SPA assets live, used by the FastAPI embed shell HTML to
-    # load the frontend bundle. In dev this is the Vite dev server.
-    spa_asset_base: str = Field(default="http://localhost:5173")
 
     @property
     def is_production(self) -> bool:
