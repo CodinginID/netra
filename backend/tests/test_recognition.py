@@ -8,6 +8,9 @@ tenant isolation without any ML model.
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -322,6 +325,42 @@ async def test_holiday_has_no_late_penalty(client: AsyncClient, super_admin):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["attendance"]["status"] == "on_time"
+
+
+@pytest.mark.asyncio
+async def test_identify_does_not_block_event_loop(super_admin):
+    """eng.embed() is CPU-bound and synchronous; it must run off the event loop
+    so one slow identify() call doesn't stall every other concurrent request
+    (real incident: a client's /integration/users poll timed out while an
+    unrelated enroll/identify call was mid-inference on a single-process
+    uvicorn server)."""
+
+    class _SlowEngine:
+        name = "slow"
+
+        def embed(self, image: bytes) -> list[float]:
+            time.sleep(0.3)  # stands in for CPU-bound ONNX inference
+            return [0.0] * 512
+
+    async with SessionFactory() as s:
+        await _set_tenant(s, None)
+        t = Tenant(name="Slow", slug="slow-loop")
+        s.add(t)
+        await s.flush()
+        tid = t.id
+
+    async def _run() -> None:
+        async with SessionFactory() as s:
+            await _set_tenant(s, tid)
+            await recognition_service.identify(s, b"q", engine=_SlowEngine())
+
+    start = time.perf_counter()
+    await asyncio.gather(_run(), _run(), _run())
+    elapsed = time.perf_counter() - start
+
+    # Serialized on a blocked event loop: ~3 * 0.3s = 0.9s. Offloaded to a
+    # thread pool: all three overlap, close to a single 0.3s call.
+    assert elapsed < 0.6, f"identify() calls ran serially (event loop blocked): {elapsed:.2f}s"
 
 
 @pytest.mark.asyncio
