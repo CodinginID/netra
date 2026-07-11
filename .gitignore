@@ -68,3 +68,4 @@ __pycache__
 .qwen
 .claude-flow
 .gstack/
+.worktrees/
