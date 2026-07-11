@@ -1,3 +1,174 @@
+# Embed Enrollment Guided Face Capture Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace the embed enrollment page's bare camera + manual-button capture with a guided 3-angle (front/left/right) capture flow that has live face-detection overlay, an animated oval guide, countdown, and clear Indonesian instructions — matching the kiosk self-enroll UX.
+
+**Architecture:** A new hook `useGuidedCapture` (front/left/right timed sequence + preview/retake state machine) is extracted for `EmbedEnrollPage` to consume alongside the existing `useFaceDetection` hook. `EmbedEnrollPage.tsx`'s `camera`/`submitting` phases are rewritten to drive this hook and render the guide UI, reusing existing `kiosk.css`/`selfenroll.css` classes. No backend changes (already accepts 1–3 images).
+
+**Tech Stack:** React + TypeScript (Vite), existing `useFaceDetection` hook (MediaPipe, already a dependency), plain CSS classes from `kiosk.css`/`selfenroll.css`.
+
+## Global Constraints
+
+- Spec: `docs/superpowers/specs/2026-07-11-embed-enroll-guided-capture-design.md`
+- Do not modify `SelfEnrollPage.tsx` or `kiosk.css`/`selfenroll.css` content — only *import* the existing CSS files into `EmbedEnrollPage.tsx` and reuse class names verbatim.
+- No i18n migration — new copy is hardcoded Indonesian strings, matching this file's existing convention (it doesn't use `useI18n` today).
+- No backend changes.
+- This repo's `ui/` has no test framework configured (no vitest/jest, no existing `*.test.*` files) — verification is `npm --prefix ui run build` (tsc + vite build) for type/build correctness, plus a manual dev-server walkthrough. Do not introduce a test framework as part of this plan.
+- Keep files under 500 lines (CLAUDE.md project rule).
+
+---
+
+### Task 1: `useGuidedCapture` hook
+
+**Files:**
+- Create: `ui/src/hooks/useGuidedCapture.ts`
+
+**Interfaces:**
+- Produces (consumed by Task 2):
+  - `export type GuidedCapturePhase = 'front' | 'left' | 'right' | 'preview'`
+  - `export const GUIDED_CAPTURE_PHASE_ORDER: Exclude<GuidedCapturePhase, 'preview'>[]` (value `['front', 'left', 'right']`)
+  - `export interface CapturePhaseConfig { label: string; hint: string; arrow?: string; duration: number }`
+  - `export function useGuidedCapture(args: { active: boolean; phases: Record<Exclude<GuidedCapturePhase, 'preview'>, CapturePhaseConfig>; captureFrame: () => Promise<Blob | null> }): { capturePhase: GuidedCapturePhase | null; countdown: number; capturedBlobs: Blob[]; previewUrls: string[]; phaseIdx: number; phaseConfig: CapturePhaseConfig | null; progressPct: number; retake: () => void }`
+
+- [ ] **Step 1: Write the hook**
+
+Create `ui/src/hooks/useGuidedCapture.ts`:
+
+```ts
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+export interface CapturePhaseConfig {
+  label: string
+  hint: string
+  arrow?: string
+  duration: number
+}
+
+export type GuidedCapturePhase = 'front' | 'left' | 'right' | 'preview'
+
+export const GUIDED_CAPTURE_PHASE_ORDER: Exclude<GuidedCapturePhase, 'preview'>[] = ['front', 'left', 'right']
+
+interface UseGuidedCaptureArgs {
+  /** Sequence auto-starts (after a short delay) once true, unless a capture is already in progress or done. */
+  active: boolean
+  phases: Record<Exclude<GuidedCapturePhase, 'preview'>, CapturePhaseConfig>
+  captureFrame: () => Promise<Blob | null>
+}
+
+interface UseGuidedCaptureResult {
+  capturePhase: GuidedCapturePhase | null
+  countdown: number
+  capturedBlobs: Blob[]
+  previewUrls: string[]
+  phaseIdx: number
+  phaseConfig: CapturePhaseConfig | null
+  progressPct: number
+  retake: () => void
+}
+
+/** Guided multi-angle face capture: front -> left -> right, each on a fixed countdown, then preview. */
+export function useGuidedCapture({ active, phases, captureFrame }: UseGuidedCaptureArgs): UseGuidedCaptureResult {
+  const [capturePhase, setCapturePhase] = useState<GuidedCapturePhase | null>(null)
+  const [countdown, setCountdown] = useState(0)
+  const [capturedBlobs, setCapturedBlobs] = useState<Blob[]>([])
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
+
+  const captureFrameRef = useRef(captureFrame)
+  captureFrameRef.current = captureFrame
+
+  const runSequence = useCallback(async () => {
+    const blobs: Blob[] = []
+    const urls: string[] = []
+
+    for (const phase of GUIDED_CAPTURE_PHASE_ORDER) {
+      const { duration } = phases[phase]
+      setCapturePhase(phase)
+
+      await new Promise<void>((resolve) => {
+        let remaining = duration
+        setCountdown(remaining)
+        const id = setInterval(() => {
+          remaining -= 1
+          setCountdown(remaining)
+          if (remaining <= 0) {
+            clearInterval(id)
+            resolve()
+          }
+        }, 1000)
+      })
+
+      const blob = await captureFrameRef.current()
+      if (!blob) continue
+      blobs.push(blob)
+      urls.push(URL.createObjectURL(blob))
+    }
+
+    setCapturedBlobs(blobs)
+    setPreviewUrls(urls)
+    setCapturePhase('preview')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phases])
+
+  // Auto-start 1.2s after `active` flips true, unless a sequence already ran/is running.
+  useEffect(() => {
+    if (!active || capturePhase !== null) return
+    const t = setTimeout(() => { void runSequence() }, 1200)
+    return () => clearTimeout(t)
+  }, [active, capturePhase, runSequence])
+
+  // Revoke any outstanding object URLs on unmount only.
+  const previewUrlsRef = useRef(previewUrls)
+  previewUrlsRef.current = previewUrls
+  useEffect(() => {
+    return () => { previewUrlsRef.current.forEach(URL.revokeObjectURL) }
+  }, [])
+
+  const retake = useCallback(() => {
+    previewUrls.forEach(URL.revokeObjectURL)
+    setCapturedBlobs([])
+    setPreviewUrls([])
+    setCapturePhase(null)
+  }, [previewUrls])
+
+  const phaseIdx = capturePhase && capturePhase !== 'preview' ? GUIDED_CAPTURE_PHASE_ORDER.indexOf(capturePhase) : -1
+  const phaseConfig = capturePhase && capturePhase !== 'preview' ? phases[capturePhase] : null
+  const progressPct = phaseConfig ? (1 - countdown / phaseConfig.duration) * 100 : 0
+
+  return { capturePhase, countdown, capturedBlobs, previewUrls, phaseIdx, phaseConfig, progressPct, retake }
+}
+```
+
+- [ ] **Step 2: Verify it type-checks and builds**
+
+Run: `npm --prefix /Users/anonymous/Documents/office/codinginid/netra/ui run build`
+Expected: build succeeds with no TypeScript errors (this hook isn't wired into any page yet, so it's dead code at this point — that's fine, `tsc` still checks unused exported files without warning since it's a module, not an unused local variable).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add ui/src/hooks/useGuidedCapture.ts
+git commit -m "feat: add useGuidedCapture hook for multi-angle face capture"
+```
+
+---
+
+### Task 2: Rewire `EmbedEnrollPage` to use guided capture
+
+**Files:**
+- Modify: `ui/src/pages/embed/EmbedEnrollPage.tsx` (full rewrite of the `camera`/`submitting` phase logic and JSX; `loading`/`invalid`/`consent`/`success`/`error` phases keep their existing behavior)
+
+**Interfaces:**
+- Consumes from Task 1: `useGuidedCapture`, `GUIDED_CAPTURE_PHASE_ORDER`, `CapturePhaseConfig` from `@/hooks/useGuidedCapture`.
+- Consumes existing: `useFaceDetection` from `@/hooks/useFaceDetection` (signature: `(videoRef: RefObject<HTMLVideoElement>, overlayRef: RefObject<HTMLCanvasElement>, active: boolean) => { hasFace: boolean; detectorReady: boolean }`).
+- Consumes existing CSS classes (verified present, do not invent new ones): `.kiosk-camera-wrapper`, `.kiosk-video`, `.kiosk-detection-canvas`, `.kiosk-hud`, `.kiosk-hud-svg`, `.selfenroll-phase-dots`, `.selfenroll-phase-dot` (+ `.active`/`.done`), `.selfenroll-phase-overlay` (+ `.selfenroll-phase-overlay--dim`), `.selfenroll-phase-label`, `.selfenroll-arrow`, `.selfenroll-phase-hint`, `.selfenroll-countdown-wrap`/`-bar`/`-fill`/`-num`, `.selfenroll-phase-num`, `.selfenroll-previews` (+ `.selfenroll-previews--sm`), `.selfenroll-preview-thumb`.
+- Note: `.kiosk-actions` / `.kiosk-btn-checkout` are referenced by `SelfEnrollPage.tsx` but have **no** CSS definition anywhere in the repo (pre-existing gap, confirmed via grep across `ui/src/styles/`) — do not reuse them; build the Ulangi/Lanjut action row with this file's own inline `styles` object instead (as below).
+
+- [ ] **Step 1: Replace the full file content**
+
+Replace all of `ui/src/pages/embed/EmbedEnrollPage.tsx` with:
+
+```tsx
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
 import { GUIDED_CAPTURE_PHASE_ORDER, useGuidedCapture, type CapturePhaseConfig } from '@/hooks/useGuidedCapture'
@@ -377,3 +548,39 @@ const styles: Record<string, React.CSSProperties> = {
   bigIcon: { fontSize: 44, marginBottom: 8 },
   actionsRow: { display: 'flex', gap: 10 },
 }
+```
+
+- [ ] **Step 2: Verify it type-checks and builds**
+
+Run: `npm --prefix /Users/anonymous/Documents/office/codinginid/netra/ui run build`
+Expected: build succeeds with no TypeScript errors, no missing-import errors for `@/hooks/useGuidedCapture`, `@/hooks/useFaceDetection`, `@/styles/kiosk.css`, `@/styles/selfenroll.css`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add ui/src/pages/embed/EmbedEnrollPage.tsx
+git commit -m "feat: guided 3-angle face capture with live overlay for embed enrollment"
+```
+
+---
+
+### Task 3: Manual verification
+
+**Files:** none (verification only)
+
+- [ ] **Step 1: Start the dev server**
+
+Run: `npm --prefix /Users/anonymous/Documents/office/codinginid/netra/ui run dev`
+Expected: Vite dev server starts without errors.
+
+- [ ] **Step 2: Walk the flow in a real browser with a camera**
+
+Open `http://localhost:5173/embed/enroll?token=<a valid embed session token minted via POST /integration/embed-sessions>` (adjust host/port to whatever `vite` printed) and confirm:
+- Consent step unchanged (checkbox, guardian field for minors, "Lanjut ke Kamera" button).
+- After granting camera permission: front phase shows the oval guide, live bounding-box overlay reacting to your face, "Hadapkan wajah lurus ke kamera" label, a 3s countdown bar, and phase dot 1 active.
+- Left phase (4s, `←` arrow, "Putar wajah ke kiri") and right phase (4s, `→` arrow, "Putar wajah ke kanan") follow automatically.
+- Preview step shows 3 thumbnails labeled Depan/Kiri/Kanan with "Ulangi" and "Lanjut" buttons.
+- "Ulangi" restarts the front→left→right sequence cleanly (no leftover thumbnails, no duplicate timers — countdown should read exactly 3 again on front).
+- "Lanjut" stops the camera, shows "Memproses…", then either the success screen or a server error message (test with an already-consumed/expired token to see the error path, then confirm "Coba lagi" returns to consent with the guided-capture state reset — the next attempt should start a fresh front/left/right sequence, not jump straight to a stale preview).
+
+This step requires human interaction (camera permission, a live face, a valid backend-issued token) and cannot be scripted — perform it manually and report any visual glitch back for a follow-up fix rather than deferring it.
