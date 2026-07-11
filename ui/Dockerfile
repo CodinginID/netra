@@ -26,10 +26,12 @@ FROM nginx:1.27-alpine AS runtime
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Where the embed page's reverse proxy should look up token → return_origin
-# (see nginx.conf.template's /internal/embed-frame-origin). Same-network
-# deploys (e.g. docker-compose) can leave this pointed at the internal
-# service; split deploys must override with the public API URL.
-ENV EMBED_BACKEND_ORIGIN=http://backend:8000
+# (see nginx.conf.template's /internal/embed-frame-origin). This is only a
+# same-network fallback (backend listens on 5170); every deployment should set
+# EMBED_BACKEND_ORIGIN via its .env / container environment — split deploys
+# with the public API URL (e.g. https://api-netra.flowbiz.id). Read at
+# container start (envsubst), so changing it needs no image rebuild.
+ENV EMBED_BACKEND_ORIGIN=http://backend:5170
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 

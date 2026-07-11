@@ -7,6 +7,7 @@ tenant's faces even though the query carries no explicit tenant filter.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from sqlalchemy import delete, select
@@ -57,7 +58,8 @@ async def enroll(
     if user is None:
         raise RecognitionError("user not found")
 
-    vector = (engine or get_face_engine()).embed(image)
+    eng = engine or get_face_engine()
+    vector = await asyncio.to_thread(eng.embed, image)
     embedding = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
     session.add(embedding)
     user.enrolled = True
@@ -93,7 +95,7 @@ async def enroll_multi(
     eng = engine or get_face_engine()
     embeddings: list[FaceEmbedding] = []
     for img in images:
-        vector = eng.embed(img)
+        vector = await asyncio.to_thread(eng.embed, img)
         emb = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
         session.add(emb)
         embeddings.append(emb)
@@ -111,7 +113,8 @@ async def identify(
     engine: FaceEngine | None = None,
 ) -> Match | None:
     """1:N search: return the best match above ``threshold`` cosine similarity."""
-    query_vec = (engine or get_face_engine()).embed(image)
+    eng = engine or get_face_engine()
+    query_vec = await asyncio.to_thread(eng.embed, image)
     min_sim = settings.match_threshold if threshold is None else threshold
 
     distance = FaceEmbedding.vector.cosine_distance(query_vec).label("distance")
