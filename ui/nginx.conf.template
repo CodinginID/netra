@@ -1,0 +1,93 @@
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Docker's embedded DNS — needed because the internal proxy_pass below
+    # targets a variable ($embed_backend), which makes nginx re-resolve it on
+    # every request instead of once at startup (also copes with the backend
+    # container restarting and getting a new IP without an nginx reload).
+    resolver 127.0.0.11 valid=30s;
+    # Backend origin for the embed-frame-origin lookup below. Set via env var
+    # at container start (baked in by the nginx image's envsubst-on-templates
+    # entrypoint) — same-network deploys use the internal service address
+    # (e.g. http://backend:8000), split deploys use the public API domain
+    # (e.g. https://api-netra.flowbiz.id). Defaults set in the Dockerfile.
+    set $embed_backend "${EMBED_BACKEND_ORIGIN}";
+
+    # gzip text assets
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # Hashed build assets are immutable → cache hard.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Service worker / manifest should not be cached aggressively.
+    location = /sw.js        { add_header Cache-Control "no-cache"; try_files $uri =404; }
+    location = /manifest.webmanifest { add_header Cache-Control "no-cache"; try_files $uri =404; }
+
+    # Baseline security headers for the whole app.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # The dashboard itself must NOT be framable.
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    # Internal-only: subrequest target for the auth_request below. Looks up
+    # the embed token's trusted return_origin from the backend without
+    # consuming the token or exposing this path externally.
+    #
+    # $arg_token can't be read here directly — auth_request's subrequest
+    # doesn't inherit the parent request's query string, so $arg_token
+    # inside this location would resolve against the subrequest's own
+    # (empty) args. The caller copies it into $token beforehand, which (a
+    # plain `set` variable, unlike $arg_*) IS shared with the subrequest.
+    location = /internal/embed-frame-origin {
+        internal;
+        proxy_pass $embed_backend/api/v1/embed/frame-origin?token=$token;
+        proxy_ssl_server_name on;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+    }
+
+    # ── Embed pages (/embed/*) — meant to be iframed by client apps ──
+    # Per-session `frame-ancestors` (embed plan §6.10): ask the backend which
+    # origin this specific token is allowed to be framed by, then allow only
+    # that one. An invalid/expired/consumed token → backend 401 → nginx 401
+    # here too (fail closed; no SPA "session expired" page in this case).
+    # Deliberately NOT setting X-Frame-Options here — it can't express a
+    # per-token allowlist, so framing control is via CSP only.
+    location /embed/ {
+        set $token $arg_token;
+        auth_request /internal/embed-frame-origin;
+        auth_request_set $embed_origin $upstream_http_x_frame_origin;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy "frame-ancestors 'self' $embed_origin" always;
+
+        # A *named* location, not a bare "/index.html" — try_files treats a
+        # plain URI target as an internal redirect, which re-matches location
+        # blocks for the new URI and would land back in the "/" block below
+        # (losing this block's auth_request + CSP entirely). "@name" jumps
+        # directly to this location's handler within the same request instead.
+        try_files $uri @embed_index;
+    }
+
+    location @embed_index {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy "frame-ancestors 'self' $embed_origin" always;
+        rewrite ^ /index.html break;
+    }
+
+    # SPA history fallback — every other route serves index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

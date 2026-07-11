@@ -365,6 +365,17 @@ async def get_embed_principal(
     return await _embed_principal_from_token(x_embed_token)
 
 
+async def get_embed_principal_from_query(token: str | None = None) -> EmbedPrincipal:
+    """Authenticate via a ``?token=`` query param.
+
+    Used only by the reverse proxy's ``auth_request`` subrequest (see
+    GET /embed/frame-origin) to resolve a session's trusted ``return_origin``
+    before the SPA is served, so the proxy can set a per-session
+    `frame-ancestors` CSP instead of a blanket allow/deny (§6.10).
+    """
+    return await _embed_principal_from_token(token)
+
+
 async def get_embed_db(
     principal: EmbedPrincipal = Depends(get_embed_principal),
 ) -> AsyncIterator[AsyncSession]:

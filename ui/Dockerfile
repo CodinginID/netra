@@ -18,8 +18,18 @@ RUN npm run build   # tsc && vite build -> /app/dist
 # ── Stage 2: serve static with nginx ──────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
-# SPA-aware config (history fallback, caching, security headers)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Templated (history fallback, caching, security headers, per-session embed
+# CSP). The base image's docker-entrypoint.d/20-envsubst-on-templates.sh runs
+# `envsubst` on every *.template file here using only real env var names, so
+# nginx's own $variables (e.g. $uri, $arg_token) pass through untouched —
+# only ${EMBED_BACKEND_ORIGIN} below gets substituted.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Where the embed page's reverse proxy should look up token → return_origin
+# (see nginx.conf.template's /internal/embed-frame-origin). Same-network
+# deploys (e.g. docker-compose) can leave this pointed at the internal
+# service; split deploys must override with the public API URL.
+ENV EMBED_BACKEND_ORIGIN=http://backend:8000
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 

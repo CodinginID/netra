@@ -4,19 +4,27 @@ Authenticated by a one-time embed session token (``X-Embed-Token``), NOT a JWT
 or API key. The token is minted via POST /integration/embed-sessions.
 
 Note (§6.10): the chromeless HTML page itself is served by the frontend SPA at
-/embed/enroll. Setting CSP `frame-ancestors` per-tenant is a prod-serving
-concern (Q8) handled by the SPA host / proxy; these are the data endpoints.
+/embed/enroll, not from here. The SPA host's reverse proxy sets CSP
+`frame-ancestors` per-session by calling GET /frame-origin below (via
+auth_request) to resolve the token's trusted origin; everything else here is
+the data endpoints.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import EmbedPrincipal, get_embed_db, get_embed_principal
+from app.api.deps import (
+    EmbedPrincipal,
+    get_embed_db,
+    get_embed_principal,
+    get_embed_principal_from_query,
+)
 from app.core.logging import get_logger
 from app.models import Consent, EmbedSession
 from app.schemas import EmbedSessionInfo, EnrollmentResult, Envelope
@@ -31,6 +39,14 @@ from app.services.face import NoFaceDetectedError
 
 router = APIRouter(prefix="/embed", tags=["embed"])
 log = get_logger("netra.embed")
+
+# A bare origin: scheme://host[:port], no path/query/fragment/whitespace. Values
+# stored on ApiKey.allowed_origins are meant to already look like this (see
+# schemas._validate_origins), but that check parses with urlsplit(), which
+# silently drops embedded CR/LF/tab — so a value with smuggled control chars
+# could still pass it and land in the DB. Re-validate here since this value is
+# about to be reflected into an HTTP response header for nginx to consume.
+_ORIGIN_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:\d{1,5})?$")
 
 
 @router.get("/session", response_model=Envelope[EmbedSessionInfo])
@@ -47,6 +63,22 @@ async def session_info(
             return_origin=principal.return_origin,
         )
     )
+
+
+@router.get("/frame-origin", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
+async def frame_origin(
+    principal: EmbedPrincipal = Depends(get_embed_principal_from_query),
+) -> Response:
+    """Read-only token → trusted origin lookup.
+
+    Called by the SPA host's reverse proxy via ``auth_request`` so it can set
+    a per-session `Content-Security-Policy: frame-ancestors` on the embed
+    shell, instead of a blanket allow (any origin) or deny (§6.10, §7). Not
+    part of the public API surface — no envelope, no OpenAPI entry.
+    """
+    if not _ORIGIN_RE.match(principal.return_origin):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"X-Frame-Origin": principal.return_origin})
 
 
 @router.post("/enroll", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED)
