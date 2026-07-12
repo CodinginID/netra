@@ -37,6 +37,31 @@ export function LandingPage() {
     document.title = 'Netra — ' + t('landing.doc_title')
   }, [locale, t])
 
+  // Scroll-reveal: below-the-fold cards drift up as they enter the viewport.
+  useEffect(() => {
+    if (REDUCED_MOTION) return
+    const els = document.querySelectorAll<HTMLElement>(
+      '.lp-stat, .lp-tile, .lp-step, .lp-feed, .lp-ctaband'
+    )
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in')
+            io.unobserve(entry.target)
+          }
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    )
+    els.forEach((el, i) => {
+      el.classList.add('lp-reveal')
+      el.style.transitionDelay = `${(i % 3) * 70}ms`
+      io.observe(el)
+    })
+    return () => io.disconnect()
+  }, [])
+
   const langBtn = (lang: Locale) => (
     <button
       type="button"
