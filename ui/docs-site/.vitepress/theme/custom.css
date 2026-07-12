@@ -16,6 +16,86 @@
   --vp-home-hero-name-background: linear-gradient(100deg, #5eead4 10%, #38bdf8 90%);
 }
 
+/* ── "Back to Home" pill in the navbar ── */
+.netra-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+  padding: 4px 14px;
+  border: 1px solid var(--vp-c-brand-1);
+  border-radius: 999px;
+  color: var(--vp-c-brand-1);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 0.15s, background-color 0.15s;
+}
+.netra-home-link:hover {
+  color: var(--vp-c-white, #fff);
+  background: var(--vp-c-brand-2);
+}
+@media (max-width: 768px) {
+  .netra-home-link span:last-child { display: none; } /* arrow only */
+  .netra-home-link { padding: 4px 10px; }
+}
+
+/* ── Architecture page: diagram + flow steps ── */
+.arch-diagram {
+  overflow-x: auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+  background: var(--vp-c-bg);
+}
+.arch-diagram svg {
+  min-width: 720px;
+  display: block;
+  font-family: inherit;
+}
+
+.arch-flow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+  counter-reset: arch-step;
+}
+@media (max-width: 640px) { .arch-flow { grid-template-columns: 1fr; } }
+.arch-step {
+  position: relative;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+  padding: 12px 14px 12px 40px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  line-height: 1.55;
+}
+.arch-step::before {
+  counter-increment: arch-step;
+  content: counter(arch-step);
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.arch-step b {
+  display: block;
+  color: var(--vp-c-text-1);
+  margin-bottom: 2px;
+}
+
 /* Smooth navigation: in-page anchors glide, page swaps fade in. */
 @media (prefers-reduced-motion: no-preference) {
   html {

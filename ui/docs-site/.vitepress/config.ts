@@ -18,7 +18,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/' },
-          { text: 'App', link: 'https://netra.flowbiz.id' },
         ],
         sidebar: [
           {
@@ -40,9 +39,15 @@ export default defineConfig({
             ],
           },
           {
+            text: 'For Developers',
+            items: [
+              { text: 'Architecture & flow', link: '/guide/architecture' },
+              { text: 'Integration', link: '/guide/integration' },
+            ],
+          },
+          {
             text: 'More',
             items: [
-              { text: 'Integration', link: '/guide/integration' },
               { text: 'Trash & recovery', link: '/guide/trash-recovery' },
             ],
           },
@@ -56,7 +61,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Panduan', link: '/id/' },
-          { text: 'Aplikasi', link: 'https://netra.flowbiz.id' },
         ],
         sidebar: [
           {
@@ -78,9 +82,15 @@ export default defineConfig({
             ],
           },
           {
+            text: 'Untuk Developer',
+            items: [
+              { text: 'Arsitektur & alur', link: '/id/guide/architecture' },
+              { text: 'Integrasi', link: '/id/guide/integration' },
+            ],
+          },
+          {
             text: 'Lainnya',
             items: [
-              { text: 'Integrasi', link: '/id/guide/integration' },
               { text: 'Sampah & pemulihan', link: '/id/guide/trash-recovery' },
             ],
           },

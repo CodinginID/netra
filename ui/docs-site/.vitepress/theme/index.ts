@@ -1,9 +1,26 @@
+import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
+import { useData } from 'vitepress'
 import type { EnhanceAppContext } from 'vitepress'
 import './custom.css'
 
+/** Pill button in the navbar that leaves the docs and returns to the
+ *  landing page (same origin, so a plain "/" works on any host). */
+function HomeLink() {
+  const { lang } = useData()
+  const label = lang.value.startsWith('id') ? 'Kembali ke Beranda' : 'Back to Home'
+  return h('a', { class: 'netra-home-link', href: '/', 'aria-label': label }, [
+    h('span', { 'aria-hidden': 'true' }, '←'),
+    h('span', label),
+  ])
+}
+
 export default {
   extends: DefaultTheme,
+  Layout: () =>
+    h(DefaultTheme.Layout, null, {
+      'nav-bar-content-before': () => h(HomeLink),
+    }),
   enhanceApp({ router }: EnhanceAppContext) {
     if (typeof window === 'undefined') return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
