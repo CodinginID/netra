@@ -789,3 +789,63 @@
   .auth-brand { display: none; }
   .auth-panel { flex: 1 1 100%; background: #f8f9ff; }
 }
+
+/* ── Docs button — fixed top-right, glowing glass ── */
+.auth-docs-btn {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: #5eead4;
+  background: rgba(10, 19, 34, 0.78);
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 18px rgba(45, 212, 191, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.auth-docs-btn:hover {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 0 30px rgba(45, 212, 191, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.auth-docs-btn-arrow { transition: transform 0.2s; }
+.auth-docs-btn:hover .auth-docs-btn-arrow { transform: translateX(3px); }
+
+/* sweeping shine */
+.auth-docs-btn-glow {
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(94, 234, 212, 0.25), transparent);
+  transform: skewX(-20deg);
+  animation: docsBtnSweep 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes docsBtnSweep {
+  0%, 60%  { left: -60%; }
+  100%     { left: 130%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-docs-btn-glow { animation: none; }
+}
+
+@media (max-width: 768px) {
+  .auth-docs-btn { top: 12px; right: 12px; padding: 8px 14px; font-size: 12px; }
+}

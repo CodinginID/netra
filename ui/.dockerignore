@@ -8,3 +8,6 @@ dist
 .DS_Store
 .vscode
 coverage
+docs-site/node_modules
+docs-site/.vitepress/dist
+docs-site/.vitepress/cache

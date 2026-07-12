@@ -40,7 +40,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/ws\//],
+        // /docs is a separate static site (VitePress) served by nginx — the
+        // SPA service worker must never hijack navigations into it.
+        navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/docs(\/|$)/],
       },
     }),
   ],
