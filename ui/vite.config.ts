@@ -63,6 +63,27 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // In production nginx serves the VitePress build at /docs/. In dev,
+      // proxy to the VitePress dev server (`npm run docs:dev`, port 4174).
+      '/docs': {
+        target: 'http://localhost:4174',
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on('error', (_err, _req, res) => {
+            if ('writeHead' in res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' })
+              res.end(
+                '<div style="font-family:sans-serif;padding:40px;max-width:60ch">' +
+                  '<h2>Docs dev server is not running</h2>' +
+                  '<p>Start it from <code>ui/</code> with:</p>' +
+                  '<pre>npm run docs:dev</pre>' +
+                  '<p>then reload this page. (In production, nginx serves the built docs at /docs/.)</p>' +
+                  '</div>'
+              )
+            }
+          })
+        },
+      },
     },
   },
 })
