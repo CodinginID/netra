@@ -5,6 +5,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { OnboardingTooltips } from '@/components/OnboardingTooltips'
 import { ProtectedRoute } from '@/router/ProtectedRoute'
+import { RouteFade } from '@/components/RouteFade'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RootRedirect } from '@/pages/RootRedirect'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -64,6 +65,7 @@ function AppRoutes() {
       <KeyboardShortcuts />
       <OnboardingTooltips />
       <BrowserRouter>
+        <RouteFade>
         <Routes>
         {/* Public */}
         <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
@@ -128,6 +130,7 @@ function AppRoutes() {
         {/* 404 */}
         <Route path="*" element={<ErrorBoundary><NotFoundPage /></ErrorBoundary>} />
         </Routes>
+        </RouteFade>
       </BrowserRouter>
     </ToastProvider>
   )

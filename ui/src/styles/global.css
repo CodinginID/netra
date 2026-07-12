@@ -1247,3 +1247,23 @@ a:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Smooth navigation (app-wide) ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+.route-fade-enter {
+  animation: routeFadeIn 0.22s ease;
+}
+
+@keyframes routeFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-fade-enter { animation: none; }
+}
