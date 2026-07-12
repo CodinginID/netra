@@ -22,8 +22,8 @@ fingerprints, no queues.
 | **Schedule** | Working hours assigned to employees; lateness is computed against it. |
 
 ::: tip Data isolation
-Every tenant's data is isolated with PostgreSQL Row-Level Security. Users in
-one organization can never see another organization's data.
+Every tenant's data is hard-isolated at the data layer. Users in one
+organization can never see another organization's data.
 :::
 
 ## Where to next

@@ -22,8 +22,8 @@ jari, tanpa antre.
 | **Jadwal** | Jam kerja yang ditetapkan ke karyawan; keterlambatan dihitung dari sini. |
 
 ::: tip Isolasi data
-Data tiap tenant diisolasi dengan Row-Level Security PostgreSQL. Pengguna di
-satu organisasi tidak akan pernah bisa melihat data organisasi lain.
+Data tiap tenant diisolasi keras di lapisan data. Pengguna di satu
+organisasi tidak akan pernah bisa melihat data organisasi lain.
 :::
 
 ## Selanjutnya

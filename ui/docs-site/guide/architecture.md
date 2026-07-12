@@ -6,104 +6,114 @@ before touching anything.
 ## System overview
 
 <div class="arch-diagram">
-<svg viewBox="0 0 960 420" role="img" aria-label="Netra system architecture diagram" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 760 640" role="img" aria-label="Netra system architecture diagram" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--vp-c-text-3)"/>
     </marker>
   </defs>
   <style>
-    .box { fill: var(--vp-c-bg-soft); stroke: var(--vp-c-divider); rx: 10; }
-    .box-brand { fill: var(--vp-c-brand-soft); stroke: var(--vp-c-brand-1); rx: 10; }
-    .t { fill: var(--vp-c-text-1); font: 600 13px inherit; }
-    .d { fill: var(--vp-c-text-2); font: 11px inherit; }
-    .lbl { fill: var(--vp-c-text-3); font: 10px inherit; }
-    .ln { stroke: var(--vp-c-text-3); stroke-width: 1.2; fill: none; marker-end: url(#arr); }
-    .ln-dash { stroke: var(--vp-c-brand-1); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; marker-end: url(#arr); }
+    .box { fill: var(--vp-c-bg-soft); stroke: var(--vp-c-divider); rx: 12; }
+    .box-brand { fill: var(--vp-c-brand-soft); stroke: var(--vp-c-brand-1); rx: 12; }
+    .chip { fill: var(--vp-c-bg); stroke: var(--vp-c-divider); rx: 10; }
+    .t { fill: var(--vp-c-text-1); font: 600 15px inherit; }
+    .d { fill: var(--vp-c-text-2); font: 12.5px inherit; }
+    .lbl { fill: var(--vp-c-text-3); font: 12px inherit; }
+    .ln { stroke: var(--vp-c-text-3); stroke-width: 1.4; fill: none; marker-end: url(#arr); }
+    .ln-dash { stroke: var(--vp-c-brand-1); stroke-width: 1.4; stroke-dasharray: 6 5; fill: none; marker-end: url(#arr); }
   </style>
 
-  <!-- clients -->
-  <rect class="box" x="16" y="30" width="180" height="66"/>
-  <text class="t" x="30" y="56">Admin dashboard</text>
-  <text class="d" x="30" y="74">React SPA · JWT login</text>
+  <!-- row 1: clients -->
+  <rect class="box" x="10" y="16" width="232" height="84"/>
+  <text class="t" x="26" y="48">Admin dashboard</text>
+  <text class="d" x="26" y="72">web app, sign-in per role</text>
 
-  <rect class="box" x="16" y="140" width="180" height="66"/>
-  <text class="t" x="30" y="166">Kiosk / camera</text>
-  <text class="d" x="30" y="184">device token · /attendance</text>
+  <rect class="box" x="264" y="16" width="232" height="84"/>
+  <text class="t" x="280" y="48">Kiosk / camera</text>
+  <text class="d" x="280" y="72">attendance at the entrance</text>
 
-  <rect class="box" x="16" y="250" width="180" height="66"/>
-  <text class="t" x="30" y="276">Your app (iframe)</text>
-  <text class="d" x="30" y="294">one-time embed token</text>
+  <rect class="box" x="518" y="16" width="232" height="84"/>
+  <text class="t" x="534" y="48">Your app (embed)</text>
+  <text class="d" x="534" y="72">self-enrollment via iframe</text>
 
-  <!-- nginx -->
-  <rect class="box" x="286" y="130" width="160" height="96"/>
-  <text class="t" x="300" y="156">nginx</text>
-  <text class="d" x="300" y="174">serves SPA + /docs</text>
-  <text class="d" x="300" y="190">security headers, CSP</text>
-  <text class="d" x="300" y="206">frame-origin check</text>
+  <!-- arrows to gateway -->
+  <path class="ln" d="M 126 100 C 126 130, 260 130, 300 148"/>
+  <path class="ln" d="M 380 100 L 380 144"/>
+  <path class="ln" d="M 634 100 C 634 130, 500 130, 460 148"/>
 
-  <!-- backend -->
-  <rect class="box-brand" x="536" y="46" width="220" height="270"/>
-  <text class="t" x="552" y="74">FastAPI backend</text>
-  <rect class="box" x="552" y="90" width="188" height="44"/>
-  <text class="d" x="564" y="108">REST API · /api/v1</text>
-  <text class="lbl" x="564" y="124">auth, users, devices, reports…</text>
-  <rect class="box" x="552" y="144" width="188" height="44"/>
-  <text class="d" x="564" y="162">WebSocket · /ws</text>
-  <text class="lbl" x="564" y="178">realtime events to dashboard</text>
-  <rect class="box" x="552" y="198" width="188" height="44"/>
-  <text class="d" x="564" y="216">Face engine (InsightFace)</text>
-  <text class="lbl" x="564" y="232">embeddings, off the event loop</text>
-  <rect class="box" x="552" y="252" width="188" height="44"/>
-  <text class="d" x="564" y="270">Liveness check</text>
-  <text class="lbl" x="564" y="286">rejects photos & replays</text>
+  <!-- row 2: gateway -->
+  <rect class="box" x="190" y="150" width="380" height="82"/>
+  <text class="t" x="210" y="182">Access gateway</text>
+  <text class="d" x="210" y="206">serves app &amp; docs · security headers · embed origin check</text>
 
-  <!-- db -->
-  <rect class="box" x="816" y="106" width="130" height="120"/>
-  <text class="t" x="830" y="132">PostgreSQL</text>
-  <text class="d" x="830" y="152">Row-Level Security</text>
-  <text class="lbl" x="830" y="170">users · schedules</text>
-  <text class="lbl" x="830" y="186">face embeddings</text>
-  <text class="lbl" x="830" y="202">attendance events</text>
+  <path class="ln" d="M 380 232 L 380 274"/>
+  <text class="lbl" x="396" y="258">secure requests · realtime</text>
 
-  <!-- webhooks -->
-  <rect class="box" x="816" y="270" width="130" height="60"/>
-  <text class="t" x="830" y="294">Your systems</text>
-  <text class="d" x="830" y="312">webhooks</text>
+  <!-- row 3: backend -->
+  <rect class="box-brand" x="30" y="278" width="700" height="196"/>
+  <text class="t" x="50" y="310">Application backend</text>
 
-  <!-- arrows -->
-  <path class="ln" d="M 196 63 C 240 63, 250 160, 286 166"/>
-  <path class="ln" d="M 196 173 L 286 177"/>
-  <path class="ln" d="M 196 283 C 240 283, 250 200, 286 194"/>
-  <path class="ln" d="M 446 178 L 536 180"/>
-  <text class="lbl" x="458" y="168">HTTPS · WSS</text>
-  <path class="ln" d="M 756 166 L 816 166"/>
-  <path class="ln" d="M 756 290 L 816 298"/>
-  <path class="ln-dash" d="M 646 46 C 646 -6, 180 -14, 108 30"/>
-  <text class="lbl" x="320" y="16">live updates (WebSocket)</text>
+  <rect class="chip" x="50" y="326" width="320" height="60"/>
+  <text class="d" x="66" y="350" style="font-weight:600; fill:var(--vp-c-text-1)">Core API</text>
+  <text class="d" x="66" y="372">users · devices · schedules · reports</text>
+
+  <rect class="chip" x="390" y="326" width="320" height="60"/>
+  <text class="d" x="406" y="350" style="font-weight:600; fill:var(--vp-c-text-1)">Realtime events</text>
+  <text class="d" x="406" y="372">pushes attendance to the dashboard</text>
+
+  <rect class="chip" x="50" y="398" width="320" height="60"/>
+  <text class="d" x="66" y="422" style="font-weight:600; fill:var(--vp-c-text-1)">Face matching</text>
+  <text class="d" x="66" y="444">face → signature, matched per tenant</text>
+
+  <rect class="chip" x="390" y="398" width="320" height="60"/>
+  <text class="d" x="406" y="422" style="font-weight:600; fill:var(--vp-c-text-1)">Liveness check</text>
+  <text class="d" x="406" y="444">rejects photos &amp; screen replays</text>
+
+  <!-- arrows to row 4 -->
+  <path class="ln" d="M 210 474 L 210 516"/>
+  <path class="ln" d="M 550 474 L 550 516"/>
+
+  <!-- row 4: data & external -->
+  <rect class="box" x="60" y="520" width="300" height="96"/>
+  <text class="t" x="76" y="552">Data store</text>
+  <text class="d" x="76" y="576">isolated per organization:</text>
+  <text class="d" x="76" y="596">people · schedules · attendance</text>
+
+  <rect class="box" x="400" y="520" width="300" height="96"/>
+  <text class="t" x="416" y="552">Your systems</text>
+  <text class="d" x="416" y="576">webhooks notify your backend</text>
+  <text class="d" x="416" y="596">whenever attendance is recorded</text>
+
+  <!-- realtime back to dashboard -->
+  <path class="ln-dash" d="M 730 356 C 752 340, 752 60, 750 58"/>
+  <text class="lbl" x="562" y="130" transform="rotate(0)">live updates</text>
 </svg>
 </div>
 
 ## Components
 
-| Component | Role |
+Each service has one job — no implementation details needed to use them:
+
+| Service | What it does |
 |---|---|
-| **React SPA** | Landing, login, and the role-based dashboards. Talks to the backend via `/api/v1` and listens on `/ws`. |
-| **nginx** | Serves the SPA build and these docs (`/docs/`), sets security headers, and enforces the per-token frame origin for embeds. |
-| **FastAPI backend** | All business logic: auth (JWT + roles), users, devices, schedules, attendance, reports, webhooks. |
-| **Face engine** | InsightFace embeddings computed in a worker thread pool, so recognition never blocks the API event loop. |
-| **PostgreSQL + RLS** | One database, hard-isolated per tenant with Row-Level Security. Face embeddings are stored as vectors per tenant. |
-| **WebSocket** | Pushes attendance events to the dashboard the moment they happen. |
+| **Admin dashboard** | Where admins and supervisors manage people, devices, schedules, and watch attendance live. |
+| **Kiosk** | Runs at the entrance; recognizes faces and records attendance without any user login. |
+| **Access gateway** | The single front door: serves the app and these docs, applies security headers, and decides which origin may embed the enrollment page. |
+| **Core API** | Business logic: sign-in and roles, users, devices, schedules, attendance, reports. |
+| **Face matching** | Turns a face image into a numeric signature and compares it against the organization's enrolled signatures — kept off the main request path so the API stays fast. |
+| **Liveness check** | Rejects printed photos and screen replays before any matching happens. |
+| **Realtime events** | Streams every attendance event to the dashboard the moment it happens. |
+| **Data store** | One database, hard-isolated per organization: people, schedules, face signatures, attendance history. |
 
 ## Flow 1 — recognition → attendance
 
 <div class="arch-flow">
   <div class="arch-step"><b>Camera frame</b>The kiosk captures a frame and sends it with its device token.</div>
   <div class="arch-step"><b>Auth + liveness</b>The backend validates the device token and rejects photos/replays.</div>
-  <div class="arch-step"><b>Embedding</b>The face engine computes a vector in the thread pool.</div>
-  <div class="arch-step"><b>Match</b>The vector is compared against the tenant's enrolled embeddings.</div>
+  <div class="arch-step"><b>Signature</b>The face is converted into a numeric signature, off the main request path.</div>
+  <div class="arch-step"><b>Match</b>The signature is compared against the organization's enrolled people.</div>
   <div class="arch-step"><b>Record</b>An attendance event is stored, matched to the employee's schedule.</div>
-  <div class="arch-step"><b>Notify</b>The dashboard updates over WebSocket; webhooks fire to your systems.</div>
+  <div class="arch-step"><b>Notify</b>The dashboard updates in realtime; webhooks fire to your systems.</div>
 </div>
 
 End to end this takes **under a second** per frame.
@@ -113,18 +123,18 @@ End to end this takes **under a second** per frame.
 <div class="arch-flow">
   <div class="arch-step"><b>Start</b>An admin starts enrollment — or your app opens the embed page with a one-time token.</div>
   <div class="arch-step"><b>Guided poses</b>The UI walks the employee through front, left, and right poses.</div>
-  <div class="arch-step"><b>Store</b>Each pose becomes an embedding vector stored under the tenant.</div>
+  <div class="arch-step"><b>Store</b>Each pose becomes a face signature stored under your organization.</div>
   <div class="arch-step"><b>Ready</b>The employee is marked <i>Enrolled</i> and cameras recognize them immediately.</div>
 </div>
 
 ## Multi-tenancy & security
 
-- **Row-Level Security** — every query runs inside a tenant context; one
-  organization can never read another's rows, even through a bug in
-  application code.
-- **Three token types** — user JWTs (dashboard, role-based), device tokens
-  (kiosks), and single-use embed tokens (self-enrollment inside your app,
-  frame-origin locked via CSP).
+- **Hard tenant isolation** — every request runs inside one organization's
+  context, enforced at the data layer; one organization can never read
+  another's data, even through an application bug.
+- **Three token types** — user sign-in tokens (dashboard, role-based),
+  device tokens (kiosks), and single-use embed tokens (self-enrollment
+  inside your app, locked to your origin).
 - **Liveness detection** — recognition rejects printed photos and screen
   replays before any matching happens.
 

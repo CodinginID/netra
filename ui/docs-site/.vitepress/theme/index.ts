@@ -4,8 +4,8 @@ import { useData } from 'vitepress'
 import type { EnhanceAppContext } from 'vitepress'
 import './custom.css'
 
-/** Pill button in the navbar that leaves the docs and returns to the
- *  landing page (same origin, so a plain "/" works on any host). */
+/** Button at the bottom of the sidebar that leaves the docs and returns to
+ *  the landing page (same origin, so a plain "/" works on any host). */
 function HomeLink() {
   const { lang } = useData()
   const label = lang.value.startsWith('id') ? 'Kembali ke Beranda' : 'Back to Home'
@@ -19,7 +19,7 @@ export default {
   extends: DefaultTheme,
   Layout: () =>
     h(DefaultTheme.Layout, null, {
-      'nav-bar-content-before': () => h(HomeLink),
+      'sidebar-nav-after': () => h(HomeLink),
     }),
   enhanceApp({ router }: EnhanceAppContext) {
     if (typeof window === 'undefined') return
