@@ -15,6 +15,17 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 COPY . .
 RUN npm run build   # tsc && vite build -> /app/dist
 
+# ── Stage 1b: build the docs site (VitePress → /docs/) ────────────────────────
+FROM node:20-alpine AS docs-builder
+
+WORKDIR /docs-site
+
+COPY docs-site/package.json docs-site/package-lock.json ./
+RUN npm ci
+
+COPY docs-site/ .
+RUN npm run docs:build   # vitepress build -> .vitepress/dist
+
 # ── Stage 2: serve static with nginx ──────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
@@ -34,6 +45,7 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 ENV EMBED_BACKEND_ORIGIN=http://backend:5170
 
 COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=docs-builder /docs-site/.vitepress/dist /usr/share/nginx/html/docs
 
 EXPOSE 80
 

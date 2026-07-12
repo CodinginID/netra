@@ -95,6 +95,23 @@ server {
         rewrite ^ /index.html break;
     }
 
+    # ── Public docs (static VitePress build, copied to html/docs) ──
+    location = /docs { return 301 /docs/; }
+
+    # VitePress emits content-hashed assets under /docs/assets/ → immutable.
+    location /docs/assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Plain static serving — no SPA fallback, so missing pages 404 into the
+    # docs site's own 404 page rather than booting the dashboard app.
+    location /docs/ {
+        error_page 404 /docs/404.html;
+        try_files $uri $uri/ =404;
+    }
+
     # SPA history fallback — every other route serves index.html.
     location / {
         try_files $uri $uri/ /index.html;

@@ -1,6 +1,6 @@
 import { useState, useRef, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, Lock, Mail, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, ArrowRight, ArrowLeft, BookOpen } from 'lucide-react'
 import { checkEmailApi, loginApi } from '@/api/authApi'
 import { useAuthStore } from '@/store/authStore'
 import { useI18n } from '@/store/i18nStore'
@@ -79,6 +79,13 @@ export function LoginPage() {
 
   return (
     <div className="auth-container">
+      <a href="/docs/" className="auth-docs-btn">
+        <span className="auth-docs-btn-glow" aria-hidden />
+        <BookOpen size={16} />
+        <span>{t('login.docs_button')}</span>
+        <ArrowRight size={14} className="auth-docs-btn-arrow" />
+      </a>
+
       <aside className="auth-brand">
         <div className="auth-brand-inner">
           <div className="auth-brand-logo">
