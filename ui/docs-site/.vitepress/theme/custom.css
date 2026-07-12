@@ -16,25 +16,28 @@
   --vp-home-hero-name-background: linear-gradient(100deg, #5eead4 10%, #38bdf8 90%);
 }
 
-/* ── "Back to Home" button at the bottom of the sidebar ── */
+/* ── "Back to Home" — footer row at the very bottom of the sidebar ── */
 .netra-home-link {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  margin-top: 24px;
-  padding: 9px 14px;
-  border: 1px solid var(--vp-c-brand-1);
-  border-radius: 10px;
-  color: var(--vp-c-brand-1);
+  margin-top: 28px;
+  padding: 14px 4px 0;
+  border-top: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color 0.15s;
 }
 .netra-home-link:hover {
-  color: var(--vp-c-white, #fff);
-  background: var(--vp-c-brand-2);
+  color: var(--vp-c-brand-1);
+}
+.netra-home-link span:first-child {
+  transition: transform 0.15s;
+}
+.netra-home-link:hover span:first-child {
+  transform: translateX(-3px);
 }
 
 /* ── Architecture page: diagram + flow steps ── */

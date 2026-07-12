@@ -9,10 +9,22 @@ import './custom.css'
 function HomeLink() {
   const { lang } = useData()
   const label = lang.value.startsWith('id') ? 'Kembali ke Beranda' : 'Back to Home'
-  return h('a', { class: 'netra-home-link', href: '/', 'aria-label': label }, [
-    h('span', { 'aria-hidden': 'true' }, '←'),
-    h('span', label),
-  ])
+  return h(
+    'a',
+    {
+      class: 'netra-home-link',
+      href: '/',
+      'aria-label': label,
+      // VitePress' router intercepts same-origin link clicks for SPA
+      // navigation, which strands "/" inside the docs app — force a real
+      // page load back to the landing page instead.
+      onClick: (e: Event) => {
+        e.preventDefault()
+        window.location.href = '/'
+      },
+    },
+    [h('span', { 'aria-hidden': 'true' }, '←'), h('span', label)]
+  )
 }
 
 export default {
