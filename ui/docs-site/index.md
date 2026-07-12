@@ -1,26 +1,33 @@
----
-layout: home
+# What is Netra
 
-hero:
-  name: Netra
-  text: Touchless face-recognition attendance
-  tagline: A user guide for admins and supervisors — from face enrollment to daily reports.
-  actions:
-    - theme: brand
-      text: Get Started
-      link: /guide/what-is-netra
-    - theme: alt
-      text: Open the App
-      link: https://netra.flowbiz.id
+Netra is a **touchless attendance platform** based on face recognition.
+Cameras stream footage to the Netra backend, which identifies enrolled faces
+in real time and records attendance events automatically — no cards, no
+fingerprints, no queues.
 
-features:
-  - icon: 👤
-    title: Guided face enrollment
-    details: Register employee faces in about a minute with step-by-step pose guidance.
-  - icon: 🖥️
-    title: Kiosk attendance
-    details: A tablet at the entrance recognizes faces and records attendance in real time.
-  - icon: 📊
-    title: Reports & live status
-    details: Daily recaps, exports, and a live view of who has checked in today.
----
+## How it works
+
+1. **Enroll faces** — an admin registers each employee's face with guided poses.
+2. **Cameras recognize** — kiosks or area cameras detect and match faces in real time.
+3. **Attendance is recorded** — events appear on the dashboard instantly, matched
+   against the employee's work schedule.
+
+## Key concepts
+
+| Term | Meaning |
+|---|---|
+| **Tenant** | Your organization's isolated space. Data is never shared between tenants. |
+| **Enrollment** | The one-time process of registering an employee's face. |
+| **Kiosk** | A device (tablet/screen) at an entrance running the attendance page. |
+| **Schedule** | Working hours assigned to employees; lateness is computed against it. |
+
+::: tip Data isolation
+Every tenant's data is isolated with PostgreSQL Row-Level Security. Users in
+one organization can never see another organization's data.
+:::
+
+## Where to next
+
+- [Sign in & user roles](/guide/sign-in-roles) — access the dashboard
+- [Face enrollment](/guide/enrollment) — register your first employees
+- [Devices & kiosk](/guide/devices-kiosk) — put a kiosk at the entrance

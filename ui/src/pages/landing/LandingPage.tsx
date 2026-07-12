@@ -72,7 +72,7 @@ export function LandingPage() {
 
       <header className="lp-hero">
         <div className="lp-hero-glow" aria-hidden />
-        <div className="lp-hero-copy">
+        <div className="lp-hero-copy lp-fade" key={`hero-${locale}`}>
           <span className="lp-badge">
             <span className="lp-pulse" aria-hidden />
             {t('landing.badge')}
@@ -99,7 +99,7 @@ export function LandingPage() {
         </div>
       </header>
 
-      <section className="lp-stats">
+      <section className="lp-stats lp-fade" key={`stats-${locale}`}>
         <div className="lp-stat">
           <div className="lp-stat-t">&lt; 1<span>s</span></div>
           <div className="lp-stat-d">{t('landing.stat1')}</div>
@@ -114,7 +114,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="lp-section" id="features">
+      <section className="lp-section lp-fade" id="features" key={`feat-${locale}`}>
         <p className="lp-eyebrow">{t('landing.feat_eyebrow')}</p>
         <h2>{t('landing.feat_h')}</h2>
         <p className="lp-section-sub">{t('landing.feat_sub')}</p>
@@ -152,7 +152,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="lp-section" id="how">
+      <section className="lp-section lp-fade" id="how" key={`how-${locale}`}>
         <p className="lp-eyebrow">{t('landing.how_eyebrow')}</p>
         <h2>{t('landing.how_h')}</h2>
         <p className="lp-section-sub">{t('landing.how_sub')}</p>
@@ -184,7 +184,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="lp-ctaband" id="contact">
+      <section className="lp-ctaband lp-fade" id="contact" key={`cta-${locale}`}>
         <p className="lp-ctaband-t">{t('landing.band_h')}</p>
         <p className="lp-ctaband-d">{t('landing.band_d')}</p>
         <a href="mailto:hello@codingin.id?subject=Netra%20Demo" className="lp-btn lp-btn-primary lp-btn-lg">

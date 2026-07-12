@@ -17,14 +17,14 @@ export default defineConfig({
       lang: 'en',
       themeConfig: {
         nav: [
-          { text: 'Guide', link: '/guide/what-is-netra' },
+          { text: 'Guide', link: '/' },
           { text: 'App', link: 'https://netra.flowbiz.id' },
         ],
         sidebar: [
           {
             text: 'Getting Started',
             items: [
-              { text: 'What is Netra', link: '/guide/what-is-netra' },
+              { text: 'What is Netra', link: '/' },
               { text: 'Sign in & user roles', link: '/guide/sign-in-roles' },
             ],
           },
@@ -55,14 +55,14 @@ export default defineConfig({
       link: '/id/',
       themeConfig: {
         nav: [
-          { text: 'Panduan', link: '/id/guide/what-is-netra' },
+          { text: 'Panduan', link: '/id/' },
           { text: 'Aplikasi', link: 'https://netra.flowbiz.id' },
         ],
         sidebar: [
           {
             text: 'Mulai',
             items: [
-              { text: 'Apa itu Netra', link: '/id/guide/what-is-netra' },
+              { text: 'Apa itu Netra', link: '/id/' },
               { text: 'Masuk & peran pengguna', link: '/id/guide/sign-in-roles' },
             ],
           },
