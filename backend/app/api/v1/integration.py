@@ -4,7 +4,8 @@ This is the surface a tenant's OWN application calls to pull attendance data
 into their dashboard. Authentication is by tenant API key (scope-checked), and
 every query is automatically tenant-isolated by RLS via get_api_db.
 
-Read-only by design. Auth: send the key as ``X-API-Key: ntr_live_…`` or
+Mostly read (pull) endpoints, plus an inbound roster upsert (POST /users,
+scope users:write). Auth: send the key as ``X-API-Key: ntr_live_…`` or
 ``Authorization: Bearer ntr_live_…``.
 """
 
@@ -26,15 +27,26 @@ from app.schemas import (
     EmbedSessionMinted,
     Envelope,
     IntegrationUserOut,
+    IntegrationUserUpsert,
+    IntegrationUserUpsertOut,
     TenantConfig,
 )
-from app.services import audit_service, embed_session_service, report_service, tenant_service
+from app.services import (
+    audit_service,
+    embed_session_service,
+    report_service,
+    tenant_service,
+    user_service,
+)
 
 router = APIRouter(prefix="/integration", tags=["integration"])
 
 ATTENDANCE_READ = require_scope("attendance:read")
 USERS_READ = require_scope("users:read")
+USERS_WRITE = require_scope("users:write")
 EMBED_ENROLL = require_scope("embed:enroll")
+
+UPSERT_BATCH_LIMIT = 500
 
 
 def _parse_day(value: str, field: str) -> datetime:
@@ -141,6 +153,74 @@ async def list_users(
 
 
 # --------------------------------------------------------------------------- #
+# Users (push) — inbound sync: the client app upserts its roster into netra
+# --------------------------------------------------------------------------- #
+@router.post("/users", response_model=Envelope[dict])
+async def upsert_users(
+    payload: IntegrationUserUpsert | list[IntegrationUserUpsert],
+    principal: ApiPrincipal = Depends(USERS_WRITE),
+    session: AsyncSession = Depends(get_api_db),
+) -> Envelope[dict]:
+    """Create-or-update end-users keyed by ``external_id`` (idempotent).
+
+    Accepts one object or an array (bulk sync, max 500 per request). An
+    existing ``external_id`` gets its ``full_name`` refreshed instead of a
+    duplicate error, so the client can replay its full roster safely. Users
+    created here merge with later embed enrollment on the same ``external_id``.
+    """
+    items = payload if isinstance(payload, list) else [payload]
+    if not items:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Payload must contain at least one user",
+        )
+    if len(items) > UPSERT_BATCH_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Too many users in one request (max {UPSERT_BATCH_LIMIT})",
+        )
+
+    # Dedupe within the batch (last occurrence wins) — two inserts with the
+    # same external_id_hash in one transaction would violate the unique key.
+    deduped = {item.external_id: item for item in items}
+
+    results: list[IntegrationUserUpsertOut] = []
+    created_count = 0
+    for item in deduped.values():
+        user, created = await user_service.upsert_end_user(
+            session,
+            principal.tenant_id,
+            external_id=item.external_id,
+            full_name=item.full_name,
+        )
+        created_count += created
+        base = IntegrationUserOut.model_validate(user)
+        results.append(IntegrationUserUpsertOut(**base.model_dump(), created=created))
+
+    await audit_service.record(
+        session,
+        action="integration.users_upserted",
+        actor=principal.key_id,
+        tenant_id=principal.tenant_id,
+        detail={
+            "received": len(items),
+            "created": created_count,
+            "updated": len(deduped) - created_count,
+        },
+    )
+    return Envelope(
+        data={
+            "items": results,
+            "summary": {
+                "received": len(items),
+                "created": created_count,
+                "updated": len(deduped) - created_count,
+            },
+        }
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Embed sessions (mint) — render netra enrollment inside the client app
 # --------------------------------------------------------------------------- #
 @router.post(
@@ -184,6 +264,4 @@ async def mint_embed_session(
     # iframe src too; EMBED_BASE_URL must be configured in staging/production.
     base = (settings.embed_base_url or str(request.base_url)).rstrip("/")
     url = f"{base}/embed/enroll?token={token}"
-    return Envelope(
-        data=EmbedSessionMinted(token=token, url=url, expires_at=embed.expires_at)
-    )
+    return Envelope(data=EmbedSessionMinted(token=token, url=url, expires_at=embed.expires_at))

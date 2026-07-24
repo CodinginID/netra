@@ -263,6 +263,7 @@ class DeviceRegistered(DeviceOut):
 API_SCOPES: dict[str, str] = {
     "attendance:read": "Baca catatan & laporan kehadiran",
     "users:read": "Baca daftar pengguna + status enrolled",
+    "users:write": "Buat/perbarui pengguna via sinkronisasi (upsert by external_id)",
     "embed:enroll": "Mint sesi embed untuk enrollment wajah",
 }
 
@@ -373,6 +374,19 @@ class IntegrationUserOut(BaseModel):
     enrolled: bool
     is_active: bool
     created_at: datetime
+
+
+class IntegrationUserUpsert(BaseModel):
+    """One end-user to create-or-update, keyed by the client's external_id."""
+
+    external_id: str = Field(min_length=1, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+
+
+class IntegrationUserUpsertOut(IntegrationUserOut):
+    """Upsert result row — ``created`` distinguishes insert from update."""
+
+    created: bool
 
 
 # --------------------------------------------------------------------------- #

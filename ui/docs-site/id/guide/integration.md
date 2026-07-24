@@ -16,8 +16,9 @@ Biarkan karyawan mendaftarkan wajah dari dalam portal HR **Anda**:
 ## Akses API
 
 REST API Netra mencakup pengguna, enrollment, perangkat, jadwal, dan event
-absensi. Hubungi administrator platform Anda untuk kredensial API dan
-referensi endpoint.
+absensi. Lihat **[Referensi API](/id/guide/api-reference)** lengkap untuk setiap
+endpoint, parameternya, dan bentuk responsnya. Hubungi administrator platform
+Anda untuk kredensial API.
 
 ::: tip Webhook & realtime
 Event absensi didorong lewat WebSocket ke dashboard. Untuk kebutuhan

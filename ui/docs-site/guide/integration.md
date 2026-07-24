@@ -15,8 +15,9 @@ Let employees enroll their face from inside **your** HR portal:
 ## API access
 
 The Netra REST API covers users, enrollment, devices, schedules, and
-attendance events. Contact your platform administrator for API credentials
-and the endpoint reference.
+attendance events. See the full **[API reference](/guide/api-reference)** for
+every endpoint, its parameters, and response shapes. Contact your platform
+administrator for API credentials.
 
 ::: tip Webhooks & realtime
 Attendance events are pushed over WebSocket to the dashboard. For

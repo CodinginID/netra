@@ -56,6 +56,30 @@
   font-family: inherit;
 }
 
+/* Diagram element styles live HERE (theme CSS, loaded with the app) rather
+   than in a <style> block inside the SVG — per-page style blocks are
+   extracted into async page chunks, so the SVG could paint before its CSS
+   arrived and every shape flashed black until a refresh. */
+.arch-diagram .abox { fill: var(--vp-c-bg-soft); stroke: var(--vp-c-divider); }
+.arch-diagram .abox-brand { fill: var(--vp-c-brand-soft); stroke: var(--vp-c-brand-1); }
+.arch-diagram .achip { fill: var(--vp-c-bg); stroke: var(--vp-c-divider); }
+.arch-diagram .at { fill: var(--vp-c-text-1); font-size: 15px; font-weight: 600; }
+.arch-diagram .ad { fill: var(--vp-c-text-2); font-size: 12.5px; }
+.arch-diagram .ad-strong { fill: var(--vp-c-text-1); font-weight: 600; }
+.arch-diagram .albl { fill: var(--vp-c-text-3); font-size: 12px; }
+.arch-diagram .amark { fill: var(--vp-c-text-3); }
+.arch-diagram .aln {
+  stroke: var(--vp-c-text-3);
+  stroke-width: 1.4;
+  fill: none;
+}
+.arch-diagram .aln-dash {
+  stroke: var(--vp-c-brand-1);
+  stroke-width: 1.4;
+  stroke-dasharray: 6 5;
+  fill: none;
+}
+
 .arch-flow {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
