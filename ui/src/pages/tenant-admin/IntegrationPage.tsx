@@ -344,6 +344,12 @@ ENDPOINTS TO USE
        -> roster: each user present/late/absent/checked_out today
 - GET  /integration/users?page=1&limit=50
        -> end-users with { id, full_name, external_id, enrolled, is_active }
+- POST /integration/users   (scope users:write; idempotent by external_id, max 500/request)
+       body: one object OR an array of { external_id, full_name }
+       -> { data: { items: [{ …, created }], summary: { received, created, updated } } }
+       Use to push/sync YOUR employee roster INTO Netra so records exist before
+       enrollment. Safe to replay the full roster — existing people are updated,
+       not duplicated. Synced users then appear in Netra's "Manage Users" menu.
 - POST /integration/embed-sessions
        body: { external_id, full_name, return_origin, is_minor }
        -> { url }  (a one-time enrollment page URL; expires ~15 min, single use)
@@ -388,6 +394,19 @@ function ApiStepsTab() {
   "${API_BASE_URL}/integration/attendance/daily-status?date=2026-06-25"`
   const curlUsers = `curl -H "X-API-Key: ntr_live_xxxxx" \\
   "${API_BASE_URL}/integration/users?page=1&limit=50"`
+  const curlPush = `curl -X POST "${API_BASE_URL}/integration/users" \\
+  -H "X-API-Key: ntr_live_xxxxx" -H "Content-Type: application/json" \\
+  -d '[{"external_id":"EMP-001","full_name":"Budi Santoso"},
+       {"external_id":"EMP-002","full_name":"Siti Aminah"}]'`
+  const pushResponse = `{
+  "data": {
+    "items": [
+      { "id": "usr_…", "full_name": "Budi Santoso", "external_id": "EMP-001",
+        "enrolled": false, "is_active": true, "created": true }
+    ],
+    "summary": { "received": 2, "created": 1, "updated": 1 }
+  }, "error": null
+}`
   const sampleResponse = `{
   "data": {
     "items": [
@@ -423,6 +442,12 @@ function ApiStepsTab() {
       <h4 style={H4}>{t('integration.guide_users_title')}</h4>
       <p style={P}>{t('integration.guide_users_desc')}</p>
       <CodeBlock code={curlUsers} />
+
+      <h4 style={H4}>{t('integration.guide_push_title')}</h4>
+      <p style={P}>{t('integration.guide_push_desc')}</p>
+      <CodeBlock code={curlPush} />
+      <p style={{ ...P, marginTop: 10 }}>{t('integration.guide_push_resp')}</p>
+      <CodeBlock code={pushResponse} />
 
       <h4 style={H4}>{t('integration.guide_step5_title')}</h4>
       <p style={P}>{t('integration.guide_step5_desc')}</p>

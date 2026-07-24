@@ -43,6 +43,7 @@ export default defineConfig({
             items: [
               { text: 'Architecture & flow', link: '/guide/architecture' },
               { text: 'Integration', link: '/guide/integration' },
+              { text: 'API reference', link: '/guide/api-reference' },
             ],
           },
           {
@@ -86,6 +87,7 @@ export default defineConfig({
             items: [
               { text: 'Arsitektur & alur', link: '/id/guide/architecture' },
               { text: 'Integrasi', link: '/id/guide/integration' },
+              { text: 'Referensi API', link: '/id/guide/api-reference' },
             ],
           },
           {
