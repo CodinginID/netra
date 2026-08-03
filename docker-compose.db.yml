@@ -22,10 +22,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong password in .env}
       POSTGRES_DB: ${POSTGRES_DB:-netra}
     ports:
-      # host:container — remote backend connects to <db-server-ip>:5436.
+      # host:container — remote backend connects to <db-server-ip>:5430.
       # SECURITY: firewall this port to the backend server's IP only, e.g.
-      #   ufw allow from <BACKEND_IP> to any port 5436
-      - "${DB_HOST_PORT:-5436}:5432"
+      #   ufw allow from <BACKEND_IP> to any port 5430
+      - "${DB_HOST_PORT:-5430}:5432"
     volumes:
       - netra_pgdata:/var/lib/postgresql/data
     healthcheck:

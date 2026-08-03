@@ -37,13 +37,11 @@ import {
   SuperAdminDashboard,
   SuperAdminIndex,
   SuperAdminHomePage,
+  TenantAdminHomePage,
 } from '@/pages/super-admin/SuperAdminDashboard'
 import { TenantsPage } from '@/pages/super-admin/TenantsPage'
 import { SettingsPage } from '@/pages/super-admin/SettingsPage'
 import { TenantScopedDashboard } from '@/components/TenantScopedDashboard'
-
-// Tenant Admin dashboard home
-import { TenantAdminHomePage } from '@/pages/tenant-admin/TenantAdminDashboard'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,7 +112,7 @@ function AppRoutes() {
 
           {/* Tenant-scoped routes — context-switched view for a specific tenant */}
           <Route path="tenants/:tenantId" element={<ErrorBoundary><TenantScopedDashboard /></ErrorBoundary>}>
-            <Route index element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
+            <Route index element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
             <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
             <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
             <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />

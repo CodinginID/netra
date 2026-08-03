@@ -1,4 +1,4 @@
-import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
 import {
   LayoutDashboard,
   Building2,
@@ -14,12 +14,15 @@ import {
   Trash2,
   ArrowUpRight,
   Settings,
+  AlertCircle,
+  XCircle,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { useTenants, useUsers, useDailyReport } from '@/hooks/useApiQueries'
 import { useI18n } from '@/store/i18nStore'
 import type { TenantOut } from '@/api/adminApi'
+import { EmptyState } from '@/components/EmptyState'
 
 // Nav items for global (no-tenant) context
 const NAV_ITEMS_GLOBAL = [
@@ -116,6 +119,110 @@ function VerticalBadge({ config }: { config: TenantOut['config'] }) {
  * Global dashboard — the default landing page for super admins.
  * Shows system-wide stats and a list of all tenants with "Kelola" links.
  */
+/**
+ * Tenant-scoped home page — shown when a super admin views a specific tenant
+ * under /admin/tenants/:tenantId. Shows a summary of this tenant only:
+ * user count, attendance today, and a link to the full tenant admin pages.
+ */
+export function TenantAdminHomePage() {
+  const navigate = useNavigate()
+  const { tenantId } = useParams<{ tenantId: string }>()
+  const { t } = useI18n()
+  const today = todayString()
+
+  const { data: tenantsData } = useTenants({ limit: 1000 })
+  const { data: usersData } = useUsers({ limit: 1000 })
+  const { data: reportData } = useDailyReport(today)
+
+  const tenants = tenantsData?.items ?? []
+  const tenant = tenants.find((t$) => t$.id === tenantId)
+
+  const enrolled = usersData?.items?.filter((u) => u.enrolled).length ?? 0
+  const totalUsers = usersData?.total ?? 0
+  const checkInToday = reportData?.check_in ?? 0
+  const lateToday = reportData?.late ?? 0
+  const absentCount = Math.max(enrolled - checkInToday, 0)
+
+  // Redirect if tenant not found
+  if (tenantId && !tenant) {
+    return (
+      <div>
+        <div className="page-header">
+          <h2>{t('global.welcome_title')}</h2>
+        </div>
+        <div className="data-card">
+          <EmptyState
+            icon="inbox"
+            title={t('tenant.error_not_found') ?? 'Tenant tidak ditemukan'}
+            description="ID tenant tidak valid atau sudah dihapus"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>{tenant?.name ? `${tenant.name}` : t('global.welcome_title')}</h2>
+        <p>{t('global.overview_desc')}</p>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        {[
+          { label: t('stat.total_users'), value: totalUsers, Icon: Users, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+          { label: t('stat.attendance_today'), value: checkInToday, Icon: Activity, fg: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+          { label: 'Terlambat', value: lateToday, Icon: AlertCircle, fg: '#d97706', bg: 'rgba(217,119,6,0.08)' },
+          { label: 'Absen', value: absentCount, Icon: XCircle, fg: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+        ].map(({ label, value, Icon, fg, bg }) => (
+          <div key={label} className="stat-card">
+            <div className="stat-icon" style={{ background: bg }}><Icon size={22} color={fg} /></div>
+            <div>
+              <div className="stat-value">{value}</div>
+              <div className="stat-label">{label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {tenant && (
+        <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>{tenant.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{tenant.slug}</div>
+            </div>
+            <span className={tenant.status === 'active' ? 'badge badge-green' : 'badge badge-gray'}>
+              {tenant.status === 'active' ? t('active') : t('suspended')}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="data-card">
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>{t('section.tenant_list')}</h3>
+        </div>
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+            Lihat daftar tenant lain di halaman Kelola Tenant
+          </p>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/admin/tenants')}>
+            Kelola Semua Tenant <ArrowUpRight size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SuperAdminHomePage() {
   const navigate = useNavigate()
   const { t } = useI18n()

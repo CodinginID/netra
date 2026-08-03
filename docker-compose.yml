@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-netra}
       POSTGRES_DB: ${POSTGRES_DB:-netra}
     ports:
-      - "5436:5432"
+      - "5430:5432"
     volumes:
       - netra_pgdata:/var/lib/postgresql/data
       # Belt-and-suspenders: create the least-privilege netra_app role on a
@@ -22,20 +22,26 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: netra-backend
+    environment:
+      # DB connection — app role (netra_app) for the running app.
+      DATABASE_URL: postgresql+asyncpg://netra_app:netra_app@postgres:5432/${POSTGRES_DB:-netra}
+      DATABASE_ADMIN_URL: postgresql+asyncpg://${POSTGRES_USER:-netra}:${POSTGRES_PASSWORD:-netra}@postgres:5432/${POSTGRES_DB:-netra}
+    volumes:
+      # Bind-mount source tree: any edit on host is live in the container.
+      - ./backend:/app
+      # Persist .venv across container restarts so cold-start stays cheap.
+      - backend_venv:/app/.venv
+      # Persist ML models downloaded at runtime.
+      - backend_models:/app/models
+    ports:
+      - "5170:5170"
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - ./backend/.env
-    environment:
-      # Override hostname: container network uses service name, not localhost.
-      DATABASE_URL: postgresql+asyncpg://${APP_DB_USER:-netra_app}:${APP_DB_PASSWORD:-netra_app}@postgres:5432/${POSTGRES_DB:-netra}
-      DATABASE_ADMIN_URL: postgresql+asyncpg://${POSTGRES_USER:-netra}:${POSTGRES_PASSWORD:-netra}@postgres:5432/${POSTGRES_DB:-netra}
-    ports:
-      # 8000 is taken by other local projects — netra backend uses 5170 (host + container).
-      - "5170:5170"
 
 volumes:
   netra_pgdata:
+  backend_venv:
+  backend_models:
