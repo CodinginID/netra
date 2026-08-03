@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ToastProvider } from '@/components/Toast'
@@ -11,6 +12,7 @@ import { RootRedirect } from '@/pages/RootRedirect'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ForbiddenPage } from '@/pages/ForbiddenPage'
 import { useWebSocketInvalidation } from '@/hooks/useWebSocketInvalidation'
+import { useAuthStore } from '@/store/authStore'
 
 // Tenant Admin
 import {
@@ -53,6 +55,50 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Wait for the persisted auth store to finish rehydrating AND for the
+// silent refresh to complete before rendering routes.  Without this guard,
+// the app would paint with an expired access token on a hard refresh, the
+// first API call would get a 401, and the user would be redirected to
+// `/login` even though they have a valid refresh token.
+let appReadyPromise: Promise<void> | null = null
+
+function useAppReady(): boolean {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (appReadyPromise) {
+      appReadyPromise.then(() => setReady(true))
+      return
+    }
+    appReadyPromise = new Promise<void>(async (resolve) => {
+      const refreshToken = useAuthStore.getState().refreshToken
+      if (refreshToken) {
+        // Wait for the persisted store to finish rehydrating before
+        // calling silentRefresh.  Without this, the stored tokens might
+        // not be available yet and silentRefresh would skip.
+        await new Promise<void>((r) => {
+          const unsub = useAuthStore.persist.onFinishHydration(() => {
+            unsub()
+            r()
+          })
+          // If already hydrated, resolve immediately.
+          if (useAuthStore.getState().refreshToken) r()
+        })
+        // Now that the store is hydrated, run silentRefresh and wait for it.
+        await useAuthStore.getState().silentRefresh()
+      }
+      resolve()
+    })
+    appReadyPromise.then(() => setReady(true))
+  }, [])
+  return ready
+}
+
+function AppShell() {
+  const ready = useAppReady()
+  if (!ready) return null // prevent flash of un-authenticated UI
+  return <AppRoutes />
+}
 
 function AppRoutes() {
   // Must run inside QueryClientProvider — it calls useQueryClient().
@@ -137,7 +183,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppRoutes />
+      <AppShell />
     </QueryClientProvider>
   )
 }
