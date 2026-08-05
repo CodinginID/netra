@@ -71,11 +71,6 @@ export const useAuthStore = create<AuthState>()(
         username: state.username,
         isAuthenticated: state.isAuthenticated,
       }),
-      // silentRefresh is triggered by App.tsx via useAppReady() after the
-      // store is fully rehydrated.  We intentionally don't fire it from a
-      // persist callback here because we can't await it — the app would
-      // render with an expired access token before the refresh completes,
-      // triggering auto-logout.
     }
   )
 )

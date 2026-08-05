@@ -55,6 +55,11 @@ embed_token_scheme = APIKeyHeader(
 )
 
 
+#: Value a super admin sends in ``X-Tenant-Id`` to deliberately read across every
+#: tenant (platform dashboards, global trash). Anything else is a tenant id.
+PLATFORM_TENANT_SCOPE = "*"
+
+
 @dataclass
 class Principal:
     """Authenticated identity extracted from a JWT."""
@@ -63,6 +68,9 @@ class Principal:
     role: Role
     tenant_id: str | None
     external_id: str | None = None
+    #: True only when a super admin explicitly asked for cross-tenant scope via
+    #: ``X-Tenant-Id: *``. Never inferred from a missing tenant.
+    platform_scope: bool = False
 
     @property
     def is_platform(self) -> bool:
@@ -109,24 +117,54 @@ async def get_effective_principal(
     request: Request,
     principal: Principal = Depends(get_principal),
 ) -> Principal:
-    """Allow super_admin to scope requests to a specific tenant via X-Tenant-Id header."""
+    """Resolve the tenant a request acts on, honouring the X-Tenant-Id header.
+
+    A super admin's JWT carries no tenant, so the tenant it operates on comes
+    from ``X-Tenant-Id``: a tenant id scopes the request to that tenant, and the
+    literal ``*`` opts into cross-tenant (platform) scope. Only super admins may
+    set either — everyone else stays pinned to the tenant in their token,
+    header or not.
+    """
     if principal.role == Role.super_admin and principal.tenant_id is None:
-        tenant_id = request.headers.get("x-tenant-id")
-        if tenant_id:
+        header = (request.headers.get("x-tenant-id") or "").strip()
+        if header == PLATFORM_TENANT_SCOPE:
             return Principal(
                 subject=principal.subject,
                 role=principal.role,
-                tenant_id=tenant_id,
+                tenant_id=None,
+                external_id=principal.external_id,
+                platform_scope=True,
+            )
+        if header:
+            return Principal(
+                subject=principal.subject,
+                role=principal.role,
+                tenant_id=header,
                 external_id=principal.external_id,
             )
     return principal
 
 
 async def get_db(principal: Principal = Depends(get_effective_principal)) -> AsyncIterator[AsyncSession]:
-    """Tenant-bound DB session for the authenticated principal (RLS-scoped)."""
+    """Tenant-bound DB session for the authenticated principal (RLS-scoped).
+
+    Refuses to open a session when no tenant was resolved. Tenant-scoped
+    endpoints must never run in an ambiguous scope: a super admin whose
+    ``X-Tenant-Id`` header was missing used to receive every tenant's rows
+    merged together, silently. Such a request is now rejected, and reading
+    across tenants requires asking for it (``X-Tenant-Id: *``).
+    """
+    if principal.tenant_id is None and not principal.platform_scope:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Tenant context required: send X-Tenant-Id with the tenant id "
+                "(super admins may send '*' to act across all tenants)."
+            ),
+        )
     tenant_id_ctx.set(principal.tenant_id)
     async with SessionFactory() as session:
-        await _set_tenant(session, principal.tenant_id)
+        await _set_tenant(session, principal.tenant_id, platform=principal.platform_scope)
         try:
             yield session
             await session.commit()
@@ -136,9 +174,14 @@ async def get_db(principal: Principal = Depends(get_effective_principal)) -> Asy
 
 
 async def get_db_unscoped() -> AsyncIterator[AsyncSession]:
-    """Session with NO tenant bound — for login & platform-level reads."""
+    """Cross-tenant session — for login & platform-level reads.
+
+    Holds the explicit ``app.platform_context`` grant, so RLS stops isolating.
+    Mount this only on endpoints that are platform-level by definition
+    (authentication, tenant administration) and gated accordingly.
+    """
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         try:
             yield session
             await session.commit()
@@ -182,7 +225,8 @@ async def get_device_principal(
         )
     token_hash = hash_device_token(x_device_token)
     async with SessionFactory() as session:
-        await _set_tenant(session, None)  # platform context: search across tenants
+        # Platform context: the tenant is unknown until the token's row is found.
+        await _set_tenant(session, None, platform=True)
         device = (
             await session.execute(select(Device).where(Device.token_hash == token_hash))
         ).scalar_one_or_none()
@@ -250,7 +294,8 @@ async def get_api_principal(
 
     key_hash = hash_api_key(raw)
     async with SessionFactory() as session:
-        await _set_tenant(session, None)  # platform context: search across tenants
+        # Platform context: the tenant is unknown until the token's row is found.
+        await _set_tenant(session, None, platform=True)
         key = (
             await session.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
         ).scalar_one_or_none()
@@ -330,7 +375,8 @@ async def _embed_principal_from_token(token: str | None) -> EmbedPrincipal:
         )
     token_hash = hash_embed_token(token)
     async with SessionFactory() as session:
-        await _set_tenant(session, None)  # platform context: search across tenants
+        # Platform context: the tenant is unknown until the token's row is found.
+        await _set_tenant(session, None, platform=True)
         embed = (
             await session.execute(
                 select(EmbedSession).where(EmbedSession.token_hash == token_hash)

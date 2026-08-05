@@ -53,6 +53,12 @@ async def clean_db() -> AsyncIterator[None]:
     """
     from sqlalchemy import text
 
+    from app.core.ratelimit import reset_login_limiter
+
+    # Login throttling is in-process and per-IP, so attempts accumulate across
+    # tests and a full-suite run would otherwise start 429-ing partway through.
+    reset_login_limiter()
+
     _assert_safe_test_db()
     await engine.dispose()
     async with engine.begin() as conn:
@@ -70,7 +76,7 @@ async def clean_db() -> AsyncIterator[None]:
 @pytest_asyncio.fixture
 async def super_admin() -> User:
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         admin = User(
             tenant_id=None,
             username="owner",
@@ -81,6 +87,9 @@ async def super_admin() -> User:
             is_active=True,
         )
         session.add(admin)
-        await session.commit()
+        # Refresh BEFORE committing: the tenant/platform binding is transaction
+        # local, so a read after commit would run unscoped (and see nothing).
+        await session.flush()
         await session.refresh(admin)
+        await session.commit()
         return admin

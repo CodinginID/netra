@@ -160,7 +160,10 @@ async def delete_tenant(
     principal: Principal = Depends(require_super_admin),
     session: AsyncSession = Depends(get_db_unscoped),
 ) -> None:
-    await soft_delete(session, Tenant, tenant_id)
+    if not await soft_delete(session, Tenant, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found or already deleted"
+        )
     await audit_service.record(
         session,
         action="tenant.deleted",

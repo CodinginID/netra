@@ -3,6 +3,8 @@ import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/Toast'
 import { useI18n } from '@/store/i18nStore'
 import { fetchUsers, enrollFaceMulti, grantConsent, type UserItem } from '@/api/enrollmentApi'
+import { withTenantScope } from '@/api/adminApi'
+import { useTenantScope } from '@/hooks/useApiQueries'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
 import { useVoiceGuide } from '@/hooks/useVoiceGuide'
 import '@/styles/layout.css'
@@ -114,6 +116,7 @@ export function EnrollmentPage() {
   const { t } = useI18n()
   const { show } = useToast()
   const accessToken = useAuthStore((s) => s.accessToken)
+  const tenantScope = useTenantScope()
   const { announcePhase, announceCountdown, announceDone } = useVoiceGuide()
 
   const [users, setUsers]                   = useState<UserItem[]>([])
@@ -147,10 +150,11 @@ export function EnrollmentPage() {
   function loadUsers() {
     if (!accessToken) return
     setUsersLoading(true); setUsersError(false)
-    fetchUsers(accessToken).then(setUsers).catch(() => setUsersError(true)).finally(() => setUsersLoading(false))
+    withTenantScope(tenantScope, () => fetchUsers(accessToken))
+      .then(setUsers).catch(() => setUsersError(true)).finally(() => setUsersLoading(false))
   }
 
-  useEffect(() => { loadUsers() }, [accessToken])
+  useEffect(() => { loadUsers() }, [accessToken, tenantScope])
   useEffect(() => () => { stopCamera(); capturedUrls.forEach(URL.revokeObjectURL) }, [])
 
   function stopCamera() {
@@ -248,8 +252,10 @@ export function EnrollmentPage() {
     if (!uid || capturedBlobs.length === 0 || !accessToken) return
     setSubmitState('loading'); setErrorMessage('')
     try {
-      await grantConsent(accessToken, uid)
-      await enrollFaceMulti(accessToken, uid, capturedBlobs)
+      // Both calls are pinned to the tenant shown in the URL so an enrollment
+      // can never land in a different tenant than the operator is looking at.
+      await withTenantScope(tenantScope, () => grantConsent(accessToken, uid))
+      await withTenantScope(tenantScope, () => enrollFaceMulti(accessToken, uid, capturedBlobs))
       show(t('enrollment.toast_success', { count: capturedBlobs.length }), 'success')
       changeUser()
     } catch (err) {

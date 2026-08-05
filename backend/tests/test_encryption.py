@@ -52,7 +52,7 @@ async def test_external_id_ciphertext_at_rest_plaintext_via_api(client: AsyncCli
 
     # Raw column on disk is ciphertext, not the plaintext NIK.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         raw = (
             await s.execute(
                 text("SELECT external_id, external_id_hash FROM users WHERE id = :i"),
@@ -66,7 +66,7 @@ async def test_external_id_ciphertext_at_rest_plaintext_via_api(client: AsyncCli
 
     # ORM read decrypts transparently.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         user = (await s.execute(select(User).where(User.id == user_id))).scalar_one()
         assert user.external_id == nik
 

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import * as api from '@/api/adminApi'
+import { PLATFORM_TENANT_SCOPE, withTenantScope, type TenantScope } from '@/api/adminApi'
 import { useTenantContext } from '@/hooks/useTenantContext'
 
 // ---- Query Keys ----
@@ -10,81 +11,101 @@ import { useTenantContext } from '@/hooks/useTenantContext'
 // would NOT match ['users', {...}], so invalidation would silently miss and the
 // UI would only update on a full reload.
 //
-// tenantId is included in the key to scope queries per tenant — without it,
-// switching tenants would reuse cached data from the previous tenant.
-// Note: the hooks (not the keys) handle tenantId via useTenantContext() below.
+// EVERY tenant-scoped key carries the scope. A key that omits it (as apiKeys,
+// onboarding and trash once did) makes react-query serve the previous tenant's
+// cached response after a tenant switch — the "Integration" and "Trash" menus
+// showing another tenant's rows was exactly this.
 export const queryKeys = {
-  users: (params?: { page?: number; limit?: number; search?: string; tenantId?: string | null }) => {
+  users: (params?: { page?: number; limit?: number; search?: string; tenantId?: TenantScope }) => {
     const key: unknown[] = ['users']
     if (params) key.push(params)
     return key as readonly unknown[]
   },
-  devices: (params?: { page?: number; limit?: number; tenantId?: string | null }) => {
+  devices: (params?: { page?: number; limit?: number; tenantId?: TenantScope }) => {
     const key: unknown[] = ['devices']
     if (params) key.push(params)
     return key as readonly unknown[]
   },
-  schedules: (params?: { page?: number; limit?: number; tenantId?: string | null }) => {
+  schedules: (params?: { page?: number; limit?: number; tenantId?: TenantScope }) => {
     const key: unknown[] = ['schedules']
     if (params) key.push(params)
     return key as readonly unknown[]
   },
-  attendance: (params?: { page?: number; limit?: number; from?: string; to?: string; user_id?: string; tenantId?: string | null }) => {
+  attendance: (params?: { page?: number; limit?: number; from?: string; to?: string; user_id?: string; tenantId?: TenantScope }) => {
     const key: unknown[] = ['attendance']
     if (params) key.push(params)
     return key as readonly unknown[]
   },
+  // Platform-level: the tenant list is never tenant-scoped.
   tenants: (params?: { page?: number; limit?: number; search?: string }) =>
     (params ? ['tenants', params] : ['tenants']) as readonly unknown[],
-  trash: (type: 'users' | 'devices' | 'schedules') =>
-    ['trash', type] as readonly unknown[],
-  apiKeys: () => ['apiKeys'] as readonly unknown[],
+  trash: (type: 'users' | 'devices' | 'schedules' | 'tenants', tenantId?: TenantScope) =>
+    (tenantId === undefined ? ['trash', type] : ['trash', type, { tenantId }]) as readonly unknown[],
+  apiKeys: (tenantId?: TenantScope) =>
+    (tenantId === undefined ? ['apiKeys'] : ['apiKeys', { tenantId }]) as readonly unknown[],
   apiKeyScopes: () => ['apiKeyScopes'] as readonly unknown[],
-  onboarding: () => ['onboarding'] as readonly unknown[],
-  dailyReport: (date: string, tenantId?: string | null) => ['dailyReport', date, { tenantId }] as readonly unknown[],
-  dailyStatus: (date: string, tenantId?: string | null) => ['dailyStatus', date, { tenantId }] as readonly unknown[],
+  onboarding: (tenantId?: TenantScope) =>
+    (tenantId === undefined ? ['onboarding'] : ['onboarding', { tenantId }]) as readonly unknown[],
+  dailyReport: (date: string, tenantId?: TenantScope) => ['dailyReport', date, { tenantId }] as readonly unknown[],
+  dailyStatus: (date: string, tenantId?: TenantScope) => ['dailyStatus', date, { tenantId }] as readonly unknown[],
+}
+
+// ---- Tenant scope ----
+
+/**
+ * The tenant scope every tenant-scoped request must be pinned to.
+ *
+ * - A tenant in the URL (`/admin/tenants/:tenantId/...` or `?tenant=`) scopes to
+ *   that tenant.
+ * - A super admin with no tenant selected is on a platform-wide view, and says
+ *   so explicitly via the `*` sentinel.
+ * - Everyone else gets `null`: their tenant is fixed by their JWT and cannot be
+ *   changed by a header.
+ *
+ * Read during render and passed into both the query key and the request, so the
+ * two can never disagree — the previous design set a module global from an
+ * effect that ran after the request had already gone out.
+ */
+export function useTenantScope(): TenantScope {
+  const role = useAuthStore((s) => s.role)
+  let urlTenantId: string | null = null
+  try {
+    urlTenantId = useTenantContext().tenantId
+  } catch {
+    urlTenantId = null // rendered outside a Router (tests, kiosk shells)
+  }
+  if (urlTenantId) return urlTenantId
+  return role === 'super_admin' ? PLATFORM_TENANT_SCOPE : null
 }
 
 // ---- Query Hooks ----
 
-/**
- * Returns the current tenantId from URL context, or null for global views.
- * Centralized so all tenant-scoped hooks can share the same source of truth.
- */
-function currentTenantId(): string | null {
-  try {
-    const ctx = useTenantContext()
-    return ctx.tenantId
-  } catch {
-    return null
-  }
-}
-
 export function useUsers(params?: { page?: number; limit?: number; search?: string }) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.users({ ...params, tenantId }),
-    queryFn: () => api.listUsers(token!, params),
+    queryFn: () => withTenantScope(tenantId, () => api.listUsers(token!, params)),
     enabled: !!token,
   })
 }
 
 export function useDevices(params?: { page?: number; limit?: number }) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.devices({ ...params, tenantId }),
-    queryFn: () => api.listDevices(token!, params),
+    queryFn: () => withTenantScope(tenantId, () => api.listDevices(token!, params)),
     enabled: !!token,
   })
 }
 
 export function useApiKeys() {
   const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
   return useQuery({
-    queryKey: queryKeys.apiKeys(),
-    queryFn: () => api.listApiKeys(token!),
+    queryKey: queryKeys.apiKeys(tenantId),
+    queryFn: () => withTenantScope(tenantId, () => api.listApiKeys(token!)),
     enabled: !!token,
   })
 }
@@ -100,20 +121,20 @@ export function useApiKeyScopes() {
 
 export function useSchedules(params?: { page?: number; limit?: number }) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.schedules({ ...params, tenantId }),
-    queryFn: () => api.listSchedules(token!, params),
+    queryFn: () => withTenantScope(tenantId, () => api.listSchedules(token!, params)),
     enabled: !!token,
   })
 }
 
 export function useAttendance(params?: { page?: number; limit?: number; from?: string; to?: string; user_id?: string }) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.attendance({ ...params, tenantId }),
-    queryFn: () => api.listAttendance(token!, params),
+    queryFn: () => withTenantScope(tenantId, () => api.listAttendance(token!, params)),
     enabled: !!token,
   })
 }
@@ -129,9 +150,10 @@ export function useTenants(params?: { page?: number; limit?: number; search?: st
 
 export function useDeletedUsers() {
   const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
   return useQuery({
-    queryKey: queryKeys.trash('users'),
-    queryFn: () => api.listDeletedUsers(token!),
+    queryKey: queryKeys.trash('users', tenantId),
+    queryFn: () => withTenantScope(tenantId, () => api.listDeletedUsers(token!)),
     enabled: !!token,
     staleTime: 60_000, // trash changes rarely
   })
@@ -139,9 +161,10 @@ export function useDeletedUsers() {
 
 export function useDeletedDevices() {
   const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
   return useQuery({
-    queryKey: queryKeys.trash('devices'),
-    queryFn: () => api.listDeletedDevices(token!),
+    queryKey: queryKeys.trash('devices', tenantId),
+    queryFn: () => withTenantScope(tenantId, () => api.listDeletedDevices(token!)),
     enabled: !!token,
     staleTime: 60_000,
   })
@@ -149,9 +172,10 @@ export function useDeletedDevices() {
 
 export function useDeletedSchedules() {
   const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
   return useQuery({
-    queryKey: queryKeys.trash('schedules'),
-    queryFn: () => api.listDeletedSchedules(token!),
+    queryKey: queryKeys.trash('schedules', tenantId),
+    queryFn: () => withTenantScope(tenantId, () => api.listDeletedSchedules(token!)),
     enabled: !!token,
     staleTime: 60_000,
   })
@@ -159,9 +183,10 @@ export function useDeletedSchedules() {
 
 export function useOnboardingStatus() {
   const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
   return useQuery({
-    queryKey: queryKeys.onboarding(),
-    queryFn: () => api.getOnboardingStatus(token!),
+    queryKey: queryKeys.onboarding(tenantId),
+    queryFn: () => withTenantScope(tenantId, () => api.getOnboardingStatus(token!)),
     enabled: !!token,
     staleTime: 5 * 60_000, // onboarding rarely changes
   })
@@ -169,20 +194,20 @@ export function useOnboardingStatus() {
 
 export function useDailyReport(date: string) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.dailyReport(date, tenantId),
-    queryFn: () => api.dailyReport(token!, date),
+    queryFn: () => withTenantScope(tenantId, () => api.dailyReport(token!, date)),
     enabled: !!token,
   })
 }
 
 export function useDailyStatus(date: string) {
   const token = useAuthStore((s) => s.accessToken)
-  const tenantId = currentTenantId()
+  const tenantId = useTenantScope()
   return useQuery({
     queryKey: queryKeys.dailyStatus(date, tenantId),
-    queryFn: () => api.dailyStatus(token!, date),
+    queryFn: () => withTenantScope(tenantId, () => api.dailyStatus(token!, date)),
     enabled: !!token,
   })
 }

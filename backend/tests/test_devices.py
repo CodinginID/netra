@@ -48,7 +48,7 @@ async def test_device_register_returns_plaintext_token_once(client: AsyncClient,
 
     # Only the HASH is stored — never the plaintext token.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         from sqlalchemy import select
 
         device = (await s.execute(select(Device).where(Device.id == data["id"]))).scalar_one()
@@ -75,7 +75,7 @@ async def test_device_revoke(client: AsyncClient, super_admin):
 
     # Audit trail recorded register + revoke.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         from sqlalchemy import select
 
         from app.models import AuditLog

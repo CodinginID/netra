@@ -98,7 +98,7 @@ async def test_enroll_requires_consent(client: AsyncClient, super_admin):
     assert resp.json()["data"]["enrolled"] is True
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         embs = (await s.execute(select(FaceEmbedding))).scalars().all()
         assert len(embs) == 1
         assert len(embs[0].vector) == 512
@@ -177,7 +177,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
     assert len(listing.json()["data"]) == 2
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "face.enrolled" in actions
         assert "attendance.check_in" in actions
@@ -343,7 +343,7 @@ async def test_identify_does_not_block_event_loop(super_admin):
             return [0.0] * 512
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         t = Tenant(name="Slow", slug="slow-loop")
         s.add(t)
         await s.flush()
@@ -377,7 +377,7 @@ async def test_identify_respects_threshold(super_admin):
             return query_vec
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         t = Tenant(name="Thr", slug="thr")
         s.add(t)
         await s.flush()

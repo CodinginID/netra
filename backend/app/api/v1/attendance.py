@@ -423,7 +423,11 @@ async def delete_attendance_record(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """Soft-delete an attendance record (moves to trash)."""
-    await soft_delete(session, AttendanceRecord, record_id)
+    if not await soft_delete(session, AttendanceRecord, record_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found or already deleted",
+        )
     await audit_service.record(
         session,
         action="attendance.deleted",

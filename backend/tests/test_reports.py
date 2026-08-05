@@ -48,7 +48,7 @@ async def _tenant_id(slug: str) -> str:
     from sqlalchemy import select
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         return (await s.execute(select(Tenant.id).where(Tenant.slug == slug))).scalar_one()
 
 
@@ -63,8 +63,10 @@ async def _seed_user(tenant_id: str, full_name: str, username: str) -> str:
             is_active=True,
         )
         s.add(user)
-        await s.commit()
+        # Refresh BEFORE committing — the tenant binding is transaction local.
+        await s.flush()
         await s.refresh(user)
+        await s.commit()
         return user.id
 
 

@@ -33,23 +33,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         while True:
             await asyncio.sleep(24 * 3600)  # 24 hours
             try:
-                from app.db.session import SessionFactory
-                from app.models import Device, Schedule, User
-                from app.services.soft_delete import hard_delete_older_than
+                from app.services.soft_delete import purge_expired
 
-                async with SessionFactory() as session:
-                    users = await hard_delete_older_than(session, User, days=30)
-                    devices = await hard_delete_older_than(session, Device, days=30)
-                    schedules = await hard_delete_older_than(session, Schedule, days=30)
-                    await session.commit()
+                counts = await purge_expired(days=30)
 
-                if users or devices or schedules:
-                    log.info(
-                        "auto_purge_completed",
-                        users=users,
-                        devices=devices,
-                        schedules=schedules,
-                    )
+                # Log every run, including empty ones: a purge that silently
+                # stopped deleting is indistinguishable from "nothing expired"
+                # unless the zero is on the record.
+                log.info("auto_purge_completed", **counts)
             except Exception as exc:
                 log.error("auto_purge_failed", error=str(exc))
 

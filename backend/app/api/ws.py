@@ -20,7 +20,8 @@ async def _auth_device_token(raw_token: str) -> str | None:
     token_hash = hash_device_token(raw_token)
     try:
         async with SessionFactory() as session:
-            await _set_tenant(session, None)  # platform context: cross-tenant lookup
+            # Platform context: the tenant is unknown until the device is found.
+            await _set_tenant(session, None, platform=True)
             device = (
                 await session.execute(select(Device).where(Device.token_hash == token_hash))
             ).scalar_one_or_none()

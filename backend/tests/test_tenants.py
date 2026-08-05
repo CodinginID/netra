@@ -49,7 +49,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
     assert resp.json()["data"]["status"] == "suspended"
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
         assert tenant.status == TenantStatus.suspended
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
@@ -69,7 +69,7 @@ async def test_suspend_then_activate_tenant(client: AsyncClient, super_admin):
     assert resp.json()["data"]["status"] == "active"
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "tenant.active" in actions
 
@@ -124,7 +124,7 @@ async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin)
 
     # Audit row written.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "tenant.config.updated" in actions
 
@@ -173,3 +173,82 @@ async def test_non_admin_cannot_update_config(client: AsyncClient, super_admin):
         json={"branding": {"display_name": "hack"}},
     )
     assert resp.status_code == 403
+
+
+async def _make_tenant(client: AsyncClient, headers: dict, slug: str) -> str:
+    """Create a tenant via the API and return its id."""
+    resp = await client.post(
+        "/api/v1/tenants",
+        headers=headers,
+        json={
+            "name": f"Sekolah {slug}",
+            "slug": slug,
+            "admin_email": f"admin@{slug}.app",
+            "admin_password": "adminpass123",
+            "admin_full_name": f"Admin {slug}",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["data"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_soft_deletes_and_hides_from_list(
+    client: AsyncClient, super_admin
+):
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+    tenant_id = await _make_tenant(client, oheaders, "sekolah-del")
+
+    resp = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
+    assert resp.status_code == 204, resp.text
+
+    # deleted_at stamped rather than the row removed.
+    async with SessionFactory() as s:
+        await _set_tenant(s, None, platform=True)
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        assert tenant.deleted_at is not None
+        actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
+        assert "tenant.deleted" in actions
+
+    # ...and it disappears from the tenant listing.
+    listing = await client.get("/api/v1/tenants", headers=oheaders)
+    assert listing.status_code == 200, listing.text
+    assert tenant_id not in {t["id"] for t in listing.json()["data"]["items"]}
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_tenant_returns_404(client: AsyncClient, super_admin):
+    """A delete that matches no row must fail loudly, not report success."""
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+
+    resp = await client.delete("/api/v1/tenants/does-not-exist", headers=oheaders)
+    assert resp.status_code == 404, resp.text
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_twice_returns_404(client: AsyncClient, super_admin):
+    """Re-deleting an already-deleted tenant is a 404, not a silent 204."""
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+    tenant_id = await _make_tenant(client, oheaders, "sekolah-twice")
+
+    first = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
+    assert first.status_code == 204, first.text
+
+    second = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
+    assert second.status_code == 404, second.text
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_requires_super_admin(client: AsyncClient, super_admin):
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+    tenant_id = await _make_tenant(client, oheaders, "sekolah-rbac-del")
+
+    admin = await _token(client, email="admin@sekolah-rbac-del.app", password="adminpass123")
+    resp = await client.delete(
+        f"/api/v1/tenants/{tenant_id}", headers={"Authorization": f"Bearer {admin}"}
+    )
+    assert resp.status_code == 403, resp.text

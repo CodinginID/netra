@@ -69,7 +69,8 @@ async def purge_trash(
             "attendance": attendance_deleted,
         },
     )
-    await session.commit()
+    # No commit here: get_db owns it. Committing mid-request would drop the
+    # transaction-local tenant binding for anything queried afterwards.
 
     return Envelope(
         data={

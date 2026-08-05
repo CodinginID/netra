@@ -37,6 +37,10 @@ class SlidingWindowLimiter:
         if not dq:
             self._hits.pop(key, None)
 
+    def reset(self) -> None:
+        """Drop all recorded attempts. For tests, which share one process."""
+        self._hits.clear()
+
 
 def _client_ip(request: Request) -> str:
     # Honor the first hop in X-Forwarded-For when behind a reverse proxy.
@@ -53,3 +57,8 @@ _login_limiter = SlidingWindowLimiter(max_attempts=10, window_seconds=60)
 async def login_rate_limit(request: Request) -> None:
     """FastAPI dependency: throttle auth attempts per client IP."""
     _login_limiter.check(f"auth:{_client_ip(request)}")
+
+
+def reset_login_limiter() -> None:
+    """Clear login throttle state. Used by the test suite between tests."""
+    _login_limiter.reset()

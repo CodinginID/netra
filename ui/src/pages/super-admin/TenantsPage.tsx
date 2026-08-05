@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, EyeOff, Plus, Search, X, ArrowUpRight } from 'lucide-react'
+import { Eye, EyeOff, Plus, Search, X, ArrowUpRight, Trash2 } from 'lucide-react'
 import {
   type TenantOut,
 } from '@/api/adminApi'
@@ -9,7 +9,7 @@ import { useModalA11y } from '@/hooks/useModalA11y'
 import { Pagination } from '@/components/Pagination'
 import { MobileFab } from '@/components/MobileFab'
 import { useTenants } from '@/hooks/useApiQueries'
-import { useCreateTenant, useSuspendTenant, useActivateTenant } from '@/hooks/useApiMutations'
+import { useCreateTenant, useSuspendTenant, useActivateTenant, useDeleteTenant } from '@/hooks/useApiMutations'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '@/store/i18nStore'
 import '@/styles/layout.css'
@@ -265,6 +265,30 @@ function ToggleConfirmModal({ tenant, onConfirm, onClose, busy }: {
   )
 }
 
+function DeleteConfirmModal({ tenant, onConfirm, onClose, busy }: {
+  tenant: TenantOut
+  onConfirm: () => void
+  onClose: () => void
+  busy: boolean
+}) {
+  const { t } = useI18n()
+  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
+  return (
+    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
+      <div ref={modalRef} className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">{t('tenant.delete_title')}</h3>
+        <p className="confirm-text">{t('tenant.confirm_delete', { name: tenant.name })}</p>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={busy}>
+            {busy ? '...' : t('tenant.delete')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function TenantsPage() {
   const { show } = useToast()
   const { t } = useI18n()
@@ -275,6 +299,7 @@ export function TenantsPage() {
   const searchRef = useRef('')
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<TenantOut | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<TenantOut | null>(null)
 
   const handleKelola = (tenantId: string) => {
     navigate(`/admin/tenants/${tenantId}`)
@@ -302,6 +327,10 @@ export function TenantsPage() {
   const activateMutation = useActivateTenant(() => {
     show(t('tenant.toast_activated'), 'success')
   })
+  const deleteMutation = useDeleteTenant(() => {
+    show(t('tenant.toast_deleted'), 'success')
+    setDeleteTarget(null)
+  })
 
   const handleConfirmToggle = () => {
     if (!confirmTarget) return
@@ -326,6 +355,14 @@ export function TenantsPage() {
   }
 
   const busyId = suspendMutation.isPending ? suspendMutation.variables : (activateMutation.isPending ? activateMutation.variables : null)
+
+  const handleDelete = (tenant: TenantOut) => {
+    deleteMutation.mutate(tenant.id, {
+      onError: (err) => {
+        show(err instanceof Error ? err.message : t('tenant.error_delete_failed'), 'error')
+      },
+    })
+  }
 
   return (
     <div>
@@ -426,6 +463,16 @@ export function TenantsPage() {
                       </button>
                     )}
                   </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => setDeleteTarget(tenant)}
+                      disabled={busyId === tenant.id}
+                      title={t('tenant.delete')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
           </tbody>
@@ -449,6 +496,15 @@ export function TenantsPage() {
           onConfirm={handleConfirmToggle}
           onClose={() => setConfirmTarget(null)}
           busy={busyId === confirmTarget.id}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          tenant={deleteTarget}
+          onConfirm={() => handleDelete(deleteTarget)}
+          onClose={() => setDeleteTarget(null)}
+          busy={deleteMutation.isPending}
         />
       )}
     </div>

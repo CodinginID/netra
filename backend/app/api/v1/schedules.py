@@ -112,7 +112,10 @@ async def delete_schedule(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> None:
-    await soft_delete(session, Schedule, schedule_id)
+    if not await soft_delete(session, Schedule, schedule_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or already deleted"
+        )
     await audit_service.record(
         session,
         action="schedule.deleted",

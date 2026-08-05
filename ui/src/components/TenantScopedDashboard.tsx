@@ -1,12 +1,14 @@
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { TenantContextBanner } from '@/components/TenantContextBanner'
-import { useTenantApiHeaders } from '@/hooks/useTenantApiHeaders'
 
 /**
  * Dashboard layout for tenant-scoped pages under /admin/tenants/:tenantId/*
  *
- * Renders the context banner and ensures the API layer is synced to the
- * current tenant from the URL.
+ * Renders the context banner. It deliberately does NOT push the tenant into the
+ * API layer: each query and mutation reads the tenant from the URL itself (see
+ * `useTenantScope`) and pins its own request. Syncing it from an effect here
+ * used to race the child pages' requests, which fired first and were answered
+ * under the previous tenant's scope.
  *
  * The sidebar nav items are provided by the parent SuperAdminDashboard
  * which detects tenant context and adjusts accordingly.
@@ -15,9 +17,6 @@ export function TenantScopedDashboard() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-
-  // Sync tenant from URL → API headers
-  useTenantApiHeaders()
 
   if (!tenantId) return null
 

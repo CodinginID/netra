@@ -4,28 +4,59 @@ import { refreshApi } from '@/api/authApi'
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 /**
- * Mutable ref holding the current tenant context.
- * Set by `setApiTenantContext` (or the `useTenantApiHeaders` hook) so that
- * apiFetch picks up the tenant from the URL rather than localStorage.
+ * Sentinel a super admin sends in `X-Tenant-Id` to deliberately act across every
+ * tenant (platform dashboard, global trash). The backend rejects tenant-scoped
+ * requests that arrive with no scope at all, so cross-tenant reads are always a
+ * conscious choice rather than the consequence of a missing header.
  */
-let _currentTenantId: string | null = null
+export const PLATFORM_TENANT_SCOPE = '*'
 
-/** Update the active tenant for all subsequent API calls. */
-export function setApiTenantContext(tenantId: string | null) {
-  _currentTenantId = tenantId
-}
+/** A tenant id, the platform sentinel, or null (scope comes from the JWT). */
+export type TenantScope = string | null
 
-/** Read the current tenant context — used by enrollmentApi.ts. */
-export function getApiTenantContext(): string | null {
+/**
+ * Ambient tenant scope for the call currently being set up.
+ *
+ * Prefer `withTenantScope`, which binds this for exactly one call. Leaving it
+ * set from an effect is what caused cross-tenant data to be cached: React runs
+ * child effects (which fire the request) BEFORE the parent effect that updated
+ * the scope, so the first request after a tenant switch went out under the
+ * previous tenant and its response was stored against the new tenant's key.
+ */
+let _currentTenantId: TenantScope = null
+
+/**
+ * Read the ambient tenant scope — used by enrollmentApi.ts, which builds its own
+ * headers. There is deliberately no public setter: scope is bound per call via
+ * `withTenantScope`, so it cannot be left pointing at a stale tenant.
+ */
+export function getApiTenantContext(): TenantScope {
   return _currentTenantId
 }
 
-function authHeaders(token: string): HeadersInit {
+/**
+ * Run `fn` with `scope` bound as the tenant scope, then restore the previous one.
+ *
+ * Every API function builds its headers synchronously before its first await, so
+ * binding the scope around the call is enough to pin it — no async gap in which
+ * another view could change it out from under the request.
+ */
+export function withTenantScope<T>(scope: TenantScope, fn: () => T): T {
+  const previous = _currentTenantId
+  _currentTenantId = scope
+  try {
+    return fn()
+  } finally {
+    _currentTenantId = previous
+  }
+}
+
+function authHeaders(token: string, scope: TenantScope): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   }
-  if (_currentTenantId) h['X-Tenant-Id'] = _currentTenantId
+  if (scope) h['X-Tenant-Id'] = scope
   return h
 }
 
@@ -52,9 +83,14 @@ async function tryRefresh(): Promise<string | null> {
 }
 
 async function apiFetch<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+  // Snapshot the scope synchronously, before any await. The retry path below
+  // resumes after a token refresh, by which point the ambient scope may already
+  // belong to a different tenant's view — the retry must reuse this one.
+  const scope = _currentTenantId
+
   let res = await fetch(url, {
     ...init,
-    headers: { ...authHeaders(token), ...init?.headers },
+    headers: { ...authHeaders(token, scope), ...init?.headers },
   })
 
   // On 401, attempt a single silent refresh and retry once before giving up.
@@ -63,7 +99,7 @@ async function apiFetch<T>(url: string, token: string, init?: RequestInit): Prom
     if (newToken) {
       res = await fetch(url, {
         ...init,
-        headers: { ...authHeaders(newToken), ...init?.headers },
+        headers: { ...authHeaders(newToken, scope), ...init?.headers },
       })
     }
     if (res.status === 401) {
@@ -489,6 +525,10 @@ export async function suspendTenant(token: string, tenantId: string): Promise<Te
 
 export async function activateTenant(token: string, tenantId: string): Promise<TenantOut> {
   return apiFetch<TenantOut>(`${API_BASE}/tenants/${tenantId}/activate`, token, { method: 'POST' })
+}
+
+export async function deleteTenant(token: string, tenantId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/tenants/${tenantId}`, token, { method: 'DELETE' })
 }
 
 // --------------------------------------------------------------------------- //

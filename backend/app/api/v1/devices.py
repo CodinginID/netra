@@ -186,7 +186,10 @@ async def delete_device(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> None:
-    await soft_delete(session, Device, device_id)
+    if not await soft_delete(session, Device, device_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or already deleted"
+        )
     await audit_service.record(
         session,
         action="device.deleted",

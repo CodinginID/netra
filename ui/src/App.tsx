@@ -72,21 +72,24 @@ function useAppReady(): boolean {
     }
     appReadyPromise = new Promise<void>(async (resolve) => {
       const refreshToken = useAuthStore.getState().refreshToken
-      if (refreshToken) {
-        // Wait for the persisted store to finish rehydrating before
-        // calling silentRefresh.  Without this, the stored tokens might
-        // not be available yet and silentRefresh would skip.
-        await new Promise<void>((r) => {
-          const unsub = useAuthStore.persist.onFinishHydration(() => {
-            unsub()
-            r()
-          })
-          // If already hydrated, resolve immediately.
-          if (useAuthStore.getState().refreshToken) r()
-        })
-        // Now that the store is hydrated, run silentRefresh and wait for it.
-        await useAuthStore.getState().silentRefresh()
+      if (!refreshToken) {
+        resolve()
+        return
       }
+
+      // Wait for the persisted store to finish rehydrating.
+      await new Promise<void>((r) => {
+        const unsub = useAuthStore.persist.onFinishHydration(() => {
+          unsub()
+          r()
+        })
+        // If already hydrated (no localStorage or already restored), resolve.
+        if (useAuthStore.getState().refreshToken) r()
+      })
+
+      // Run silentRefresh and wait for it to COMPLETE before resolving.
+      // This ensures the access token is fresh when routes render.
+      await useAuthStore.getState().silentRefresh()
       resolve()
     })
     appReadyPromise.then(() => setReady(true))

@@ -139,7 +139,10 @@ async def delete_user(
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    await soft_delete(session, User, user_id)
+    if not await soft_delete(session, User, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found or already deleted"
+        )
     await audit_service.record(
         session,
         action="user.deleted",

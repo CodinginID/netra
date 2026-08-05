@@ -67,7 +67,7 @@ async def _mint(client: AsyncClient, api_key: str, *, return_origin: str) -> dic
 
 async def _load_embed_session(token: str) -> EmbedSession:
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         embed = (
             await session.execute(
                 select(EmbedSession).where(EmbedSession.token_hash == hash_embed_token(token))
@@ -107,7 +107,7 @@ async def test_frame_origin_rejects_expired_token(client: AsyncClient, super_adm
     minted = await _mint(client, key["key"], return_origin="https://app.acme.id")
 
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         embed = (
             await session.execute(
                 select(EmbedSession).where(
@@ -129,7 +129,7 @@ async def test_frame_origin_rejects_consumed_token(client: AsyncClient, super_ad
     minted = await _mint(client, key["key"], return_origin="https://app.acme.id")
 
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         embed = await embed_session_service.lookup_active(session, minted["token"])
         assert embed is not None
         await embed_session_service.consume(session, embed)
@@ -151,7 +151,7 @@ async def test_frame_origin_rejects_malformed_stored_origin(client: AsyncClient,
     minted = await _mint(client, key["key"], return_origin="https://app.acme.id")
 
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         embed = (
             await session.execute(
                 select(EmbedSession).where(
