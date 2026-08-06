@@ -26,7 +26,7 @@ Net effect: forgetting to bind a tenant now under-fetches (empty list) instead
 of over-fetching (every tenant), and the fix is fail-safe by construction.
 
 Revision ID: a7b3c9d1e5f2
-Revises: d4e5f6a7b8c9
+Revises: d3e4f5a6b7c8
 Create Date: 2026-08-04
 
 """
@@ -36,7 +36,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a7b3c9d1e5f2"
-down_revision: str | Sequence[str] | None = "d4e5f6a7b8c9"
+down_revision: str | Sequence[str] | None = "d3e4f5a6b7c8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
