@@ -25,7 +25,7 @@ async def test_root(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_login_success_super_admin(client: AsyncClient, super_admin):
     resp = await client.post(
-        "/api/v1/auth/login", json={"username": "owner", "password": "ownerpass123"}
+        "/api/v1/auth/login", json={"email": "owner@netra.app", "password": "ownerpass123"}
     )
     assert resp.status_code == 200
     data = resp.json()["data"]
@@ -34,8 +34,19 @@ async def test_login_success_super_admin(client: AsyncClient, super_admin):
 
 
 @pytest.mark.asyncio
+async def test_login_is_case_insensitive(client: AsyncClient, super_admin):
+    resp = await client.post(
+        "/api/v1/auth/login", json={"email": "Owner@Netra.App", "password": "ownerpass123"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["role"] == "super_admin"
+
+
+@pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient, super_admin):
-    resp = await client.post("/api/v1/auth/login", json={"username": "owner", "password": "wrong"})
+    resp = await client.post(
+        "/api/v1/auth/login", json={"email": "owner@netra.app", "password": "wrong"}
+    )
     assert resp.status_code == 401
     assert resp.json()["error"] == "Invalid credentials"
 
@@ -48,7 +59,7 @@ async def _token(client: AsyncClient, **payload) -> str:
 
 @pytest.mark.asyncio
 async def test_tenant_onboarding_flow(client: AsyncClient, super_admin):
-    token = await _token(client, username="owner", password="ownerpass123")
+    token = await _token(client, email="owner@netra.app", password="ownerpass123")
     headers = {"Authorization": f"Bearer {token}"}
 
     # Super admin creates a tenant (+ first tenant admin).
@@ -58,7 +69,7 @@ async def test_tenant_onboarding_flow(client: AsyncClient, super_admin):
         json={
             "name": "Sekolah Maju",
             "slug": "sekolah-maju",
-            "admin_username": "admin",
+            "admin_email": "admin@sekolah-maju.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin Sekolah",
         },
@@ -66,9 +77,9 @@ async def test_tenant_onboarding_flow(client: AsyncClient, super_admin):
     assert resp.status_code == 201, resp.text
     assert resp.json()["data"]["slug"] == "sekolah-maju"
 
-    # Tenant admin can now log in (scoped by tenant_slug).
+    # Tenant admin can now log in by email — tenant_id comes from the JWT, no slug.
     admin_token = await _token(
-        client, username="admin", password="adminpass123", tenant_slug="sekolah-maju"
+        client, email="admin@sekolah-maju.app", password="adminpass123"
     )
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -85,40 +96,34 @@ async def test_tenant_onboarding_flow(client: AsyncClient, super_admin):
     # at onboarding + the end user just added = 2 users in this tenant.
     resp = await client.get("/api/v1/users", headers=admin_headers)
     assert resp.status_code == 200
-    assert len(resp.json()["data"]) == 2
+    assert resp.json()["data"]["total"] == 2
 
 
 @pytest.mark.asyncio
-async def test_rbac_end_user_cannot_create_tenant(client: AsyncClient, super_admin):
-    # Onboard a tenant + end user first.
-    token = await _token(client, username="owner", password="ownerpass123")
+async def test_rbac_tenant_admin_cannot_create_tenant(client: AsyncClient, super_admin):
+    # Onboard a tenant; its admin is a non-super staff user.
+    token = await _token(client, email="owner@netra.app", password="ownerpass123")
     await client.post(
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "name": "Tenant Org",
             "slug": "t-org",
-            "admin_username": "tadmin",
+            "admin_email": "tadmin@t-org.app",
             "admin_password": "tapass123",
             "admin_full_name": "Tenant Admin",
         },
     )
-    admin_token = await _token(client, username="tadmin", password="tapass123", tenant_slug="t-org")
-    await client.post(
-        "/api/v1/users",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"full_name": "EU", "role": "end_user", "username": "eu", "password": "eupass123"},
-    )
-    eu_token = await _token(client, username="eu", password="eupass123", tenant_slug="t-org")
+    admin_token = await _token(client, email="tadmin@t-org.app", password="tapass123")
 
-    # End user attempts a super-admin action -> 403.
+    # Tenant admin attempts a super-admin-only action -> 403.
     resp = await client.post(
         "/api/v1/tenants",
-        headers={"Authorization": f"Bearer {eu_token}"},
+        headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "name": "Tenant X",
             "slug": "x-org",
-            "admin_username": "xadmin",
+            "admin_email": "xadmin@x-org.app",
             "admin_password": "xpass1234",
             "admin_full_name": "Admin X",
         },

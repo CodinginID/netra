@@ -1,0 +1,36 @@
+# ── Development image — fast rebuild, bind-mount source ───────────────────────
+FROM python:3.12-slim
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+WORKDIR /app
+
+# Copy manifests for initial sync (cached unless these files change).
+COPY pyproject.toml uv.lock ./
+
+# Install deps (production only — no ML model download needed in dev).
+# insightface pulls in opencv-python (GUI) as transitive dep — replace it
+# with the headless variant immediately after sync.
+RUN uv sync --frozen --no-dev --no-install-project \
+ && uv pip uninstall --python .venv/bin/python opencv-python opencv-python-headless \
+ && uv pip install --python .venv/bin/python "opencv-python-headless==4.13.0.92"
+
+# Copy application code (bind-mounted in docker-compose, but needed for
+# first-time sync and for containers started without a bind mount).
+COPY app/ app/
+COPY alembic/ alembic/
+COPY alembic.ini ./
+COPY scripts/ scripts/
+
+# ML model paths — models dir is bind-mounted via docker-compose in dev.
+ENV SILENTFACE_MODEL_PATH=/app/models/silentface.onnx \
+    INSIGHTFACE_MODEL_ROOT=/app/models/insightface \
+    PYTHONPATH="/app" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 5170
+
+# Default: run the dev entrypoint (migration + uvicorn --reload).
+ENTRYPOINT ["sh", "scripts/entrypoint-dev.sh"]

@@ -67,3 +67,7 @@ __pycache__
 .claude
 .qwen
 .claude-flow
+.gstack/
+.worktrees/
+.superpowers/
+

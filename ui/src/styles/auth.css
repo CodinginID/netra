@@ -51,79 +51,413 @@
   animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
 
-/* ── Face scan illustration ── */
+/* ── Face scan: 3D ID Card ── */
 .auth-face-scan {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.875rem;
-  margin-top: 1rem;
+  gap: 1rem;
+  margin-top: 0.5rem;
 }
 
-.face-scan-svg {
+/* 3D card container */
+.face-scan-card {
+  perspective: 1000px;
+}
+
+.face-scan-card-inner {
   width: 220px;
-  height: 240px;
-  filter: drop-shadow(0 0 16px rgba(107, 216, 203, 0.2));
+  height: 300px;
+  position: relative;
+  animation: cardFloat 5s ease-in-out infinite;
+  transform-style: preserve-3d;
 }
 
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0) rotateX(2deg) rotateY(-2deg); }
+  25%      { transform: translateY(-8px) rotateX(-1deg) rotateY(2deg); }
+  50%      { transform: translateY(-12px) rotateX(1deg) rotateY(-1deg); }
+  75%      { transform: translateY(-6px) rotateX(-2deg) rotateY(1deg); }
+}
+
+/* Card face (the actual card) */
+.face-scan-card-face {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(107, 216, 203, 0.2);
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(107, 216, 203, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Animated border glow */
+.face-scan-card-face::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(107, 216, 203, 0.5) 90deg,
+    transparent 180deg,
+    rgba(107, 216, 203, 0.5) 270deg,
+    transparent 360deg
+  );
+  animation: borderRotate 4s linear infinite;
+  z-index: -1;
+  opacity: 0.6;
+}
+
+@keyframes borderRotate {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Card header with chip */
+.face-scan-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(107, 216, 203, 0.1);
+}
+
+.face-scan-card-chip {
+  width: 24px;
+  height: 18px;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  border-radius: 4px;
+  position: relative;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
+.face-scan-card-chip::before {
+  content: '';
+  position: absolute;
+  inset: 2px 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.face-scan-card-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #5eead4, #0ea5e9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Photo area */
+.face-scan-photo {
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.face-scan-face-svg {
+  width: 120px;
+  height: 140px;
+  filter: drop-shadow(0 0 12px rgba(107, 216, 203, 0.15));
+}
+
+/* Card info lines */
+.face-scan-card-info {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.face-scan-info-line {
+  height: 6px;
+  background: rgba(107, 216, 203, 0.15);
+  border-radius: 3px;
+}
+
+.face-scan-info-line.short { width: 40%; }
+.face-scan-info-line.medium { width: 70%; }
+.face-scan-info-line.long { width: 85%; }
+
+/* Card footer */
+.face-scan-card-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid rgba(107, 216, 203, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.face-scan-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(107, 216, 203, 0.4);
+  transition: all 0.3s;
+}
+
+.face-scan-status-dot.active {
+  background: #5eead4;
+  box-shadow: 0 0 8px rgba(94, 234, 212, 0.6);
+  animation: dotPulse 1s ease-in-out infinite;
+}
+
+.face-scan-status-dot.success {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+}
+
+.face-scan-status-dot.error {
+  background: #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.6);
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.3); opacity: 0.7; }
+}
+
+.face-scan-card-footer-text {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: rgba(107, 216, 203, 0.6);
+}
+
+/* Face animations */
+
+/* Head breathes & bobs — gives the face a sense of life & depth */
+@keyframes headAlive {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  25%      { transform: translateY(-1.5px) rotate(-0.7deg) scale(1.004); }
+  50%      { transform: translateY(0.6px) rotate(0.5deg) scale(1.012); } /* breathe in */
+  75%      { transform: translateY(-1px) rotate(0.7deg) scale(1.006); }
+}
+
+.face-head {
+  transform-box: fill-box;
+  transform-origin: 60px 62px;
+  animation: headAlive 6s ease-in-out infinite;
+}
+
+/* Eyes blink together — two natural blinks per cycle, one occasionally doubled */
+@keyframes eyeBlink {
+  0%, 44%, 52%, 90%, 94%, 100% { transform: scaleY(1); }
+  48%                          { transform: scaleY(0.08); }
+  92%                          { transform: scaleY(0.08); }
+}
+
+.face-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eyeBlink 5.5s ease-in-out infinite;
+}
+
+/* Pupils glance left/right — the face "looks around" */
+@keyframes pupilGlance {
+  0%, 34%   { transform: translate(0, 0); }
+  40%, 52%  { transform: translate(-2.4px, 0.4px); }  /* look left */
+  58%, 72%  { transform: translate(2.4px, 0.4px); }   /* look right */
+  78%, 100% { transform: translate(0, 0); }
+}
+
+.face-pupils {
+  transform-box: fill-box;
+  animation: pupilGlance 7s ease-in-out infinite;
+}
+
+/* Smile shown only when verified */
+.face-mouth-smile { opacity: 0; transition: opacity 0.35s ease; }
+.face-mouth-neutral { transition: opacity 0.35s ease; }
+
+@keyframes meshDotPulse {
+  0%, 100% { opacity: 0.4; r: 1.2; }
+  50%      { opacity: 0.9; r: 2; }
+}
+
+@keyframes radarExpand {
+  0%   { r: 0; opacity: 0.5; }
+  70%  { r: 50; opacity: 0.05; }
+  100% { r: 55; opacity: 0; }
+}
+
+.face-mesh .mesh-dot { animation: meshDotPulse 2s ease-in-out infinite; }
+.face-mesh .mesh-dot:nth-child(1) { animation-delay: 0s; }
+.face-mesh .mesh-dot:nth-child(2) { animation-delay: 0.1s; }
+.face-mesh .mesh-dot:nth-child(3) { animation-delay: 0.2s; }
+.face-mesh .mesh-dot:nth-child(4) { animation-delay: 0.3s; }
+.face-mesh .mesh-dot:nth-child(5) { animation-delay: 0.4s; }
+.face-mesh .mesh-dot:nth-child(6) { animation-delay: 0.5s; }
+.face-mesh .mesh-dot:nth-child(7) { animation-delay: 0.6s; }
+.face-mesh .mesh-dot:nth-child(8) { animation-delay: 0.7s; }
+
+.radar-scan { animation: radarExpand 2.5s ease-out infinite; }
+
+/* Scan line animation */
 @keyframes scanMove {
-  0%   { transform: translateY(-38px); opacity: 0.85; }
-  50%  { transform: translateY(100px); opacity: 0.9; }
-  100% { transform: translateY(-38px); opacity: 0.85; }
+  0%   { transform: translateY(-20px); opacity: 0.8; }
+  50%  { transform: translateY(60px); opacity: 0.9; }
+  100% { transform: translateY(-20px); opacity: 0.8; }
 }
 
 @keyframes scanMoveFast {
-  0%   { transform: translateY(-38px); opacity: 0.95; }
-  50%  { transform: translateY(100px); opacity: 1; }
-  100% { transform: translateY(-38px); opacity: 0.95; }
-}
-
-@keyframes bracketPulse {
-  0%, 100% { opacity: 0.85; }
-  50%      { opacity: 1; filter: drop-shadow(0 0 6px rgba(107,216,203,0.9)); }
-}
-
-@keyframes verifiedRing {
-  0%   { stroke: rgba(107,216,203,0); stroke-width: 0; r: 30; }
-  40%  { stroke: rgba(107,216,203,0.8); stroke-width: 2; r: 36; }
-  100% { stroke: rgba(107,216,203,0); stroke-width: 0; r: 50; }
-}
-
-@keyframes badgeDot {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50%      { opacity: 1; transform: scale(1.2); }
+  0%   { transform: translateY(-20px); opacity: 0.95; }
+  50%  { transform: translateY(60px); opacity: 1; }
+  100% { transform: translateY(-20px); opacity: 0.95; }
 }
 
 .scan-line, .scan-glow {
   animation: scanMove 3s ease-in-out infinite;
 }
 
-/* Scanning state — fast scan + pulsing brackets */
+/* Scanning state */
 .auth-face-scan.scanning .scan-line,
 .auth-face-scan.scanning .scan-glow {
-  animation: scanMoveFast 0.9s ease-in-out infinite;
+  animation: scanMoveFast 1s ease-in-out infinite;
 }
 
-.auth-face-scan.scanning .bracket {
-  animation: bracketPulse 0.9s ease-in-out infinite;
+.auth-face-scan.scanning .face-scan-card-face {
+  border-color: rgba(107, 216, 203, 0.4);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 60px rgba(107, 216, 203, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* Verified state — pause scan, ring expands */
-.auth-face-scan.verified .scan-line,
-.auth-face-scan.verified .scan-glow {
-  animation-play-state: paused;
-  opacity: 0.3;
+.auth-face-scan.scanning .face-scan-card-face::before {
+  opacity: 1;
+  animation-duration: 2s;
 }
 
-.auth-face-scan.verified .verified-ring {
-  animation: verifiedRing 0.9s ease-out forwards;
+.auth-face-scan.scanning .face-mesh .mesh-dot {
+  animation-duration: 0.8s;
 }
 
-/* Failed state — pause scan */
-.auth-face-scan.failed .scan-line,
-.auth-face-scan.failed .scan-glow {
-  animation-play-state: paused;
-  opacity: 0.15;
+.auth-face-scan.scanning .radar-scan {
+  animation-duration: 1.2s;
+}
+
+/* Scanning: the face focuses — pupils track the scan line up & down */
+@keyframes pupilScan {
+  0%, 100% { transform: translateY(-1.2px); }
+  50%      { transform: translateY(3px); }
+}
+
+.auth-face-scan.scanning .face-pupils {
+  animation: pupilScan 1s ease-in-out infinite;
+}
+
+/* Alert, quicker breathing while being scanned */
+.auth-face-scan.scanning .face-head {
+  animation-duration: 3s;
+}
+
+/* Blink less while concentrating */
+.auth-face-scan.scanning .face-eyes {
+  animation-duration: 8s;
+}
+
+/* Verified state */
+.auth-face-scan.verified .face-scan-card-face {
+  border-color: rgba(52, 211, 153, 0.5);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 80px rgba(52, 211, 153, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.auth-face-scan.verified .face-scan-card-face::before {
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(52, 211, 153, 0.6) 90deg,
+    transparent 180deg,
+    rgba(52, 211, 153, 0.6) 270deg,
+    transparent 360deg
+  );
+  animation-duration: 2s;
+  opacity: 0.8;
+}
+
+/* Verified: the face smiles & brightens up */
+.auth-face-scan.verified .face-mouth-neutral { opacity: 0; }
+.auth-face-scan.verified .face-mouth-smile { opacity: 1; }
+
+.auth-face-scan.verified .face-pupils {
+  animation: none;
+  transform: translate(0, 0);
+}
+
+.auth-face-scan.verified .eye-pupil {
+  fill: #34d399;
+  filter: drop-shadow(0 0 3px rgba(52, 211, 153, 0.8));
+}
+
+.auth-face-scan.verified .face-eye {
+  stroke: rgba(52, 211, 153, 0.8);
+}
+
+/* Failed: pupils shrink & drift down, mouth stays neutral */
+.auth-face-scan.failed .face-pupils {
+  animation: none;
+  transform: translateY(1.5px);
+}
+
+.auth-face-scan.failed .eye-pupil {
+  fill: #f87171;
+}
+
+.auth-face-scan.failed .face-eye {
+  stroke: rgba(248, 113, 113, 0.7);
+}
+
+/* Failed state */
+.auth-face-scan.failed .face-scan-card-face {
+  border-color: rgba(248, 113, 113, 0.4);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(248, 113, 113, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.auth-face-scan.failed .face-scan-card-face::before {
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(248, 113, 113, 0.5) 90deg,
+    transparent 180deg,
+    rgba(248, 113, 113, 0.5) 270deg,
+    transparent 360deg
+  );
+  opacity: 0.5;
+}
+
+/* Respect users who prefer less motion — keep the face calm & static */
+@media (prefers-reduced-motion: reduce) {
+  .face-head,
+  .face-eyes,
+  .face-pupils,
+  .face-mesh .mesh-dot,
+  .radar-scan,
+  .scan-line,
+  .scan-glow,
+  .face-scan-card-inner,
+  .face-scan-card-face::before {
+    animation: none !important;
+  }
 }
 
 .face-scan-status {
@@ -276,8 +610,16 @@
   margin-bottom: 2rem;
 }
 
+.auth-brand-logo span {
+  background: linear-gradient(135deg, #0d9488 0%, #006387 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .auth-brand-logo svg {
-  filter: drop-shadow(0 0 8px rgba(107,216,203,0.8));
+  color: #0d9488;
+  filter: drop-shadow(0 0 8px rgba(13,148,136,0.6));
 }
 
 
@@ -446,4 +788,64 @@
 @media (max-width: 768px) {
   .auth-brand { display: none; }
   .auth-panel { flex: 1 1 100%; background: #f8f9ff; }
+}
+
+/* ── Docs button — fixed top-right, glowing glass ── */
+.auth-docs-btn {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: #5eead4;
+  background: rgba(10, 19, 34, 0.78);
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 18px rgba(45, 212, 191, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.auth-docs-btn:hover {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 0 30px rgba(45, 212, 191, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.auth-docs-btn-arrow { transition: transform 0.2s; }
+.auth-docs-btn:hover .auth-docs-btn-arrow { transform: translateX(3px); }
+
+/* sweeping shine */
+.auth-docs-btn-glow {
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(94, 234, 212, 0.25), transparent);
+  transform: skewX(-20deg);
+  animation: docsBtnSweep 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes docsBtnSweep {
+  0%, 60%  { left: -60%; }
+  100%     { left: 130%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-docs-btn-glow { animation: none; }
+}
+
+@media (max-width: 768px) {
+  .auth-docs-btn { top: 12px; right: 12px; padding: 8px 14px; font-size: 12px; }
 }

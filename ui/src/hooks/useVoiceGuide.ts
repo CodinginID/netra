@@ -41,5 +41,5 @@ export function useVoiceGuide() {
 
   const setEnabled = useCallback((v: boolean) => { enabledRef.current = v }, [])
 
-  return { announcePhase, announceCountdown, announceDone, setEnabled }
+  return { speak, announcePhase, announceCountdown, announceDone, setEnabled }
 }

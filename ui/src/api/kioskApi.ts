@@ -39,13 +39,37 @@ export async function postAttendance(
   const json = await res.json().catch(() => ({}))
 
   if (res.status === 404) {
-    throw new KioskError('not_recognized', json.detail ?? 'Wajah tidak dikenali')
+    throw new KioskError(
+      'not_recognized',
+      'Wajah belum terdaftar atau tidak cocok. Silakan hubungi admin untuk pendaftaran wajah.',
+    )
   }
   if (res.status === 409) {
     throw new KioskError('duplicate', json.detail ?? 'Absensi sudah tercatat hari ini')
   }
   if (res.status === 422) {
-    throw new KioskError('liveness_failed', json.error ?? json.detail ?? 'Liveness gagal')
+    const detail = json.error ?? json.detail ?? 'Validation error'
+    // Check if it's a FastAPI validation error (array of field errors)
+    if (Array.isArray(detail)) {
+      const fieldErrors = detail.map((e: any) => `${e.loc?.join('.')}: ${e.msg}`).join('; ')
+      throw new KioskError('server_error', `Validation error: ${fieldErrors}`)
+    }
+    // Map server-side validation reasons to clear, human messages.
+    const msg = String(detail).toLowerCase()
+    if (msg.includes('liveness')) {
+      throw new KioskError(
+        'liveness_failed',
+        'Verifikasi keaslian wajah gagal. Pastikan wajah asli (bukan foto/layar) menghadap kamera dengan pencahayaan cukup.',
+      )
+    }
+    if (msg.includes('empty image') || msg.includes('decode')) {
+      throw new KioskError('liveness_failed', 'Gambar tidak terbaca. Coba lagi.')
+    }
+    if (msg.includes('no face') || msg.includes('face not detected')) {
+      throw new KioskError('not_recognized', 'Wajah tidak terdeteksi. Posisikan wajah di tengah kamera.')
+    }
+    // Generic validation error
+    throw new KioskError('server_error', String(detail))
   }
   if (!res.ok) {
     throw new KioskError('server_error', json.error ?? json.detail ?? `Server error (${res.status})`)
@@ -54,12 +78,22 @@ export async function postAttendance(
   return json.data ?? json
 }
 
+export interface Coords {
+  lat: number
+  lng: number
+}
+
 export async function postAutoAttendance(
   deviceToken: string,
   imageBlob: Blob,
+  coords?: Coords | null,
 ): Promise<AttendanceResult> {
   const form = new FormData()
   form.append('image', imageBlob, 'frame.jpg')
+  if (coords) {
+    form.append('lat', String(coords.lat))
+    form.append('lng', String(coords.lng))
+  }
 
   const res = await fetch(`${API_BASE}/attendance/auto`, {
     method: 'POST',
@@ -70,13 +104,37 @@ export async function postAutoAttendance(
   const json = await res.json().catch(() => ({}))
 
   if (res.status === 404) {
-    throw new KioskError('not_recognized', json.detail ?? 'Wajah tidak dikenali')
+    throw new KioskError(
+      'not_recognized',
+      'Wajah belum terdaftar atau tidak cocok. Silakan hubungi admin untuk pendaftaran wajah.',
+    )
   }
   if (res.status === 409) {
     throw new KioskError('duplicate', json.detail ?? 'Absensi sudah tercatat hari ini')
   }
   if (res.status === 422) {
-    throw new KioskError('liveness_failed', json.error ?? json.detail ?? 'Liveness gagal')
+    const detail = json.error ?? json.detail ?? 'Validation error'
+    // Check if it's a FastAPI validation error (array of field errors)
+    if (Array.isArray(detail)) {
+      const fieldErrors = detail.map((e: any) => `${e.loc?.join('.')}: ${e.msg}`).join('; ')
+      throw new KioskError('server_error', `Validation error: ${fieldErrors}`)
+    }
+    // Map server-side validation reasons to clear, human messages.
+    const msg = String(detail).toLowerCase()
+    if (msg.includes('liveness')) {
+      throw new KioskError(
+        'liveness_failed',
+        'Verifikasi keaslian wajah gagal. Pastikan wajah asli (bukan foto/layar) menghadap kamera dengan pencahayaan cukup.',
+      )
+    }
+    if (msg.includes('empty image') || msg.includes('decode')) {
+      throw new KioskError('liveness_failed', 'Gambar tidak terbaca. Coba lagi.')
+    }
+    if (msg.includes('no face') || msg.includes('face not detected')) {
+      throw new KioskError('not_recognized', 'Wajah tidak terdeteksi. Posisikan wajah di tengah kamera.')
+    }
+    // Generic validation error
+    throw new KioskError('server_error', String(detail))
   }
   if (!res.ok) {
     throw new KioskError('server_error', json.error ?? json.detail ?? `Server error (${res.status})`)

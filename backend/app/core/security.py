@@ -106,6 +106,47 @@ def verify_device_token(token: str, token_hash: str) -> bool:
     return hmac.compare_digest(hash_device_token(token), token_hash)
 
 
+# --------------------------------------------------------------------------- #
+# API keys (server-to-server tenant integration)
+# --------------------------------------------------------------------------- #
+API_KEY_PREFIX = "ntr_live_"
+
+
+def generate_api_key() -> str:
+    """Return a high-entropy API key with an identifying prefix (shown once)."""
+    return f"{API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def hash_api_key(key: str) -> str:
+    """SHA-256 digest for at-rest storage + constant-time lookup by hash."""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def verify_api_key(key: str, key_hash: str) -> bool:
+    return hmac.compare_digest(hash_api_key(key), key_hash)
+
+
+def api_key_display_prefix(key: str) -> str:
+    """Non-secret fragment for the dashboard so admins can tell keys apart."""
+    return key[: len(API_KEY_PREFIX) + 6]
+
+
+# --------------------------------------------------------------------------- #
+# Embed session tokens (server-to-server tenant integration — embed flow)
+# --------------------------------------------------------------------------- #
+EMBED_TOKEN_PREFIX = "ntr_embed_"
+
+
+def generate_embed_token() -> str:
+    """High-entropy one-time token carried in the embed URL (shown once)."""
+    return f"{EMBED_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def hash_embed_token(token: str) -> str:
+    """SHA-256 digest for at-rest storage + lookup by hash."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 __all__ = [
     "hash_password",
     "verify_password",
@@ -117,5 +158,13 @@ __all__ = [
     "generate_device_token",
     "hash_device_token",
     "verify_device_token",
+    "generate_api_key",
+    "hash_api_key",
+    "verify_api_key",
+    "api_key_display_prefix",
+    "API_KEY_PREFIX",
+    "generate_embed_token",
+    "hash_embed_token",
+    "EMBED_TOKEN_PREFIX",
     "JWTError",
 ]

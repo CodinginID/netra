@@ -1,0 +1,143 @@
+/* Netra brand teal (matches ui/src/styles/global.css) */
+:root {
+  --vp-c-brand-1: #0a7a70;
+  --vp-c-brand-2: #0d9488;
+  --vp-c-brand-3: #0d9488;
+  --vp-c-brand-soft: rgba(13, 148, 136, 0.14);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(100deg, #0d9488 20%, #006387 90%);
+}
+
+.dark {
+  --vp-c-brand-1: #5eead4;
+  --vp-c-brand-2: #2dd4bf;
+  --vp-c-brand-3: #14b8a6;
+  --vp-c-brand-soft: rgba(45, 212, 191, 0.16);
+  --vp-home-hero-name-background: linear-gradient(100deg, #5eead4 10%, #38bdf8 90%);
+}
+
+/* ── "Back to Home" — footer row at the very bottom of the sidebar ── */
+.netra-home-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  padding: 14px 4px 0;
+  border-top: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.netra-home-link:hover {
+  color: var(--vp-c-brand-1);
+}
+.netra-home-link span:first-child {
+  transition: transform 0.15s;
+}
+.netra-home-link:hover span:first-child {
+  transform: translateX(-3px);
+}
+
+/* ── Architecture page: diagram + flow steps ── */
+.arch-diagram {
+  overflow-x: auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+  background: var(--vp-c-bg);
+}
+.arch-diagram svg {
+  width: 100%;
+  min-width: 540px; /* below this, the container scrolls horizontally */
+  display: block;
+  font-family: inherit;
+}
+
+/* Diagram element styles live HERE (theme CSS, loaded with the app) rather
+   than in a <style> block inside the SVG — per-page style blocks are
+   extracted into async page chunks, so the SVG could paint before its CSS
+   arrived and every shape flashed black until a refresh. */
+.arch-diagram .abox { fill: var(--vp-c-bg-soft); stroke: var(--vp-c-divider); }
+.arch-diagram .abox-brand { fill: var(--vp-c-brand-soft); stroke: var(--vp-c-brand-1); }
+.arch-diagram .achip { fill: var(--vp-c-bg); stroke: var(--vp-c-divider); }
+.arch-diagram .at { fill: var(--vp-c-text-1); font-size: 15px; font-weight: 600; }
+.arch-diagram .ad { fill: var(--vp-c-text-2); font-size: 12.5px; }
+.arch-diagram .ad-strong { fill: var(--vp-c-text-1); font-weight: 600; }
+.arch-diagram .albl { fill: var(--vp-c-text-3); font-size: 12px; }
+.arch-diagram .amark { fill: var(--vp-c-text-3); }
+.arch-diagram .aln {
+  stroke: var(--vp-c-text-3);
+  stroke-width: 1.4;
+  fill: none;
+}
+.arch-diagram .aln-dash {
+  stroke: var(--vp-c-brand-1);
+  stroke-width: 1.4;
+  stroke-dasharray: 6 5;
+  fill: none;
+}
+
+.arch-flow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+  counter-reset: arch-step;
+}
+@media (max-width: 640px) { .arch-flow { grid-template-columns: 1fr; } }
+.arch-step {
+  position: relative;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+  padding: 12px 14px 12px 40px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  line-height: 1.55;
+}
+.arch-step::before {
+  counter-increment: arch-step;
+  content: counter(arch-step);
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.arch-step b {
+  display: block;
+  color: var(--vp-c-text-1);
+  margin-bottom: 2px;
+}
+
+/* Smooth navigation: in-page anchors glide, page swaps fade in. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .netra-page-enter {
+    animation: netra-page-in 0.28s ease;
+  }
+
+  @keyframes netra-page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .VPSidebar .link,
+  .VPSidebar .VPSidebarItem .text {
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+}

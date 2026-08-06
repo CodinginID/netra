@@ -39,7 +39,9 @@ async def create_schedule(
 
 
 async def list_schedules(session: AsyncSession) -> list[Schedule]:
-    result = await session.execute(select(Schedule).order_by(Schedule.created_at.desc()))
+    result = await session.execute(
+        select(Schedule).where(Schedule.deleted_at.is_(None)).order_by(Schedule.created_at.desc())
+    )
     return list(result.scalars())
 
 

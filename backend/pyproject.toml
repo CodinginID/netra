@@ -10,28 +10,27 @@ dependencies = [
     "cryptography>=43",
     "fastapi>=0.115",
     "httpx>=0.28",
+    "insightface>=0.7.3",
     "numpy>=2.0",
+    "onnxruntime>=1.19",
+    "opencv-python-headless>=4.10",
     "openpyxl>=3.1",
     "passlib[argon2]>=1.7.4",
     "pgvector>=0.3.6",
+    "pillow>=10.4",
     "pydantic-settings>=2.6",
     "pydantic[email]>=2.13.4",
     "python-jose[cryptography]>=3.3",
     "python-multipart>=0.0.12",
+    "reportlab>=4.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.4",
     "uvicorn[standard]>=0.32",
+    "websockets>=14.0",
 ]
 
 [project.optional-dependencies]
-# Real face-recognition engine (InsightFace buffalo_s via ONNX Runtime, CPU).
-# Not needed for tests/dev (FACE_ENGINE=fake). Install: `uv sync --extra recognition`
-recognition = [
-    "insightface>=0.7.3",
-    "onnxruntime>=1.19",
-    "opencv-python-headless>=4.10",
-    "pillow>=10.4",
-]
+# (recognition extras are now required — see main dependencies)
 
 [dependency-groups]
 dev = [

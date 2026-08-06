@@ -62,6 +62,21 @@ class DeviceStatus(str, enum.Enum):
     revoked = "revoked"
 
 
+class ApiKeyStatus(str, enum.Enum):
+    active = "active"
+    revoked = "revoked"
+
+
+class EmbedSessionStatus(str, enum.Enum):
+    pending = "pending"     # minted, not yet used
+    consumed = "consumed"   # enrollment succeeded, token dead
+
+
+class EmbedPurpose(str, enum.Enum):
+    enroll = "enroll"
+    # kiosk = "kiosk"  # future phase
+
+
 # --------------------------------------------------------------------------- #
 # Platform-level
 # --------------------------------------------------------------------------- #
@@ -76,6 +91,8 @@ class Tenant(Base, TimestampMixin):
     )
     # branding, attendance defaults, kiosk prefs, etc.
     config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     users: Mapped[list[User]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
@@ -90,6 +107,10 @@ class User(Base, TimestampMixin):
         # (non-deterministic) external_id ciphertext. See app/db/types.py.
         UniqueConstraint("tenant_id", "external_id_hash", name="uq_user_tenant_external"),
         UniqueConstraint("tenant_id", "username", name="uq_user_tenant_username"),
+        # Email is the GLOBAL login identifier for staff (super_admin / tenant_admin
+        # / supervisor). Stored lowercased so this plain unique is case-insensitive.
+        # NULL is allowed for end_users (multiple NULLs don't conflict in Postgres).
+        UniqueConstraint("email", name="uq_user_email"),
         Index("ix_users_tenant", "tenant_id"),
     )
 
@@ -115,6 +136,7 @@ class User(Base, TimestampMixin):
     sso_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     enrolled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
     embeddings: Mapped[list[FaceEmbedding]] = relationship(
@@ -126,6 +148,14 @@ class User(Base, TimestampMixin):
         """Keep the deterministic hash column in sync with external_id (OPS-5)."""
         self.external_id_hash = external_id_digest(value)
         return value
+
+    @validates("email")
+    def _normalize_email(self, _key: str, value: str | None) -> str | None:
+        """Lowercase + trim email so the global unique constraint is case-insensitive."""
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        return normalized or None
 
 
 class FaceEmbedding(Base, TimestampMixin):
@@ -166,6 +196,7 @@ class Schedule(Base, TimestampMixin):
     grace_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     geofence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AttendanceRecord(Base, TimestampMixin):
@@ -196,6 +227,7 @@ class AttendanceRecord(Base, TimestampMixin):
     device_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("devices.id"), nullable=True
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Device(Base, TimestampMixin):
@@ -214,6 +246,74 @@ class Device(Base, TimestampMixin):
         Enum(DeviceStatus, name="device_status"), default=DeviceStatus.active, nullable=False
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApiKey(Base, TimestampMixin):
+    """Tenant-scoped API key for server-to-server integration.
+
+    Lets a tenant's own application pull data from netra (e.g. attendance
+    reports into their dashboard) without a human login. The full key is shown
+    ONCE on creation; only its SHA-256 hash is stored. ``prefix`` is a
+    non-secret display fragment (e.g. ``ntr_live_a1b2c3``) so admins can tell
+    keys apart. ``scopes`` restrict what the key may do (e.g. attendance:read).
+    """
+
+    __tablename__ = "api_keys"
+    __table_args__ = (Index("ix_apikey_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(20), nullable=False)  # non-secret display fragment
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    # Origins allowed to embed sessions minted by THIS key (frame-ancestors +
+    # return_origin check). Scoped per-key, like OAuth client redirect URIs,
+    # so it can be set at key-creation time and edited later without touching
+    # other keys on the same tenant.
+    allowed_origins: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    status: Mapped[ApiKeyStatus] = mapped_column(
+        Enum(ApiKeyStatus, name="api_key_status"), default=ApiKeyStatus.active, nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EmbedSession(Base, TimestampMixin):
+    """One-time, short-lived session for embedding a netra flow (enrollment) in a
+    tenant's own app via iframe/WebView.
+
+    The full token is shown ONCE inside the embed URL; only its hash is stored.
+    Bound to one tenant + one subject (external_id) + one purpose. Single-use:
+    flipped to ``consumed`` once the enrollment succeeds. See docs embed plan §6.
+    """
+
+    __tablename__ = "embed_sessions"
+    __table_args__ = (Index("ix_embed_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    purpose: Mapped[EmbedPurpose] = mapped_column(
+        Enum(EmbedPurpose, name="embed_purpose"), default=EmbedPurpose.enroll, nullable=False
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_minor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    return_origin: Mapped[str] = mapped_column(String(1024), nullable=False)
+    status: Mapped[EmbedSessionStatus] = mapped_column(
+        Enum(EmbedSessionStatus, name="embed_session_status"),
+        default=EmbedSessionStatus.pending,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SSOConnection(Base, TimestampMixin):
@@ -291,4 +391,6 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "sso_connections",
     "consents",
     "webhook_endpoints",
+    "api_keys",
+    "embed_sessions",
 )

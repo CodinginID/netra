@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Role } from '@/types/auth'
+import { refreshApi } from '@/api/authApi'
 
 interface AuthState {
   accessToken: string | null
@@ -8,35 +9,34 @@ interface AuthState {
   role: Role | null
   username: string | null
   isAuthenticated: boolean
-  selectedTenantId: string | null
+  isRefreshing: boolean
   setTokens: (access: string, refresh: string, role: Role) => void
-  setSelectedTenantId: (id: string | null) => void
+  updateTokens: (access: string, refresh: string) => void
   logout: () => void
+  /** Silent refresh from the persisted refresh token — call once at app mount. */
+  silentRefresh: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       accessToken: null,
       refreshToken: null,
       role: null,
       username: null,
       isAuthenticated: false,
-      selectedTenantId: null,
+      isRefreshing: false,
 
       setTokens: (access, refresh, role) => {
         let username: string | null = null
-        let selectedTenantId: string | null = null
         try {
           const payload = JSON.parse(atob(access.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
           username = payload.sub ?? null
-          // Populate tenant context from JWT so API calls include X-Tenant-Id automatically
-          selectedTenantId = payload.tenant_id ?? null
         } catch { /* invalid token shape */ }
-        set({ accessToken: access, refreshToken: refresh, role, username, isAuthenticated: true, selectedTenantId })
+        set({ accessToken: access, refreshToken: refresh, role, username, isAuthenticated: true })
       },
 
-      setSelectedTenantId: (id) => set({ selectedTenantId: id }),
+      updateTokens: (access, refresh) => set({ accessToken: access, refreshToken: refresh }),
 
       logout: () =>
         set({
@@ -45,8 +45,22 @@ export const useAuthStore = create<AuthState>()(
           role: null,
           username: null,
           isAuthenticated: false,
-          selectedTenantId: null,
         }),
+
+      silentRefresh: async () => {
+        const { refreshToken } = get()
+        if (!refreshToken) return
+        set({ isRefreshing: true })
+        try {
+          const tokens = await refreshApi(refreshToken)
+          get().updateTokens(tokens.access_token, tokens.refresh_token)
+          get().setTokens(tokens.access_token, tokens.refresh_token, tokens.role)
+        } catch {
+          get().logout()
+        } finally {
+          set({ isRefreshing: false })
+        }
+      },
     }),
     {
       name: 'netra-auth',
@@ -56,7 +70,6 @@ export const useAuthStore = create<AuthState>()(
         role: state.role,
         username: state.username,
         isAuthenticated: state.isAuthenticated,
-        selectedTenantId: state.selectedTenantId,
       }),
     }
   )

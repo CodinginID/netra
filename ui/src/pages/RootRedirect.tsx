@@ -1,20 +1,18 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import { LandingPage } from '@/pages/landing/LandingPage'
 
 export function RootRedirect() {
   const { isAuthenticated, role } = useAuthStore()
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+  if (isAuthenticated && role === 'super_admin') {
+    return <Navigate to="/admin/dashboard" replace />
   }
 
-  if (role === 'super_admin') {
-    return <Navigate to="/admin/tenants" replace />
-  }
-
-  if (role === 'tenant_admin' || role === 'supervisor') {
+  if (isAuthenticated && (role === 'tenant_admin' || role === 'supervisor')) {
     return <Navigate to="/tenant/attendance" replace />
   }
 
-  return <Navigate to="/login" replace />
+  // Anonymous visitors (or an unknown role) see the public landing page.
+  return <LandingPage />
 }

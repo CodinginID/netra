@@ -52,7 +52,10 @@ class InsightFaceEngine:
             raise FaceError("Pillow not installed (recognition extra).") from exc
 
         app = self._ensure_loaded()
-        rgb = Image.open(io.BytesIO(image)).convert("RGB")
+        try:
+            rgb = Image.open(io.BytesIO(image)).convert("RGB")
+        except OSError as exc:  # truncated / undecodable upload
+            raise NoFaceDetectedError("invalid or corrupt image") from exc
         bgr = np.array(rgb)[:, :, ::-1]  # InsightFace expects BGR
         faces = app.get(bgr)
         if len(faces) != 1:

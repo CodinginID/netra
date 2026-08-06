@@ -25,21 +25,21 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         json={
             "name": f"Sekolah {slug}",
             "slug": slug,
-            "admin_username": f"admin-{slug}",
+            "admin_email": f"admin-{slug}@netra.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin",
         },
     )
     assert resp.status_code == 201, resp.text
     admin = await _token(
-        client, username=f"admin-{slug}", password="adminpass123", tenant_slug=slug
+        client, email=f"admin-{slug}@netra.app", password="adminpass123"
     )
     return {"Authorization": f"Bearer {admin}"}
 
 
 @pytest.mark.asyncio
 async def test_register_webhook_returns_secret_once(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "wh-a")
 
     resp = await client.post(
@@ -62,7 +62,7 @@ async def test_register_webhook_returns_secret_once(client: AsyncClient, super_a
 async def test_attendance_event_dispatches_signed_webhook(
     client: AsyncClient, super_admin, monkeypatch
 ):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "wh-b")
 
     # Enroll Alice.
@@ -70,7 +70,7 @@ async def test_attendance_event_dispatches_signed_webhook(
         await client.post(
             "/api/v1/users",
             headers=hdr,
-            json={"full_name": "Alice", "role": "end_user", "username": "alice"},
+            json={"full_name": "Alice", "role": "end_user", "external_id": "alice"},
         )
     ).json()["data"]["id"]
     await client.post("/api/v1/consents", headers=hdr, json={"user_id": alice, "granted": True})

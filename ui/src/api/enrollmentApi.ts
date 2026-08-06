@@ -1,30 +1,36 @@
-import { useAuthStore } from '@/store/authStore'
+import { getApiTenantContext } from '@/api/adminApi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 function makeHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
-  const tenantId = useAuthStore.getState().selectedTenantId
   const h: Record<string, string> = { ...extra, Authorization: `Bearer ${token}` }
+  // Read from the shared tenant context in adminApi
+  const tenantId = getApiTenantContext()
   if (tenantId) h['X-Tenant-Id'] = tenantId
   return h
 }
 
 export interface UserItem {
   id: string
-  username: string
+  username?: string | null
   full_name?: string
+  external_id?: string | null
 }
 
 export async function fetchUsers(accessToken: string): Promise<UserItem[]> {
-  const res = await fetch(`${API_BASE}/users`, {
+  const res = await fetch(`${API_BASE}/users?page=1&limit=1000`, {
     headers: makeHeaders(accessToken),
   })
   if (!res.ok) {
     throw new Error(`Failed to fetch users (${res.status})`)
   }
   const json = await res.json()
-  // Support both { data: [...] } and plain array responses
-  return Array.isArray(json) ? json : (json.data ?? [])
+  // Tolerate every shape: plain array, { data: [...] }, or paginated
+  // { data: { items: [...] } } (current backend).
+  const data = json?.data ?? json
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  return []
 }
 
 export async function grantConsent(accessToken: string, userId: string): Promise<void> {

@@ -10,9 +10,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install production deps including the ML recognition stack (onnxruntime, opencv, insightface).
+# These are now required dependencies (not optional) — uv sync installs them automatically.
 # insightface pulls in opencv-python (GUI, needs libxcb) as a transitive dep — uninstall it
 # immediately after sync so only opencv-python-headless (no X11 deps) remains.
-RUN uv sync --frozen --no-dev --no-install-project --extra recognition \
+RUN uv sync --frozen --no-dev --no-install-project \
  && uv pip uninstall --python .venv/bin/python opencv-python opencv-python-headless \
  && uv pip install --python .venv/bin/python "opencv-python-headless==4.13.0.92"
 
@@ -42,6 +43,14 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY app/ app/
 
+# Copy DB migrations + operational scripts so they are runnable in prod, e.g.
+#   docker exec netra-backend alembic upgrade head
+#   docker exec netra-backend python -m scripts.seed_superadmin --email ... --password ...
+COPY alembic/ alembic/
+COPY alembic.ini ./
+COPY scripts/ scripts/
+RUN chmod +x scripts/entrypoint.sh
+
 # Copy all pre-downloaded models from the builder stage
 COPY --from=builder /app/models/ /app/models/
 
@@ -57,6 +66,11 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 5170
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Entrypoint runs migrations (alembic upgrade head, unless AUTO_MIGRATE=false),
+# optionally seeds a super admin (SUPERADMIN_EMAIL/PASSWORD), then execs the CMD.
+# Both steps are idempotent.
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5170"]

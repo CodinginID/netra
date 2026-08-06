@@ -17,22 +17,20 @@ async def _token(client: AsyncClient, **payload) -> str:
 
 
 async def _onboard_tenant_admin(client: AsyncClient) -> dict[str, str]:
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     resp = await client.post(
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
             "name": "Sekolah Kiosk",
             "slug": "sekolah-kiosk",
-            "admin_username": "admin",
+            "admin_email": "admin@sekolah-kiosk.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin Kiosk",
         },
     )
     assert resp.status_code == 201, resp.text
-    admin = await _token(
-        client, username="admin", password="adminpass123", tenant_slug="sekolah-kiosk"
-    )
+    admin = await _token(client, email="admin@sekolah-kiosk.app", password="adminpass123")
     return {"Authorization": f"Bearer {admin}"}
 
 
@@ -50,7 +48,7 @@ async def test_device_register_returns_plaintext_token_once(client: AsyncClient,
 
     # Only the HASH is stored — never the plaintext token.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         from sqlalchemy import select
 
         device = (await s.execute(select(Device).where(Device.id == data["id"]))).scalar_one()
@@ -60,7 +58,7 @@ async def test_device_register_returns_plaintext_token_once(client: AsyncClient,
     # List does not leak the token.
     resp = await client.get("/api/v1/devices", headers=headers)
     assert resp.status_code == 200
-    listed = resp.json()["data"]
+    listed = resp.json()["data"]["items"]
     assert len(listed) == 1
     assert "token" not in listed[0]
 
@@ -77,7 +75,7 @@ async def test_device_revoke(client: AsyncClient, super_admin):
 
     # Audit trail recorded register + revoke.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         from sqlalchemy import select
 
         from app.models import AuditLog

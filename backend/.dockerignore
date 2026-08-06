@@ -1,0 +1,31 @@
+# Python caches / bytecode
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtualenvs (built fresh inside the image)
+.venv/
+venv/
+env/
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+
+# Local models (baked from builder stage instead)
+models/
+
+# VCS / editor / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Tests & docs not needed at runtime
+tests/
+*.md

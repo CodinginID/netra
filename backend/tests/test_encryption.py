@@ -19,21 +19,19 @@ async def _token(client: AsyncClient, **payload) -> str:
 
 
 async def _admin_headers(client: AsyncClient) -> str:
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     await client.post(
         "/api/v1/tenants",
         headers={"Authorization": f"Bearer {owner}"},
         json={
             "name": "Sekolah Enc",
             "slug": "sekolah-enc",
-            "admin_username": "admin",
+            "admin_email": "admin@sekolah-enc.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin Enc",
         },
     )
-    admin = await _token(
-        client, username="admin", password="adminpass123", tenant_slug="sekolah-enc"
-    )
+    admin = await _token(client, email="admin@sekolah-enc.app", password="adminpass123")
     return f"Bearer {admin}"
 
 
@@ -54,7 +52,7 @@ async def test_external_id_ciphertext_at_rest_plaintext_via_api(client: AsyncCli
 
     # Raw column on disk is ciphertext, not the plaintext NIK.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         raw = (
             await s.execute(
                 text("SELECT external_id, external_id_hash FROM users WHERE id = :i"),
@@ -68,7 +66,7 @@ async def test_external_id_ciphertext_at_rest_plaintext_via_api(client: AsyncCli
 
     # ORM read decrypts transparently.
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         user = (await s.execute(select(User).where(User.id == user_id))).scalar_one()
         assert user.external_id == nik
 

@@ -8,6 +8,9 @@ tenant isolation without any ML model.
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -33,23 +36,23 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         json={
             "name": f"Sekolah {slug}",
             "slug": slug,
-            "admin_username": f"admin-{slug}",
+            "admin_email": f"admin-{slug}@netra.app",
             "admin_password": "adminpass123",
             "admin_full_name": "Admin",
         },
     )
     assert resp.status_code == 201, resp.text
     admin = await _token(
-        client, username=f"admin-{slug}", password="adminpass123", tenant_slug=slug
+        client, email=f"admin-{slug}@netra.app", password="adminpass123"
     )
     return {"Authorization": f"Bearer {admin}"}
 
 
-async def _create_user(client: AsyncClient, hdr: dict, full_name: str, username: str) -> str:
+async def _create_user(client: AsyncClient, hdr: dict, full_name: str, external_id: str) -> str:
     resp = await client.post(
         "/api/v1/users",
         headers=hdr,
-        json={"full_name": full_name, "role": "end_user", "username": username},
+        json={"full_name": full_name, "role": "end_user", "external_id": external_id},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()["data"]["id"]
@@ -70,7 +73,7 @@ async def _device_token(client: AsyncClient, hdr: dict, name: str = "Kiosk") -> 
 
 @pytest.mark.asyncio
 async def test_enroll_requires_consent(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rec-a")
     user_id = await _create_user(client, hdr, "Bob", "bob")
 
@@ -95,7 +98,7 @@ async def test_enroll_requires_consent(client: AsyncClient, super_admin):
     assert resp.json()["data"]["enrolled"] is True
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         embs = (await s.execute(select(FaceEmbedding))).scalars().all()
         assert len(embs) == 1
         assert len(embs[0].vector) == 512
@@ -103,7 +106,7 @@ async def test_enroll_requires_consent(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "rec-b")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
@@ -174,7 +177,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
     assert len(listing.json()["data"]) == 2
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "face.enrolled" in actions
         assert "attendance.check_in" in actions
@@ -184,7 +187,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
 @pytest.mark.asyncio
 async def test_recognition_is_tenant_isolated(client: AsyncClient, super_admin):
     """A kiosk in tenant B must NEVER match a face enrolled in tenant A (RLS)."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     ohdr = {"Authorization": f"Bearer {owner}"}
 
     # Tenant A: enroll Alice.
@@ -227,7 +230,7 @@ async def _enroll(client: AsyncClient, hdr: dict, user_id: str, face: bytes) -> 
 @pytest.mark.asyncio
 async def test_liveness_rejects_spoof(client: AsyncClient, super_admin):
     """A spoofed (non-live) capture is rejected before identification."""
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "live-a")
     device = await _device_token(client, hdr)
 
@@ -242,7 +245,7 @@ async def test_liveness_rejects_spoof(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_geofence_enforced(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "geo-a")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
@@ -294,7 +297,7 @@ async def test_geofence_enforced(client: AsyncClient, super_admin):
 
 @pytest.mark.asyncio
 async def test_holiday_has_no_late_penalty(client: AsyncClient, super_admin):
-    owner = await _token(client, username="owner", password="ownerpass123")
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "hol-a")
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
@@ -325,6 +328,42 @@ async def test_holiday_has_no_late_penalty(client: AsyncClient, super_admin):
 
 
 @pytest.mark.asyncio
+async def test_identify_does_not_block_event_loop(super_admin):
+    """eng.embed() is CPU-bound and synchronous; it must run off the event loop
+    so one slow identify() call doesn't stall every other concurrent request
+    (real incident: a client's /integration/users poll timed out while an
+    unrelated enroll/identify call was mid-inference on a single-process
+    uvicorn server)."""
+
+    class _SlowEngine:
+        name = "slow"
+
+        def embed(self, image: bytes) -> list[float]:
+            time.sleep(0.3)  # stands in for CPU-bound ONNX inference
+            return [0.0] * 512
+
+    async with SessionFactory() as s:
+        await _set_tenant(s, None, platform=True)
+        t = Tenant(name="Slow", slug="slow-loop")
+        s.add(t)
+        await s.flush()
+        tid = t.id
+
+    async def _run() -> None:
+        async with SessionFactory() as s:
+            await _set_tenant(s, tid)
+            await recognition_service.identify(s, b"q", engine=_SlowEngine())
+
+    start = time.perf_counter()
+    await asyncio.gather(_run(), _run(), _run())
+    elapsed = time.perf_counter() - start
+
+    # Serialized on a blocked event loop: ~3 * 0.3s = 0.9s. Offloaded to a
+    # thread pool: all three overlap, close to a single 0.3s call.
+    assert elapsed < 0.6, f"identify() calls ran serially (event loop blocked): {elapsed:.2f}s"
+
+
+@pytest.mark.asyncio
 async def test_identify_respects_threshold(super_admin):
     """identify() accepts a match only when similarity >= the given threshold."""
     dim = 512
@@ -338,7 +377,7 @@ async def test_identify_respects_threshold(super_admin):
             return query_vec
 
     async with SessionFactory() as s:
-        await _set_tenant(s, None)
+        await _set_tenant(s, None, platform=True)
         t = Tenant(name="Thr", slug="thr")
         s.add(t)
         await s.flush()

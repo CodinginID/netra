@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, type ChangeEvent } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { Eye, ScanLine, Settings } from 'lucide-react'
 import {
   postAutoAttendance,
@@ -9,24 +9,22 @@ import {
 } from '@/api/kioskApi'
 import { useToast } from '@/components/Toast'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
+import { useVoiceGuide } from '@/hooks/useVoiceGuide'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/kiosk.css'
 
 type CameraState = 'idle' | 'active' | 'denied' | 'unavailable'
 type KioskStatus = 'idle' | 'processing' | 'success' | 'error'
 
 const RESET_DELAY_MS = 5500
+const SCAN_INTERVAL_MS = 2500
 
 interface ResultState {
   status: KioskStatus
   result?: AttendanceResult
   errorCode?: 'not_recognized' | 'liveness_failed' | 'duplicate' | 'server_error'
   errorMsg?: string
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  on_time: 'Tepat Waktu',
-  late: 'Terlambat',
-  early_leave: 'Pulang Awal',
 }
 
 function useClock() {
@@ -45,6 +43,7 @@ function useClock() {
 }
 
 export function KioskPage() {
+  const { t } = useI18n()
   const { show } = useToast()
   const { time, date } = useClock()
 
@@ -52,6 +51,24 @@ export function KioskPage() {
   const [showSetup, setShowSetup] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [savedToken, setSavedToken] = useState('')
+  const [revokedRemotely, setRevokedRemotely] = useState(false)
+
+  // WebSocket: subscribe to device channel for remote commands
+  const { on: wsOn } = useWebSocket(null, { deviceToken: savedToken || null })
+  useEffect(() => {
+    if (!savedToken) return
+    return wsOn('device.revoked', () => {
+      setRevokedRemotely(true)
+      if (autoScanIntervalRef.current) {
+        clearInterval(autoScanIntervalRef.current)
+        autoScanIntervalRef.current = null
+      }
+      stopCamera()
+      setCameraState('unavailable')
+    })
+    // wsOn is stable; savedToken triggers re-register when token changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedToken, wsOn])
 
   // Camera
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -64,6 +81,23 @@ export function KioskPage() {
   const [resultState, setResultState] = useState<ResultState>({ status: 'idle' })
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Phase 6: scan countdown + offline detection
+  const [scanProgress, setScanProgress] = useState(0)
+  const [isOffline, setIsOffline] = useState(false)
+
+  // Phase 6: idle lock screen + voice mute
+  const [locked, setLocked] = useState(false)
+  const lastActivityRef = useRef(Date.now())
+  const [voiceMuted, setVoiceMuted] = useState(false)
+  const { speak, setEnabled: setVoiceEnabled } = useVoiceGuide()
+  useEffect(() => { setVoiceEnabled(!voiceMuted) }, [voiceMuted, setVoiceEnabled])
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (Date.now() - lastActivityRef.current > 5 * 60 * 1000) setLocked(true)
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   // Auto-scan (touchless mode)
   const autoScanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cooldownUntilRef = useRef<number>(0)
@@ -73,6 +107,19 @@ export function KioskPage() {
   useEffect(() => { resultStateRef.current = resultState }, [resultState])
   useEffect(() => { cameraStateRef.current = cameraState }, [cameraState])
   useEffect(() => { savedTokenRef.current = savedToken }, [savedToken])
+
+  // Geolocation: keep the latest fix in a ref and send it with each punch.
+  // Best-effort — if the user denies permission, attendance still works (no loc).
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null)
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const id = navigator.geolocation.watchPosition(
+      (pos) => { coordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude } },
+      () => { /* denied / unavailable — proceed without location */ },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+    )
+    return () => navigator.geolocation.clearWatch(id)
+  }, [])
 
   // Real-time face detection overlay
   const detectionActive = cameraState === 'active' && resultState.status === 'idle'
@@ -128,15 +175,27 @@ export function KioskPage() {
     }
   }
 
+  // Attach the stream once the <video> is actually mounted. Setting srcObject
+  // inside startCamera() can run before the element renders (the element only
+  // appears when cameraState === 'active'), so do it here deterministically.
+  // This is also what lets the kiosk work immediately after pasting a token,
+  // without a full page reload.
+  useEffect(() => {
+    if (cameraState === 'active' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      void videoRef.current.play().catch(() => {})
+    }
+  }, [cameraState])
+
   function handleSaveToken() {
     const trimmed = tokenInput.trim()
     saveDeviceToken(trimmed)
     setSavedToken(trimmed)
     setShowSetup(false)
     if (trimmed) {
-      show('Token perangkat berhasil disimpan', 'success')
+      show(t('kiosk.token_saved'), 'success')
     } else {
-      show('Token perangkat dihapus', 'info')
+      show(t('kiosk.token_deleted'), 'info')
     }
   }
 
@@ -186,59 +245,65 @@ export function KioskPage() {
     if (!blob) { setResultState({ status: 'idle' }); return }
 
     try {
-      const result = await postAutoAttendance(tok, blob)
-      const action = result.attendance.type === 'check_in' ? 'Check In' : 'Check Out'
-      show(`${action} berhasil — ${result.full_name}`, 'success')
+      const result = await postAutoAttendance(tok, blob, coordsRef.current)
+      setIsOffline(false)
+      const action = result.attendance.type === 'check_in' ? t('kiosk.check_in') : t('kiosk.check_out')
+      show(t('kiosk.checkin_success', { label: action, name: result.full_name }), 'success')
+      lastActivityRef.current = Date.now()
+      const name = result.full_name.split(' ')[0]
+      speak(result.attendance.type === 'check_in' ? t('kiosk.check_in_voice', { name }) : t('kiosk.check_out_voice', { name }))
       setResultState({ status: 'success', result })
       cooldownUntilRef.current = Date.now() + 8000
       scheduleReset()
     } catch (err) {
+      const isNetworkErr =
+        (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) || !navigator.onLine
+      if (isNetworkErr) {
+        setIsOffline(true)
+        setResultState({ status: 'idle' })
+        cooldownUntilRef.current = Date.now() + 3000
+        return
+      }
       if (err instanceof KioskError && err.code === 'not_recognized') {
         // No face matched — silently reset and keep scanning
+        setIsOffline(false)
         setResultState({ status: 'idle' })
       } else {
+        setIsOffline(false)
         const code = err instanceof KioskError ? err.code : 'server_error'
-        const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : 'Kesalahan server.')
+        const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : t('kiosk.server_error'))
         if (code !== 'not_recognized') show(msg, 'error')
         setResultState({ status: 'error', errorCode: code, errorMsg: msg })
         cooldownUntilRef.current = Date.now() + 3000
         scheduleReset()
       }
     }
-  }, [show]) // show is stable from useCallback in ToastProvider
+  }, [show, speak]) // show and speak are stable from useCallback
 
   // Start/stop auto-scan interval when camera or token becomes available
   useEffect(() => {
     if (cameraState === 'active' && savedToken) {
-      autoScanIntervalRef.current = setInterval(() => { void autoScan() }, 2500)
+      autoScanIntervalRef.current = setInterval(() => { void autoScan() }, SCAN_INTERVAL_MS)
     } else {
       if (autoScanIntervalRef.current) { clearInterval(autoScanIntervalRef.current); autoScanIntervalRef.current = null }
     }
     return () => { if (autoScanIntervalRef.current) { clearInterval(autoScanIntervalRef.current); autoScanIntervalRef.current = null } }
   }, [cameraState, savedToken, autoScan])
 
-  function handleFileAttendance(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !savedToken) return
-    e.target.value = ''
-    if (resultState.status === 'processing') return
-    setResultState({ status: 'processing' })
-
-    postAutoAttendance(savedToken, file)
-      .then((result) => {
-        const label = result.attendance.type === 'check_in' ? 'Check In' : 'Check Out'
-        show(`${label} berhasil — ${result.full_name}`, 'success')
-        setResultState({ status: 'success', result })
-        scheduleReset()
-      })
-      .catch((err) => {
-        const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : 'Terjadi kesalahan.')
-        const code = err instanceof KioskError ? err.code : 'server_error'
-        show(msg, 'error')
-        setResultState({ status: 'error', errorCode: code, errorMsg: msg })
-        scheduleReset()
-      })
-  }
+  // Countdown progress toward the next idle scan (0-100%)
+  const idleForCountdown =
+    cameraState === 'active' && !!savedToken && resultState.status === 'idle' && !revokedRemotely
+  useEffect(() => {
+    if (!idleForCountdown) {
+      setScanProgress(0)
+      return
+    }
+    const stepPct = (250 / SCAN_INTERVAL_MS) * 100
+    const id = setInterval(() => {
+      setScanProgress((prev) => (prev + stepPct >= 100 ? 0 : prev + stepPct))
+    }, 250)
+    return () => clearInterval(id)
+  }, [idleForCountdown])
 
   const isProcessing = resultState.status === 'processing'
   const showResult =
@@ -255,7 +320,7 @@ export function KioskPage() {
           <div className="kiosk-clock-time">{time}</div>
           <div className="kiosk-clock-date">{date}</div>
         </div>
-        <button className="kiosk-setup-btn" onClick={() => setShowSetup((v) => !v)} title="Setup">
+        <button className="kiosk-setup-btn" onClick={() => setShowSetup((v) => !v)} aria-label={t('kiosk.setup')} title={t('kiosk.setup')}>
           <Settings size={15} />
         </button>
       </div>
@@ -263,10 +328,9 @@ export function KioskPage() {
       {/* Device token setup panel */}
       {showSetup && (
         <div className="kiosk-setup-panel">
-          <h3>Konfigurasi Device Token</h3>
+          <h3>{t('kiosk.setup_title')}</h3>
           <p>
-            Masukkan token perangkat kiosk yang diberikan oleh administrator tenant.
-            Token disimpan di localStorage perangkat ini.
+            {t('kiosk.setup_desc')}
           </p>
           <div className="kiosk-token-row">
             <input
@@ -274,26 +338,49 @@ export function KioskPage() {
               className="kiosk-token-input"
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Paste device token di sini…"
+              placeholder={t('kiosk.token_placeholder')}
               spellCheck={false}
+              aria-label={t('kiosk.setup')}
             />
             <button className="kiosk-token-save-btn" onClick={handleSaveToken}>
-              Simpan
+              {t('kiosk.save_token')}
             </button>
           </div>
           <p className={`kiosk-token-status ${savedToken ? 'ok' : 'missing'}`}>
-            {savedToken ? `Token aktif: ${savedToken.slice(0, 12)}…` : 'Belum ada token tersimpan'}
+            {savedToken ? `${t('kiosk.token_active')}: ${savedToken.slice(0, 12)}…` : t('kiosk.no_token_stored')}
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setVoiceMuted((v) => !v)} aria-label={voiceMuted ? t('kiosk.enable_voice') : t('kiosk.disable_voice')}>{voiceMuted ? `🔇 ${t('kiosk.voice_off')}` : `🔊 ${t('kiosk.voice_on')}`}</button>
+          </div>
         </div>
       )}
 
-      {!savedToken && !showSetup && (
+      {revokedRemotely && (
+        <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">
+          {t('kiosk.revoked_msg')}
+        </div>
+      )}
+
+      {!savedToken && !showSetup && !revokedRemotely && (
         <div className="kiosk-no-token-warning">
-          Device token belum dikonfigurasi. Tekan ⚙ Setup untuk mengatur.
+          {t('kiosk.no_token_msg')}
         </div>
       )}
 
-      <div className="kiosk-camera-area">
+      {isOffline && (
+        <div className="kiosk-offline-banner" role="alert" aria-live="assertive">
+          {'\u26a0'} {t('kiosk.offline_msg')}
+          <button onClick={() => { setIsOffline(false); void autoScan() }}>{t('kiosk.retry')}</button>
+        </div>
+      )}
+
+      {locked && (
+        <div className="kiosk-lock-screen" onClick={() => { setLocked(false); lastActivityRef.current = Date.now() }}>
+          <div className="kiosk-lock-content"><div className="kiosk-lock-icon">{'🔒'}</div><div className="kiosk-lock-text">{t('kiosk.tap_to_start')}</div></div>
+        </div>
+      )}
+
+      <div className="kiosk-camera-area" aria-label={t('kiosk.camera_area')}>
         {/* Camera / placeholder */}
         <div className="kiosk-camera-wrapper">
           {cameraState === 'active' ? (
@@ -309,16 +396,11 @@ export function KioskPage() {
               </span>
               <p>
                 {cameraState === 'denied'
-                  ? 'Akses kamera ditolak oleh browser.'
+                  ? t('kiosk.camera_denied')
                   : cameraState === 'unavailable'
-                  ? 'Kamera tidak tersedia di perangkat ini.'
-                  : 'Memuat kamera…'}
+                  ? t('kiosk.camera_unavailable')
+                  : t('kiosk.camera_loading')}
               </p>
-              {(cameraState === 'denied' || cameraState === 'unavailable') && (
-                <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                  Gunakan tombol upload gambar di bawah.
-                </p>
-              )}
             </div>
           )}
 
@@ -347,7 +429,7 @@ export function KioskPage() {
                 )}
                 {/* Teks status bawah */}
                 <text x="280" y="405" textAnchor="middle" fill="rgba(107,216,203,0.55)" fontSize="11" fontFamily="system-ui" fontWeight="600" letterSpacing="1.5">
-                  {hasFace ? 'WAJAH TERDETEKSI — MEMPROSES…' : savedToken ? 'ARAHKAN WAJAH KE KAMERA' : 'SETUP TOKEN TERLEBIH DAHULU'}
+                  {hasFace ? t('kiosk.face_detected') : savedToken ? t('kiosk.aim_face') : t('kiosk.setup_token_first')}
                 </text>
               </svg>
             </div>
@@ -357,13 +439,17 @@ export function KioskPage() {
           {isProcessing && (
             <div className="kiosk-processing">
               <ScanLine size={36} color="#0d9488" strokeWidth={1.5} className="kiosk-scan-icon" />
-              <p>Mengenali wajah…</p>
+              <p>{t('kiosk.recognizing')}</p>
             </div>
           )}
 
           {/* Result overlay */}
           {showResult && (
-            <div className={`kiosk-result-overlay ${resultState.status === 'success' ? 'success' : 'error'}`}>
+            <div
+              className={`kiosk-result-overlay ${resultState.status === 'success' ? 'success' : 'error'}`}
+              role="alert"
+              aria-live="assertive"
+            >
               {resultState.status === 'success' && resultState.result ? (
                 <>
                   <div className="kiosk-result-type-badge">
@@ -374,7 +460,10 @@ export function KioskPage() {
                     {new Date(resultState.result.attendance.occurred_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                   <div className="kiosk-result-status">
-                    {STATUS_LABELS[resultState.result.attendance.status] ?? resultState.result.attendance.status}
+                    {resultState.result.attendance.status === 'on_time' ? t('kiosk.on_time')
+                      : resultState.result.attendance.status === 'late' ? t('kiosk.late')
+                      : resultState.result.attendance.status === 'early_leave' ? t('kiosk.early_leave')
+                      : resultState.result.attendance.status}
                   </div>
                 </>
               ) : (
@@ -390,37 +479,37 @@ export function KioskPage() {
               )}
             </div>
           )}
+
         </div>
 
-
-        {/* File fallback — only shown when camera is unavailable */}
-        {(cameraState === 'denied' || cameraState === 'unavailable') && savedToken && (
-          <label className="kiosk-btn kiosk-btn-checkin" style={{ cursor: 'pointer', textAlign: 'center' }}>
-            Upload Foto Wajah
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleFileAttendance}
-            />
-          </label>
-        )}
 
         {/* Status bar */}
         <div className="kiosk-status-bar">
           <span>
             <span className={`kiosk-status-dot ${cameraState === 'active' ? 'green' : 'red'}`} />
-            {cameraState === 'active' ? 'Kamera aktif' : cameraState === 'denied' ? 'Kamera ditolak' : cameraState === 'unavailable' ? 'Kamera tidak tersedia' : 'Kamera tidak aktif'}
+            {cameraState === 'active' ? t('kiosk.camera_active') : cameraState === 'denied' ? t('kiosk.camera_denied_status') : cameraState === 'unavailable' ? t('kiosk.camera_unavailable_status') : t('kiosk.camera_inactive')}
           </span>
           <span>
             <span className={`kiosk-status-dot ${cameraState === 'active' && savedToken ? 'green' : 'amber'}`} />
-            {cameraState === 'active' && savedToken ? 'Pemindaian otomatis' : 'Mode manual'}
+            {cameraState === 'active' && savedToken ? t('kiosk.auto_scan') : t('kiosk.manual_mode')}
           </span>
           <span>
             <span className={`kiosk-status-dot ${savedToken ? 'green' : 'red'}`} />
-            {savedToken ? 'Token aktif' : 'Token belum ada'}
+            {savedToken ? t('kiosk.token_active_status') : t('kiosk.no_token_status')}
           </span>
         </div>
+
+        {/* Countdown to next auto-scan — idle only */}
+        {idleForCountdown && (
+          <div className="kiosk-countdown">
+            <div className="kiosk-countdown-bar">
+              <div className="kiosk-countdown-fill" style={{ width: `${scanProgress}%` }} />
+            </div>
+            <span className="kiosk-countdown-label">
+              {t('kiosk.scan_in', { seconds: Math.ceil((SCAN_INTERVAL_MS * (1 - scanProgress / 100)) / 1000) })}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

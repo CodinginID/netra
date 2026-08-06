@@ -3,6 +3,7 @@ import { Eye } from 'lucide-react'
 import { loginApi } from '@/api/authApi'
 import { grantConsent, selfEnrollMultiAngle } from '@/api/enrollmentApi'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
+import { useI18n } from '@/store/i18nStore'
 import '@/styles/kiosk.css'
 import '@/styles/selfenroll.css'
 
@@ -14,10 +15,10 @@ interface Session { token: string; userId: string; name: string }
 
 const PHASE_ORDER: CapturePhase[] = ['front', 'left', 'right', 'preview']
 
-const PHASE_CONFIG: Record<Exclude<CapturePhase, 'preview'>, { label: string; hint: string; arrow?: string; duration: number }> = {
-  front: { label: 'Lihat LURUS ke kamera',  hint: 'Pandang langsung ke kamera, jaga posisi',   duration: 3 },
-  left:  { label: 'Putar ke KIRI ←',        hint: 'Putar kepala perlahan ke kiri',              arrow: '←', duration: 4 },
-  right: { label: 'Putar ke KANAN →',       hint: 'Putar kepala perlahan ke kanan',             arrow: '→', duration: 4 },
+const PHASE_CONFIG: Record<Exclude<CapturePhase, 'preview'>, { labelKey: string; hintKey: string; arrow?: string; duration: number }> = {
+  front: { labelKey: 'selfenroll.look_straight',  hintKey: 'selfenroll.look_straight_hint',   duration: 3 },
+  left:  { labelKey: 'selfenroll.turn_left',      hintKey: 'selfenroll.turn_left_hint',       arrow: '←', duration: 4 },
+  right: { labelKey: 'selfenroll.turn_right',     hintKey: 'selfenroll.turn_right_hint',      arrow: '→', duration: 4 },
 }
 
 function decodeSubject(token: string): string {
@@ -26,15 +27,15 @@ function decodeSubject(token: string): string {
 }
 
 export function SelfEnrollPage() {
+  const { t } = useI18n()
   const [step, setStep] = useState<Step>('login')
   const [session, setSession] = useState<Session | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   // Login form
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [tenantSlug, setTenantSlug] = useState('')
 
   // Camera
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -151,13 +152,13 @@ export function SelfEnrollPage() {
     setError('')
     setBusy(true)
     try {
-      const tokens = await loginApi({ username: username.trim(), password, tenant_slug: tenantSlug.trim() || undefined })
+      const tokens = await loginApi({ email: email.trim().toLowerCase(), password })
       const userId = decodeSubject(tokens.access_token)
-      setSession({ token: tokens.access_token, userId, name: username.trim() })
+      setSession({ token: tokens.access_token, userId, name: email.trim() })
       setStep('capture')
       void startCamera()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login gagal')
+      setError(err instanceof Error ? err.message : t('selfenroll.login_failed'))
     } finally {
       setBusy(false)
     }
@@ -182,7 +183,7 @@ export function SelfEnrollPage() {
       setDone(true)
       resetTimerRef.current = setTimeout(resetAll, 6000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pendaftaran gagal')
+      setError(err instanceof Error ? err.message : t('selfenroll.enrollment_failed'))
     } finally {
       setBusy(false)
     }
@@ -192,7 +193,7 @@ export function SelfEnrollPage() {
     previewUrls.forEach(URL.revokeObjectURL)
     stopCamera()
     setStep('login'); setSession(null)
-    setUsername(''); setPassword(''); setTenantSlug('')
+    setEmail(''); setPassword('')
     setCapturedBlobs([]); setPreviewUrls([])
     setCapturePhase(null); setConsentChecked(false)
     setDone(false); setError('')
@@ -210,31 +211,29 @@ export function SelfEnrollPage() {
           <Eye size={24} strokeWidth={2.5} className="kiosk-brand-icon" />
           <span>netra</span>
         </div>
-        <span className="selfenroll-title">Pendaftaran Wajah Mandiri</span>
+        <span className="selfenroll-title">{t('selfenroll.title')}</span>
       </div>
 
-      <div className="kiosk-camera-area">
+      <div className="kiosk-camera-area" aria-label={t('kiosk.camera_area')}>
         {/* Step indicator */}
         <div className="selfenroll-steps">
-          <span className={`selfenroll-step ${step === 'login' ? 'active' : 'done'}`}>1. Masuk</span>
-          <span className={`selfenroll-step ${step === 'capture' ? 'active' : step === 'consent' ? 'done' : ''}`}>2. Rekam Wajah</span>
-          <span className={`selfenroll-step ${step === 'consent' ? 'active' : ''}`}>3. Persetujuan</span>
+          <span className={`selfenroll-step ${step === 'login' ? 'active' : 'done'}`}>{t('selfenroll.step_login')}</span>
+          <span className={`selfenroll-step ${step === 'capture' ? 'active' : step === 'consent' ? 'done' : ''}`}>{t('selfenroll.step_capture')}</span>
+          <span className={`selfenroll-step ${step === 'consent' ? 'active' : ''}`}>{t('selfenroll.step_consent')}</span>
         </div>
 
-        {error && <div className="kiosk-no-token-warning">{error}</div>}
+        {error && <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">{error}</div>}
 
         {/* ── Step 1: Login ── */}
         {step === 'login' && (
           <form className="selfenroll-form" onSubmit={handleLogin}>
-            <p className="selfenroll-hint">Masuk dengan akun Anda untuk mendaftarkan wajah secara mandiri.</p>
-            <input className="kiosk-token-input" type="text" placeholder="Username" value={username}
-              onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
-            <input className="kiosk-token-input" type="password" placeholder="Password" value={password}
-              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-            <input className="kiosk-token-input" type="text" placeholder="Kode institusi (tenant slug)"
-              value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} spellCheck={false} />
+            <p className="selfenroll-hint">{t('selfenroll.hint')}</p>
+            <input className="kiosk-token-input" type="email" placeholder={t('login.email')} value={email}
+              onChange={(e) => setEmail(e.target.value)} autoComplete="email" required aria-label={t('login.email')} />
+            <input className="kiosk-token-input" type="password" placeholder={t('login.password')} value={password}
+              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required aria-label={t('login.password')} />
             <button className="kiosk-btn kiosk-btn-checkin" type="submit" disabled={busy}>
-              {busy ? 'Memproses…' : 'Masuk'}
+              {busy ? t('selfenroll.processing') : t('selfenroll.login')}
             </button>
           </form>
         )}
@@ -270,7 +269,7 @@ export function SelfEnrollPage() {
                   <span className="kiosk-camera-placeholder-icon">
                     {cameraState === 'denied' ? '🚫' : cameraState === 'unavailable' ? '📵' : '📷'}
                   </span>
-                  <p>{cameraState === 'denied' ? 'Kamera ditolak browser.' : cameraState === 'unavailable' ? 'Kamera tidak tersedia.' : 'Memuat kamera…'}</p>
+                  <p>{cameraState === 'denied' ? t('selfenroll.camera_denied') : cameraState === 'unavailable' ? t('selfenroll.camera_unavailable') : t('selfenroll.camera_loading')}</p>
                 </div>
               )}
 
@@ -295,9 +294,9 @@ export function SelfEnrollPage() {
                 <div className="selfenroll-phase-overlay">
                   <div className="selfenroll-phase-label">
                     {phaseConfig.arrow && <span className="selfenroll-arrow">{phaseConfig.arrow}</span>}
-                    {phaseConfig.label}
+                    {t(phaseConfig.labelKey)}
                   </div>
-                  <div className="selfenroll-phase-hint">{phaseConfig.hint}</div>
+                  <div className="selfenroll-phase-hint">{t(phaseConfig.hintKey)}</div>
                   <div className="selfenroll-countdown-wrap">
                     <div className="selfenroll-countdown-bar">
                       <div className="selfenroll-countdown-fill" style={{ width: `${progressPct}%` }} />
@@ -311,8 +310,8 @@ export function SelfEnrollPage() {
               {/* Waiting for camera */}
               {!capturePhase && cameraState === 'active' && (
                 <div className="selfenroll-phase-overlay selfenroll-phase-overlay--dim">
-                  <div className="selfenroll-phase-label">Mempersiapkan…</div>
-                  <div className="selfenroll-phase-hint">Posisikan wajah Anda di dalam oval</div>
+                  <div className="selfenroll-phase-label">{t('selfenroll.preparing')}</div>
+                  <div className="selfenroll-phase-hint">{t('selfenroll.position_face')}</div>
                 </div>
               )}
             </div>
@@ -323,15 +322,15 @@ export function SelfEnrollPage() {
                 <div className="selfenroll-previews">
                   {previewUrls.map((url, i) => (
                     <div key={i} className="selfenroll-preview-thumb">
-                      <img src={url} alt={`Sudut ${i + 1}`} />
-                      <span>{['Depan', 'Kiri', 'Kanan'][i]}</span>
+                      <img src={url} alt={t('selfenroll.angle', { num: i + 1 })} />
+                      <span>{i === 0 ? t('selfenroll.front') : i === 1 ? t('selfenroll.left') : t('selfenroll.right')}</span>
                     </div>
                   ))}
                 </div>
                 <div className="kiosk-actions">
-                  <button className="kiosk-btn kiosk-btn-checkout" onClick={retake}>Ulangi</button>
+                  <button className="kiosk-btn kiosk-btn-checkout" onClick={retake}>{t('selfenroll.retake')}</button>
                   <button className="kiosk-btn kiosk-btn-checkin" onClick={() => { stopCamera(); setStep('consent') }}>
-                    Lanjut
+                    {t('selfenroll.continue')}
                   </button>
                 </div>
               </>
@@ -345,28 +344,26 @@ export function SelfEnrollPage() {
             <div className="selfenroll-previews selfenroll-previews--sm">
               {previewUrls.map((url, i) => (
                 <div key={i} className="selfenroll-preview-thumb">
-                  <img src={url} alt={`Sudut ${i + 1}`} />
-                  <span>{['Depan', 'Kiri', 'Kanan'][i]}</span>
+                  <img src={url} alt={t('selfenroll.angle', { num: i + 1 })} />
+                  <span>{i === 0 ? t('selfenroll.front') : i === 1 ? t('selfenroll.left') : t('selfenroll.right')}</span>
                 </div>
               ))}
             </div>
             <div className="selfenroll-consent">
               <p className="selfenroll-consent-text">
-                Sesuai UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi, data biometrik wajah
-                Anda akan dikumpulkan dan diproses untuk keperluan absensi. Data disimpan secara aman
-                dan hanya digunakan untuk verifikasi kehadiran. Anda dapat menarik persetujuan ini kapan saja.
+                {t('selfenroll.consent_text')}
               </p>
               <label className="selfenroll-consent-check">
                 <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
-                Saya menyetujui pengumpulan dan pemrosesan data biometrik wajah saya.
+                {t('selfenroll.consent_check')}
               </label>
             </div>
             <div className="kiosk-actions">
               <button className="kiosk-btn kiosk-btn-checkout" disabled={busy} onClick={() => { setStep('capture'); void startCamera() }}>
-                Kembali
+                {t('selfenroll.back')}
               </button>
               <button className="kiosk-btn kiosk-btn-checkin" disabled={busy || !consentChecked} onClick={handleSubmit}>
-                {busy ? 'Mendaftar…' : 'Daftarkan Wajah'}
+                {busy ? t('selfenroll.registering') : t('selfenroll.register')}
               </button>
             </div>
           </>
@@ -375,10 +372,10 @@ export function SelfEnrollPage() {
         {/* ── Success ── */}
         {done && (
           <div className="kiosk-camera-wrapper">
-            <div className="kiosk-result-overlay success">
+            <div className="kiosk-result-overlay success" role="alert" aria-live="assertive">
               <span className="kiosk-result-icon">✅</span>
               <div className="kiosk-result-name">{session?.name}</div>
-              <div className="kiosk-result-status">Wajah berhasil didaftarkan (3 sudut)</div>
+              <div className="kiosk-result-status">{t('selfenroll.success')}</div>
             </div>
           </div>
         )}

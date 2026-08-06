@@ -20,6 +20,28 @@ async def client() -> AsyncIterator[AsyncClient]:
         yield c
 
 
+def _assert_safe_test_db() -> None:
+    """Refuse to TRUNCATE unless we're clearly pointed at a throwaway test DB.
+
+    The test suite wipes EVERY table. If DATABASE_URL points at the shared dev
+    database, running pytest would destroy real data. We only proceed when the
+    database name contains 'test' OR an explicit opt-in env var is set.
+    """
+    import os
+
+    from app.core.config import settings
+
+    db_name = (settings.database_url or "").rsplit("/", 1)[-1].split("?")[0].lower()
+    if "test" in db_name or os.getenv("NETRA_ALLOW_TEST_DB_WIPE") == "1":
+        return
+    raise RuntimeError(
+        f"Refusing to TRUNCATE the database '{db_name}': it does not look like a "
+        "test database. Point DATABASE_URL at a dedicated '*_test' database "
+        "(e.g. netra_test) or set NETRA_ALLOW_TEST_DB_WIPE=1 to override. "
+        "This guard exists because the suite wipes ALL tables."
+    )
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db() -> AsyncIterator[None]:
     """Truncate all data before each test (platform/empty context for cleanup).
@@ -31,6 +53,13 @@ async def clean_db() -> AsyncIterator[None]:
     """
     from sqlalchemy import text
 
+    from app.core.ratelimit import reset_login_limiter
+
+    # Login throttling is in-process and per-IP, so attempts accumulate across
+    # tests and a full-suite run would otherwise start 429-ing partway through.
+    reset_login_limiter()
+
+    _assert_safe_test_db()
     await engine.dispose()
     async with engine.begin() as conn:
         await conn.execute(text("SET app.current_tenant = ''"))
@@ -47,16 +76,20 @@ async def clean_db() -> AsyncIterator[None]:
 @pytest_asyncio.fixture
 async def super_admin() -> User:
     async with SessionFactory() as session:
-        await _set_tenant(session, None)
+        await _set_tenant(session, None, platform=True)
         admin = User(
             tenant_id=None,
             username="owner",
+            email="owner@netra.app",
             full_name="Platform Owner",
             role=Role.super_admin,
             password_hash=hash_password("ownerpass123"),
             is_active=True,
         )
         session.add(admin)
-        await session.commit()
+        # Refresh BEFORE committing: the tenant/platform binding is transaction
+        # local, so a read after commit would run unscoped (and see nothing).
+        await session.flush()
         await session.refresh(admin)
+        await session.commit()
         return admin

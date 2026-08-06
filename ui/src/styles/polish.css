@@ -1,0 +1,240 @@
+/* ──────────────────────────────────────────────────────────
+   Phase 5 polish — keyboard shortcuts overlay + onboarding tooltips
+   Imported from the polish components themselves (NOT main.tsx).
+   ────────────────────────────────────────────────────────── */
+
+/* ── Keyboard shortcuts overlay ── */
+.ks-card {
+  max-width: 540px;
+}
+
+.ks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.ks-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.ks-title-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--gradient-brand-subtle);
+  color: var(--color-brand);
+}
+
+.ks-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-light);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast, 150ms) ease, color var(--duration-fast, 150ms) ease;
+}
+.ks-close:hover {
+  background: var(--color-brand-light);
+  color: var(--color-text);
+}
+
+.ks-group {
+  margin-bottom: 1.25rem;
+}
+.ks-group:last-child {
+  margin-bottom: 0;
+}
+
+.ks-group-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0 0 0.625rem;
+}
+
+.ks-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ks-row:last-child {
+  border-bottom: none;
+}
+
+.ks-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.ks-keys {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.ks-plus {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+kbd.ks-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 0.4375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong, var(--color-border-subtle));
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-level-1);
+}
+
+.ks-hint {
+  margin: 1.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ── Onboarding coachmark ── */
+.ob-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 10, 30, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn var(--duration-normal, 220ms) ease;
+}
+
+.ob-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--gradient-surface, var(--color-surface));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-level-3);
+  padding: 1.75rem;
+  animation: slideUp var(--duration-normal, 220ms) var(--ease-spring, ease);
+}
+
+.ob-illu {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  background: var(--gradient-brand-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand);
+  margin-bottom: 1rem;
+}
+
+.ob-title {
+  margin: 0 0 0.375rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--color-text);
+}
+
+.ob-body {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.ob-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ob-dots {
+  display: flex;
+  gap: 0.375rem;
+}
+.ob-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong, var(--color-border-subtle));
+  transition: background var(--duration-fast, 150ms) ease, width var(--duration-fast, 150ms) ease;
+}
+.ob-dot.active {
+  width: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+}
+
+.ob-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ob-skip {
+  border: none;
+  background: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.5rem 0.25rem;
+}
+.ob-skip:hover {
+  color: var(--color-text);
+}
+
+.ob-next {
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--gradient-brand);
+  color: var(--color-text-inverse, #fff);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-level-1);
+  transition: filter var(--duration-fast, 150ms) ease, transform var(--duration-fast, 150ms) ease;
+}
+.ob-next:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}

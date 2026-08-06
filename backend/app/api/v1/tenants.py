@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -11,9 +11,10 @@ from app.api.deps import (
     require_super_admin,
     require_tenant_admin,
 )
-from app.models import TenantStatus
+from app.models import Tenant, TenantStatus
 from app.schemas import Envelope, TenantConfig, TenantCreate, TenantOut
 from app.services import audit_service, tenant_service
+from app.services.soft_delete import soft_delete
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -38,13 +39,17 @@ async def create_tenant(
     return Envelope(data=TenantOut.model_validate(tenant))
 
 
-@router.get("", response_model=Envelope[list[TenantOut]])
+@router.get("", response_model=Envelope[dict])
 async def list_tenants(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=1000),
+    search: str | None = Query(None, description="Search by name or slug"),
     _: Principal = Depends(require_super_admin),
     session: AsyncSession = Depends(get_db_unscoped),
-) -> Envelope[list[TenantOut]]:
-    tenants = await tenant_service.list_tenants(session)
-    return Envelope(data=[TenantOut.model_validate(t) for t in tenants])
+) -> Envelope[dict]:
+    result = await tenant_service.list_tenants(session, page=page, limit=limit, search=search)
+    result["items"] = [TenantOut.model_validate(t) for t in result["items"]]
+    return Envelope(data=result)
 
 
 # --- TENANT-2: per-tenant config space (declared before /{tenant_id} routes) ---
@@ -147,3 +152,22 @@ async def _set_status(
         detail={},
     )
     return Envelope(data=TenantOut.model_validate(tenant))
+
+
+@router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tenant(
+    tenant_id: str,
+    principal: Principal = Depends(require_super_admin),
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> None:
+    if not await soft_delete(session, Tenant, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found or already deleted"
+        )
+    await audit_service.record(
+        session,
+        action="tenant.deleted",
+        actor=principal.subject,
+        tenant_id=tenant_id,
+        detail={},
+    )
