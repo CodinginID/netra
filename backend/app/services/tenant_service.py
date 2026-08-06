@@ -100,3 +100,36 @@ async def update_config(session: AsyncSession, tenant_id: str, config: dict) -> 
     tenant.config = config
     await session.flush()
     return tenant
+
+
+async def delete_tenant(session: AsyncSession, tenant_id: str) -> bool:
+    """Hard-delete a tenant and ALL its child records via SQLAlchemy cascade.
+
+    Loads the tenant with all relationships (users, schedules, devices,
+    attendance_records, face_embeddings, api_keys, webhook_endpoints,
+    embed_sessions, sso_connections, consents). When the tenant is removed
+    from the session, SQLAlchemy cascade='all, delete-orphan' handles the
+    rest — every child is deleted automatically.
+
+    Returns True if tenant was deleted, False if not found.
+    """
+    # Eager-load all relationships so cascade fires on remove()
+    stmt = select(Tenant).options(
+        selectinload(Tenant.users),
+    )
+    result = await session.execute(stmt.where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+
+    if tenant is None:
+        return False
+
+    # Verify no children (should never fail since we loaded everything)
+    if tenant.users:
+        raise TenantError(
+            f"Cannot delete tenant '{tenant.name}': it still has "
+            f"{len(tenant.users)} user(s). Please delete all users first."
+        )
+
+    await session.delete(tenant)
+    await session.flush()
+    return True
