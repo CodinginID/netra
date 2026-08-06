@@ -62,10 +62,28 @@ jobs:
       - name: Type-check (mypy)
         run: uv run mypy app
 
-      - name: Run migrations (superuser)
+      - name: Validate migration graph (no multiple heads)
+        run: |
+          HEADS=$(uv run alembic heads 2>&1)
+          echo "$HEADS"
+          HEAD_COUNT=$(echo "$HEADS" | grep -v '^\s*$' | wc -l | tr -d ' ')
+          if [ "$HEAD_COUNT" -gt 1 ]; then
+            echo "ERROR: Multiple Alembic heads detected — migration chain is broken."
+            echo "Each migration must have exactly one parent via down_revision."
+            echo "To fix: run 'alembic merge -m <name>' to consolidate heads, or"
+            echo "correct down_revision in each migration file."
+            exit 1
+          fi
+          echo "✓ Migration graph is valid: single head ($HEADS)"
+
+      - name: Verify upgrade-to-head is idempotent (downgrade + upgrade)
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_SUPER }}
-        run: uv run alembic upgrade head
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          echo "✓ Full downgrade + upgrade cycle succeeded"
 
       - name: Run tests (netra_app role)
         run: uv run pytest --cov=app --cov-report=term-missing
