@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_super_admin, require_tenant_admin
+from app.api.deps import Principal, get_db, require_super_admin, require_tenant_admin
 from app.models import AttendanceRecord, Device, Schedule, User
 from app.schemas import AttendanceOut, DeviceOut, Envelope, ScheduleOut, UserOut
 from app.services import audit_service
@@ -16,22 +16,23 @@ router = APIRouter(prefix="/trash", tags=["trash"])
 
 @router.get("", response_model=Envelope[dict])
 async def list_all_trash(
-    principal: str = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     """Combined trash listing: all soft-deleted entities grouped by type (tenant-scoped)."""
+    tid = principal.tenant_id
     users_result = await session.execute(
-        select(User).where(User.deleted_at.isnot(None)).order_by(User.deleted_at.desc())
+        select(User).where(User.deleted_at.isnot(None), User.tenant_id == tid).order_by(User.deleted_at.desc())
     )
     devices_result = await session.execute(
-        select(Device).where(Device.deleted_at.isnot(None)).order_by(Device.deleted_at.desc())
+        select(Device).where(Device.deleted_at.isnot(None), Device.tenant_id == tid).order_by(Device.deleted_at.desc())
     )
     schedules_result = await session.execute(
-        select(Schedule).where(Schedule.deleted_at.isnot(None)).order_by(Schedule.deleted_at.desc())
+        select(Schedule).where(Schedule.deleted_at.isnot(None), Schedule.tenant_id == tid).order_by(Schedule.deleted_at.desc())
     )
     attendance_result = await session.execute(
         select(AttendanceRecord)
-        .where(AttendanceRecord.deleted_at.isnot(None))
+        .where(AttendanceRecord.deleted_at.isnot(None), AttendanceRecord.tenant_id == tid)
         .order_by(AttendanceRecord.deleted_at.desc())
     )
     return Envelope(

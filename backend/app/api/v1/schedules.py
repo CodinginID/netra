@@ -51,8 +51,14 @@ async def list_schedules(
     _: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(Schedule).where(Schedule.deleted_at.is_(None))
-    count_stmt = select(func.count(Schedule.id)).select_from(Schedule).where(Schedule.deleted_at.is_(None))
+    base = select(Schedule).where(
+        Schedule.deleted_at.is_(None),
+        Schedule.tenant_id == principal.tenant_id,
+    )
+    count_stmt = select(func.count(Schedule.id)).select_from(Schedule).where(
+        Schedule.deleted_at.is_(None),
+        Schedule.tenant_id == principal.tenant_id,
+    )
     total = (await session.execute(count_stmt)).scalar() or 0
     offset = (page - 1) * limit
     items_result = await session.execute(
@@ -71,7 +77,7 @@ async def update_schedule(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[ScheduleOut]:
     schedule = await session.get(Schedule, schedule_id)
-    if schedule is None:
+    if schedule is None or schedule.tenant_id != principal.tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
     if payload.name is not None:
         schedule.name = payload.name
@@ -112,6 +118,11 @@ async def delete_schedule(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> None:
+    schedule = await session.get(Schedule, schedule_id)
+    if schedule is None or schedule.tenant_id != principal.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or already deleted"
+        )
     if not await soft_delete(session, Schedule, schedule_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or already deleted"
@@ -132,7 +143,10 @@ async def list_deleted_schedules(
 ) -> Envelope[list[ScheduleOut]]:
     """List soft-deleted schedules (recycle bin)."""
     result = await session.execute(
-        select(Schedule).where(Schedule.deleted_at.isnot(None)).order_by(Schedule.deleted_at.desc())
+        select(Schedule).where(
+            Schedule.deleted_at.isnot(None),
+            Schedule.tenant_id == principal.tenant_id,
+        ).order_by(Schedule.deleted_at.desc())
     )
     return Envelope(data=[ScheduleOut.model_validate(s) for s in result.scalars()])
 
@@ -149,7 +163,12 @@ async def restore_schedule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or not deleted"
         )
-    schedule = (await session.execute(select(Schedule).where(Schedule.id == schedule_id))).scalar_one()
+    schedule = (await session.execute(
+        select(Schedule).where(
+            Schedule.id == schedule_id,
+            Schedule.tenant_id == principal.tenant_id,
+        )
+    )).scalar_one()
     await audit_service.record(
         session,
         action="schedule.restored",

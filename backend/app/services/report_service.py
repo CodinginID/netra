@@ -90,7 +90,7 @@ def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
 
 
 async def _recap_for_range(
-    session: AsyncSession, start: datetime, end: datetime
+    session: AsyncSession, start: datetime, end: datetime, tenant_id: str
 ) -> AttendanceRecap:
     """Aggregate per-user status / type counts over ``[start, end]`` (inclusive)."""
     recap = AttendanceRecap(period_start=start.date(), period_end=end.date())
@@ -104,6 +104,7 @@ async def _recap_for_range(
             func.count().label("n"),
         )
         .join(User, User.id == AttendanceRecord.user_id)
+        .where(AttendanceRecord.tenant_id == tenant_id)
         .where(AttendanceRecord.occurred_at >= start)
         .where(AttendanceRecord.occurred_at <= end)
         .group_by(
@@ -144,17 +145,17 @@ async def _recap_for_range(
     return recap
 
 
-async def daily_recap(session: AsyncSession, day: date) -> AttendanceRecap:
+async def daily_recap(session: AsyncSession, day: date, tenant_id: str) -> AttendanceRecap:
     start, end = _day_bounds(day)
-    return await _recap_for_range(session, start, end)
+    return await _recap_for_range(session, start, end, tenant_id)
 
 
-async def monthly_recap(session: AsyncSession, year: int, month: int) -> AttendanceRecap:
+async def monthly_recap(session: AsyncSession, year: int, month: int, tenant_id: str) -> AttendanceRecap:
     start, end = _month_bounds(year, month)
-    return await _recap_for_range(session, start, end)
+    return await _recap_for_range(session, start, end, tenant_id)
 
 
-async def export_rows(session: AsyncSession, start_day: date, end_day: date) -> list[ExportRow]:
+async def export_rows(session: AsyncSession, start_day: date, end_day: date, tenant_id: str) -> list[ExportRow]:
     """Flat, ordered list of records in ``[start_day, end_day]`` (inclusive)."""
     start, _ = _day_bounds(start_day)
     _, end = _day_bounds(end_day)
@@ -162,6 +163,7 @@ async def export_rows(session: AsyncSession, start_day: date, end_day: date) -> 
     stmt = (
         select(AttendanceRecord, User.full_name)
         .join(User, User.id == AttendanceRecord.user_id)
+        .where(AttendanceRecord.tenant_id == tenant_id)
         .where(AttendanceRecord.occurred_at >= start)
         .where(AttendanceRecord.occurred_at <= end)
         .order_by(AttendanceRecord.occurred_at.asc())
@@ -184,7 +186,7 @@ async def export_rows(session: AsyncSession, start_day: date, end_day: date) -> 
 
 
 async def daily_status(
-    session: AsyncSession, day: date, tz_name: str = "Asia/Jakarta"
+    session: AsyncSession, day: date, tz_name: str = "Asia/Jakarta", tenant_id: str | None = None
 ) -> list[DailyStatus]:
     """Roster of EVERY active end-user with their attendance state for ``day``.
 
@@ -206,6 +208,7 @@ async def daily_status(
                 User.role == Role.end_user,
                 User.is_active.is_(True),
                 User.deleted_at.is_(None),
+                User.tenant_id == tenant_id,
             )
             .order_by(User.full_name.asc())
         )
@@ -220,6 +223,7 @@ async def daily_status(
                 AttendanceRecord.occurred_at,
             )
             .where(
+                AttendanceRecord.tenant_id == tenant_id,
                 AttendanceRecord.occurred_at >= day_start,
                 AttendanceRecord.occurred_at < day_end,
             )

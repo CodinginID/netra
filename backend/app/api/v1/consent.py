@@ -31,7 +31,10 @@ async def grant_consent(
         )
 
     user = (
-        await session.execute(select(User).where(User.id == payload.user_id))
+        await session.execute(select(User).where(
+            User.id == payload.user_id,
+            User.tenant_id == tenant_id,
+        ))
     ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

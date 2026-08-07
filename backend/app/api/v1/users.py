@@ -62,7 +62,10 @@ async def list_users(
     _: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(User).where(User.deleted_at.is_(None))
+    base = select(User).where(
+        User.deleted_at.is_(None),
+        User.tenant_id == principal.tenant_id,
+    )
     if search:
         search_pattern = f"%{search}%"
         base = base.where(
@@ -70,7 +73,10 @@ async def list_users(
         )
 
     # Count total
-    count_stmt = select(func.count(User.id)).select_from(User).where(User.deleted_at.is_(None))
+    count_stmt = select(func.count(User.id)).select_from(User).where(
+        User.deleted_at.is_(None),
+        User.tenant_id == principal.tenant_id,
+    )
     if search:
         search_pattern = f"%{search}%"
         count_stmt = count_stmt.where(
@@ -103,7 +109,7 @@ async def update_user(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[UserOut]:
     user = await session.get(User, user_id)
-    if user is None:
+    if user is None or user.tenant_id != principal.tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -137,7 +143,7 @@ async def delete_user(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     user = await session.get(User, user_id)
-    if user is None:
+    if user is None or user.tenant_id != principal.tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if not await soft_delete(session, User, user_id):
         raise HTTPException(
@@ -159,7 +165,10 @@ async def list_deleted_users(
 ) -> Envelope[list[UserOut]]:
     """List soft-deleted users (recycle bin)."""
     result = await session.execute(
-        select(User).where(User.deleted_at.isnot(None)).order_by(User.deleted_at.desc())
+        select(User).where(
+            User.deleted_at.isnot(None),
+            User.tenant_id == principal.tenant_id,
+        ).order_by(User.deleted_at.desc())
     )
     return Envelope(data=[UserOut.model_validate(u) for u in result.scalars()])
 
@@ -176,7 +185,12 @@ async def restore_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not deleted"
         )
-    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
+    user = (await session.execute(
+        select(User).where(
+            User.id == user_id,
+            User.tenant_id == principal.tenant_id,
+        )
+    )).scalar_one()
     await audit_service.record(
         session,
         action="user.restored",

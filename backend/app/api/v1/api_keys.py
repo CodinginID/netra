@@ -63,10 +63,10 @@ async def create_api_key(
 
 @router.get("", response_model=Envelope[list[ApiKeyOut]])
 async def list_api_keys(
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[ApiKeyOut]]:
-    keys = await api_key_service.list_keys(session)
+    keys = await api_key_service.list_keys(session, principal.tenant_id)
     return Envelope(data=[ApiKeyOut.model_validate(k) for k in keys])
 
 

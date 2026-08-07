@@ -398,11 +398,17 @@ async def list_attendance(
     _: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(AttendanceRecord).where(AttendanceRecord.deleted_at.is_(None))
+    base = select(AttendanceRecord).where(
+        AttendanceRecord.deleted_at.is_(None),
+        AttendanceRecord.tenant_id == principal.tenant_id,
+    )
     if user_id is not None:
         base = base.where(AttendanceRecord.user_id == user_id)
 
-    count_stmt = select(func.count(AttendanceRecord.id)).where(AttendanceRecord.deleted_at.is_(None))
+    count_stmt = select(func.count(AttendanceRecord.id)).where(
+        AttendanceRecord.deleted_at.is_(None),
+        AttendanceRecord.tenant_id == principal.tenant_id,
+    )
     if user_id is not None:
         count_stmt = count_stmt.where(AttendanceRecord.user_id == user_id)
     total = (await session.execute(count_stmt)).scalar() or 0
@@ -423,6 +429,12 @@ async def delete_attendance_record(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """Soft-delete an attendance record (moves to trash)."""
+    record = await session.get(AttendanceRecord, record_id)
+    if record is None or record.tenant_id != principal.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found or already deleted",
+        )
     if not await soft_delete(session, AttendanceRecord, record_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -445,7 +457,10 @@ async def list_deleted_attendance(
     """List soft-deleted attendance records (recycle bin)."""
     result = await session.execute(
         select(AttendanceRecord)
-        .where(AttendanceRecord.deleted_at.isnot(None))
+        .where(
+            AttendanceRecord.deleted_at.isnot(None),
+            AttendanceRecord.tenant_id == principal.tenant_id,
+        )
         .order_by(AttendanceRecord.deleted_at.desc())
     )
     return Envelope(data=[AttendanceOut.model_validate(r) for r in result.scalars()])
@@ -464,7 +479,10 @@ async def restore_attendance_record(
             status_code=status.HTTP_404_NOT_FOUND, detail="Record not found or not deleted"
         )
     record = (
-        await session.execute(select(AttendanceRecord).where(AttendanceRecord.id == record_id))
+        await session.execute(select(AttendanceRecord).where(
+            AttendanceRecord.id == record_id,
+            AttendanceRecord.tenant_id == principal.tenant_id,
+        ))
     ).scalar_one()
     await audit_service.record(
         session,

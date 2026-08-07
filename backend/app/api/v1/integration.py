@@ -71,7 +71,7 @@ async def list_attendance(
     session: AsyncSession = Depends(get_api_db),
 ) -> Envelope[dict]:
     """Paginated attendance records for the calling tenant."""
-    filters = [AttendanceRecord.deleted_at.is_(None)]
+    filters = [AttendanceRecord.deleted_at.is_(None), AttendanceRecord.tenant_id == principal.tenant_id]
     if user_id is not None:
         filters.append(AttendanceRecord.user_id == user_id)
     if date_from is not None:
@@ -110,7 +110,7 @@ async def daily_status(
     day = _parse_day(date_str, "date").date()
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
-    rows = await report_service.daily_status(session, day, cfg.attendance.timezone)
+    rows = await report_service.daily_status(session, day, cfg.attendance.timezone, principal.tenant_id)
     return Envelope(
         data=[
             DailyStatusOut(
@@ -137,7 +137,7 @@ async def list_users(
     session: AsyncSession = Depends(get_api_db),
 ) -> Envelope[dict]:
     """Paginated end-users for the calling tenant, with their enrolled flag."""
-    filters = [User.role == Role.end_user, User.deleted_at.is_(None)]
+    filters = [User.role == Role.end_user, User.deleted_at.is_(None), User.tenant_id == principal.tenant_id]
     total = (await session.execute(select(func.count(User.id)).where(*filters))).scalar() or 0
     offset = (page - 1) * limit
     rows = (

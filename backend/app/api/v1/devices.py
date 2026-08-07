@@ -67,8 +67,14 @@ async def list_devices(
     _: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(Device).where(Device.deleted_at.is_(None))
-    count_stmt = select(func.count(Device.id)).select_from(Device).where(Device.deleted_at.is_(None))
+    base = select(Device).where(
+        Device.deleted_at.is_(None),
+        Device.tenant_id == principal.tenant_id,
+    )
+    count_stmt = select(func.count(Device.id)).select_from(Device).where(
+        Device.deleted_at.is_(None),
+        Device.tenant_id == principal.tenant_id,
+    )
     total = (await session.execute(count_stmt)).scalar() or 0
     offset = (page - 1) * limit
     items_result = await session.execute(
@@ -86,7 +92,10 @@ async def revoke_device(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[DeviceOut]:
     device = (
-        await session.execute(select(Device).where(Device.id == device_id))
+        await session.execute(select(Device).where(
+            Device.id == device_id,
+            Device.tenant_id == principal.tenant_id,
+        ))
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -133,7 +142,10 @@ async def regenerate_device_token(
     The new plaintext token is returned ONCE.
     """
     device = (
-        await session.execute(select(Device).where(Device.id == device_id))
+        await session.execute(select(Device).where(
+            Device.id == device_id,
+            Device.tenant_id == principal.tenant_id,
+        ))
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -163,7 +175,10 @@ async def update_device(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[DeviceOut]:
     device = (
-        await session.execute(select(Device).where(Device.id == device_id))
+        await session.execute(select(Device).where(
+            Device.id == device_id,
+            Device.tenant_id == principal.tenant_id,
+        ))
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -206,7 +221,10 @@ async def list_deleted_devices(
 ) -> Envelope[list[DeviceOut]]:
     """List soft-deleted devices (recycle bin)."""
     result = await session.execute(
-        select(Device).where(Device.deleted_at.isnot(None)).order_by(Device.deleted_at.desc())
+        select(Device).where(
+            Device.deleted_at.isnot(None),
+            Device.tenant_id == principal.tenant_id,
+        ).order_by(Device.deleted_at.desc())
     )
     return Envelope(data=[DeviceOut.model_validate(d) for d in result.scalars()])
 
@@ -223,7 +241,12 @@ async def restore_device(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or not deleted"
         )
-    device = (await session.execute(select(Device).where(Device.id == device_id))).scalar_one()
+    device = (await session.execute(
+        select(Device).where(
+            Device.id == device_id,
+            Device.tenant_id == principal.tenant_id,
+        )
+    )).scalar_one()
     await audit_service.record(
         session,
         action="device.restored",

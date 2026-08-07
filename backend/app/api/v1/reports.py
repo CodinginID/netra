@@ -116,22 +116,22 @@ def _parse_month(value: str) -> tuple[int, int]:
 @router.get("/attendance/daily", response_model=Envelope[AttendanceRecapOut])
 async def daily_report(
     date_str: str = Query(..., alias="date", description="YYYY-MM-DD"),
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[AttendanceRecapOut]:
     day = _parse_date(date_str)
-    recap = await report_service.daily_recap(session, day)
+    recap = await report_service.daily_recap(session, day, principal.tenant_id)
     return Envelope(data=_to_recap_out(recap))
 
 
 @router.get("/attendance/monthly", response_model=Envelope[AttendanceRecapOut])
 async def monthly_report(
     month: str = Query(..., description="YYYY-MM"),
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[AttendanceRecapOut]:
     year, mon = _parse_month(month)
-    recap = await report_service.monthly_recap(session, year, mon)
+    recap = await report_service.monthly_recap(session, year, mon, principal.tenant_id)
     return Envelope(data=_to_recap_out(recap))
 
 
@@ -155,7 +155,7 @@ async def daily_status(
     day = _parse_date(date_str)
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
-    rows = await report_service.daily_status(session, day, cfg.attendance.timezone)
+    rows = await report_service.daily_status(session, day, cfg.attendance.timezone, principal.tenant_id)
     return Envelope(
         data=[
             DailyStatusOut(
@@ -309,7 +309,7 @@ async def export_report(
     from_str: str = Query(..., alias="from", description="YYYY-MM-DD (inclusive)"),
     to_str: str = Query(..., alias="to", description="YYYY-MM-DD (inclusive)"),
     fmt: Literal["csv", "xlsx", "pdf"] = Query("csv", alias="format"),
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     start_day = _parse_date(from_str)
@@ -320,7 +320,7 @@ async def export_report(
             detail="'to' must not be earlier than 'from'",
         )
 
-    rows = await report_service.export_rows(session, start_day, end_day)
+    rows = await report_service.export_rows(session, start_day, end_day, principal.tenant_id)
     filename = f"attendance_{from_str}_{to_str}.{fmt}"
 
     if fmt == "csv":

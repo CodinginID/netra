@@ -50,8 +50,10 @@ async def create(
     return key, plaintext
 
 
-async def list_keys(session: AsyncSession) -> list[ApiKey]:
-    result = await session.execute(select(ApiKey).order_by(ApiKey.created_at.desc()))
+async def list_keys(session: AsyncSession, tenant_id: str) -> list[ApiKey]:
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.tenant_id == tenant_id).order_by(ApiKey.created_at.desc())
+    )
     return list(result.scalars())
 
 

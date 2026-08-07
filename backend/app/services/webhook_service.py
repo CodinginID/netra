@@ -58,11 +58,13 @@ async def register(
     return endpoint
 
 
-async def list_endpoints(session: AsyncSession) -> list[WebhookEndpoint]:
+async def list_endpoints(session: AsyncSession, tenant_id: str) -> list[WebhookEndpoint]:
     return list(
         (
             await session.execute(
-                select(WebhookEndpoint).order_by(WebhookEndpoint.created_at.desc())
+                select(WebhookEndpoint).where(
+                    WebhookEndpoint.tenant_id == tenant_id
+                ).order_by(WebhookEndpoint.created_at.desc())
             )
         ).scalars()
     )
@@ -75,7 +77,12 @@ async def dispatch(session: AsyncSession, tenant_id: str, *, event: str, payload
     are logged and swallowed so attendance recording is unaffected.
     """
     endpoints = (
-        await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.is_enabled.is_(True)))
+        await session.execute(
+            select(WebhookEndpoint).where(
+                WebhookEndpoint.is_enabled.is_(True),
+                WebhookEndpoint.tenant_id == tenant_id,
+            )
+        )
     ).scalars()
     body = json.dumps({"event": event, "data": payload}, separators=(",", ":")).encode()
 

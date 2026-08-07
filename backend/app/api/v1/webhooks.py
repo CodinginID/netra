@@ -43,5 +43,5 @@ async def list_webhooks(
     _: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[WebhookOut]]:
-    endpoints = await webhook_service.list_endpoints(session)
+    endpoints = await webhook_service.list_endpoints(session, principal.tenant_id)
     return Envelope(data=[WebhookOut.model_validate(e) for e in endpoints])
