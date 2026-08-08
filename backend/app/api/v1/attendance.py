@@ -395,7 +395,7 @@ async def list_attendance(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
     user_id: str | None = None,
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     base = select(AttendanceRecord).where(
@@ -451,7 +451,7 @@ async def delete_attendance_record(
 
 @router.get("/trash", response_model=Envelope[list[AttendanceOut]])
 async def list_deleted_attendance(
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[AttendanceOut]]:
     """List soft-deleted attendance records (recycle bin)."""

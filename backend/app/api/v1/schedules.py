@@ -48,7 +48,7 @@ async def create_schedule(
 async def list_schedules(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
-    _: Principal = Depends(require_staff),
+    principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     base = select(Schedule).where(
@@ -138,7 +138,7 @@ async def delete_schedule(
 
 @router.get("/trash", response_model=Envelope[list[ScheduleOut]])
 async def list_deleted_schedules(
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[ScheduleOut]]:
     """List soft-deleted schedules (recycle bin)."""

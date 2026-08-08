@@ -64,7 +64,7 @@ async def register_device(
 async def list_devices(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     base = select(Device).where(
@@ -216,7 +216,7 @@ async def delete_device(
 
 @router.get("/trash", response_model=Envelope[list[DeviceOut]])
 async def list_deleted_devices(
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[DeviceOut]]:
     """List soft-deleted devices (recycle bin)."""

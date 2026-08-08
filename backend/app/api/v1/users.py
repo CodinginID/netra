@@ -59,7 +59,7 @@ async def list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
     search: str | None = Query(None, description="Search by name or username"),
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     base = select(User).where(
@@ -160,7 +160,7 @@ async def delete_user(
 
 @router.get("/trash", response_model=Envelope[list[UserOut]])
 async def list_deleted_users(
-    _: Principal = Depends(require_tenant_admin),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[UserOut]]:
     """List soft-deleted users (recycle bin)."""

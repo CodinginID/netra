@@ -49,7 +49,7 @@ async def list_all_trash(
 
 @router.post("/purge", status_code=status.HTTP_200_OK)
 async def purge_trash(
-    principal: str = Depends(require_super_admin),
+    principal: Principal = Depends(require_super_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     """Permanently delete all soft-deleted entities older than 30 days. Super-admin only."""
