@@ -21,14 +21,16 @@ function useScopedCall() {
 
 // ---- Mutation Hooks ----
 
-export function useCreateUser(onSuccess?: () => void) {
+export function useCreateUser(onSuccess?: (user: api.UserCreateOut) => void) {
   const call = useScopedCall()
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (payload: api.UserCreate) => call((t) => api.createUser(t, payload)),
-    onSuccess: () => {
+    onSuccess: (user) => {
       qc.invalidateQueries({ queryKey: queryKeys.users() })
-      onSuccess?.()
+      // Adding someone back revives their deleted record, so it leaves the trash.
+      qc.invalidateQueries({ queryKey: queryKeys.trash('users') })
+      onSuccess?.(user)
     },
   })
 }
@@ -243,6 +245,42 @@ export function useRestoreSchedule(onSuccess?: () => void) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.trash('schedules') })
       qc.invalidateQueries({ queryKey: queryKeys.schedules() })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useHardDeleteTrashUser(onSuccess?: () => void) {
+  const call = useScopedCall()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entityId: string) => call((t) => api.hardDeleteTrashUser(t, entityId)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trash('users') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useHardDeleteTrashDevice(onSuccess?: () => void) {
+  const call = useScopedCall()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entityId: string) => call((t) => api.hardDeleteTrashDevice(t, entityId)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trash('devices') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useHardDeleteTrashSchedule(onSuccess?: () => void) {
+  const call = useScopedCall()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entityId: string) => call((t) => api.hardDeleteTrashSchedule(t, entityId)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trash('schedules') })
       onSuccess?.()
     },
   })

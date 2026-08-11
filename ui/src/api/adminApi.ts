@@ -193,8 +193,17 @@ export async function listUsers(token: string, params?: { page?: number; limit?:
   return normalizePaginated<UserOut>(raw)
 }
 
-export async function createUser(token: string, payload: UserCreate): Promise<UserOut> {
-  return apiFetch<UserOut>(`${API_BASE}/users`, token, {
+/**
+ * A created user. `revived` is true when the identifiers belonged to someone
+ * who had been deleted: their record came back — attendance history and
+ * enrolled face included — instead of a new one being inserted.
+ */
+export interface UserCreateOut extends UserOut {
+  revived: boolean
+}
+
+export async function createUser(token: string, payload: UserCreate): Promise<UserCreateOut> {
+  return apiFetch<UserCreateOut>(`${API_BASE}/users`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -556,6 +565,18 @@ export async function listDeletedSchedules(token: string): Promise<PaginatedResp
 
 export async function restoreSchedule(token: string, scheduleId: string): Promise<ScheduleOut> {
   return apiFetch<ScheduleOut>(`${API_BASE}/schedules/${scheduleId}/restore`, token, { method: 'POST' })
+}
+
+export async function hardDeleteTrashUser(token: string, entityId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/trash/users/${entityId}`, token, { method: 'DELETE' })
+}
+
+export async function hardDeleteTrashDevice(token: string, entityId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/trash/devices/${entityId}`, token, { method: 'DELETE' })
+}
+
+export async function hardDeleteTrashSchedule(token: string, entityId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/trash/schedules/${entityId}`, token, { method: 'DELETE' })
 }
 
 // --------------------------------------------------------------------------- //

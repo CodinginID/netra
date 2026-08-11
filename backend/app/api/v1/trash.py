@@ -9,7 +9,7 @@ from app.api.deps import Principal, get_db, require_super_admin, require_tenant_
 from app.models import AttendanceRecord, Device, Schedule, User
 from app.schemas import AttendanceOut, DeviceOut, Envelope, ScheduleOut, UserOut
 from app.services import audit_service
-from app.services.soft_delete import hard_delete_older_than
+from app.services.soft_delete import hard_delete, hard_delete_older_than
 
 router = APIRouter(prefix="/trash", tags=["trash"])
 
@@ -44,6 +44,60 @@ async def list_all_trash(
                 AttendanceOut.model_validate(r) for r in attendance_result.scalars()
             ],
         }
+    )
+
+
+@router.delete("/users/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_trash_user(
+    entity_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete a soft-deleted user from the trash."""
+    if not await hard_delete(session, User, entity_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not soft-deleted")
+    await audit_service.record(
+        session,
+        action="trash.hard_deleted",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"entity_type": "user", "entity_id": entity_id},
+    )
+
+
+@router.delete("/devices/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_trash_device(
+    entity_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete a soft-deleted device from the trash."""
+    if not await hard_delete(session, Device, entity_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or not soft-deleted")
+    await audit_service.record(
+        session,
+        action="trash.hard_deleted",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"entity_type": "device", "entity_id": entity_id},
+    )
+
+
+@router.delete("/schedules/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_trash_schedule(
+    entity_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete a soft-deleted schedule from the trash."""
+    if not await hard_delete(session, Schedule, entity_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or not soft-deleted")
+    await audit_service.record(
+        session,
+        action="trash.hard_deleted",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"entity_type": "schedule", "entity_id": entity_id},
     )
 
 

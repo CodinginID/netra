@@ -42,6 +42,18 @@ async def restore(session: AsyncSession, model_cls, entity_id: str) -> bool:
     return result.rowcount > 0
 
 
+async def hard_delete(session: AsyncSession, model_cls, entity_id: str) -> bool:
+    """Permanently delete a single soft-deleted row by ID.
+
+    Unlike `hard_delete_older_than`, there is no age filter — admin explicitly
+    triggered this deletion. Returns True if a row was removed, False if no
+    row matched (already restored, or never existed).
+    """
+    stmt = sa_delete(model_cls).where(model_cls.id == entity_id)
+    result = await session.execute(stmt)
+    return (result.rowcount or 0) > 0
+
+
 async def hard_delete_older_than(
     session: AsyncSession,
     model_cls,

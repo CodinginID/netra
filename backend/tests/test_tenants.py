@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.db.session import SessionFactory, _set_tenant
-from app.models import AuditLog, Tenant, TenantStatus
+from app.models import AuditLog, Tenant, TenantStatus, User
 
 
 async def _token(client: AsyncClient, **payload) -> str:
@@ -193,9 +193,11 @@ async def _make_tenant(client: AsyncClient, headers: dict, slug: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_delete_tenant_soft_deletes_and_hides_from_list(
+async def test_delete_tenant_removes_tenant_and_its_users(
     client: AsyncClient, super_admin
 ):
+    """Deleting a tenant cascades to its rows — starting with the admin that
+    onboarding created, which used to block the delete."""
     owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     oheaders = {"Authorization": f"Bearer {owner}"}
     tenant_id = await _make_tenant(client, oheaders, "sekolah-del")
@@ -203,11 +205,17 @@ async def test_delete_tenant_soft_deletes_and_hides_from_list(
     resp = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
     assert resp.status_code == 204, resp.text
 
-    # deleted_at stamped rather than the row removed.
+    # Row removed outright, and the tenant admin went with it.
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
-        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
-        assert tenant.deleted_at is not None
+        tenant = (
+            await s.execute(select(Tenant).where(Tenant.id == tenant_id))
+        ).scalar_one_or_none()
+        assert tenant is None
+        users = list(
+            (await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars()
+        )
+        assert users == []
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "tenant.deleted" in actions
 
@@ -215,6 +223,37 @@ async def test_delete_tenant_soft_deletes_and_hides_from_list(
     listing = await client.get("/api/v1/tenants", headers=oheaders)
     assert listing.status_code == 200, listing.text
     assert tenant_id not in {t["id"] for t in listing.json()["data"]["items"]}
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_with_soft_deleted_user(client: AsyncClient, super_admin):
+    """A soft-deleted user is invisible in the UI, so it must not block the
+    tenant delete either — the old guard counted it and refused."""
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    oheaders = {"Authorization": f"Bearer {owner}"}
+    tenant_id = await _make_tenant(client, oheaders, "sekolah-soft-del")
+
+    admin = await _token(client, email="admin@sekolah-soft-del.app", password="adminpass123")
+    aheaders = {"Authorization": f"Bearer {admin}"}
+    created = await client.post(
+        "/api/v1/users",
+        headers=aheaders,
+        json={"full_name": "Siswa Satu", "external_id": "S-1", "role": "end_user"},
+    )
+    assert created.status_code == 201, created.text
+    user_id = created.json()["data"]["id"]
+    removed = await client.delete(f"/api/v1/users/{user_id}", headers=aheaders)
+    assert removed.status_code == 204, removed.text
+
+    resp = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
+    assert resp.status_code == 204, resp.text
+
+    async with SessionFactory() as s:
+        await _set_tenant(s, None, platform=True)
+        users = list(
+            (await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars()
+        )
+        assert users == []
 
 
 @pytest.mark.asyncio

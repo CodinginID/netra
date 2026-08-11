@@ -159,15 +159,8 @@ async def delete_tenant(
     principal: Principal = Depends(require_super_admin),
     session: AsyncSession = Depends(get_db_unscoped),
 ) -> None:
-    try:
-        if not await tenant_service.delete_tenant(session, tenant_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found"
-            )
-    except tenant_service.TenantError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
-        ) from exc
+    if not await tenant_service.delete_tenant(session, tenant_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
 
     await audit_service.record(
         session,

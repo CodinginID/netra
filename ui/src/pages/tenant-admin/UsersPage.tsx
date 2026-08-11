@@ -312,9 +312,14 @@ export function UsersPage() {
     setEditTarget(null)
   }, [])
 
-  const createMutation = useCreateUser(() => {
+  const createMutation = useCreateUser((user) => {
     closeModal()
-    show(t('users.toast_created'), 'success')
+    // A revived record brings its attendance history and enrolled face back
+    // with it — say so, otherwise the admin has no way to know.
+    show(
+      user.revived ? t('users.toast_revived', { name: user.full_name }) : t('users.toast_created'),
+      'success',
+    )
   })
 
   const updateMutation = useUpdateUser(() => {

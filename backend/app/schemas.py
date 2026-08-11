@@ -203,6 +203,18 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class UserCreateOut(UserOut):
+    """A created user, plus whether it was a brand-new record.
+
+    ``revived`` is True when the identifiers matched someone who had been
+    deleted: their record came back — attendance history and enrolled face
+    included — instead of a fresh row being inserted. Worth telling the admin,
+    since it is not what "add user" normally means.
+    """
+
+    revived: bool = False
+
+
 # --------------------------------------------------------------------------- #
 # Consent (UU PDP)
 # --------------------------------------------------------------------------- #

@@ -277,7 +277,10 @@ function DeleteConfirmModal({ tenant, onConfirm, onClose, busy }: {
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
       <div ref={modalRef} className="modal-card" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">{t('tenant.delete_title')}</h3>
-        <p className="confirm-text">{t('tenant.confirm_delete', { name: tenant.name })}</p>
+        <p className="confirm-text">
+          {t('tenant.confirm_delete', { name: tenant.name })}{' '}
+          <strong>{t('tenant.delete_warning')}</strong>
+        </p>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
           <button className="btn btn-danger" onClick={onConfirm} disabled={busy}>

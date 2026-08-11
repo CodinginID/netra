@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,33 +103,25 @@ async def update_config(session: AsyncSession, tenant_id: str, config: dict) -> 
 
 
 async def delete_tenant(session: AsyncSession, tenant_id: str) -> bool:
-    """Hard-delete a tenant and ALL its child records via SQLAlchemy cascade.
+    """Hard-delete a tenant and every record that belongs to it.
 
-    Loads the tenant with all relationships (users, schedules, devices,
-    attendance_records, face_embeddings, api_keys, webhook_endpoints,
-    embed_sessions, sso_connections, consents). When the tenant is removed
-    from the session, SQLAlchemy cascade='all, delete-orphan' handles the
-    rest — every child is deleted automatically.
+    Every tenant-scoped table carries ``ON DELETE CASCADE`` on its ``tenant_id``
+    foreign key, so a single DELETE on ``tenants`` takes the whole subtree with
+    it: users, face_embeddings, schedules, attendance_records, devices,
+    api_keys, webhook_endpoints, embed_sessions, sso_connections and consents.
 
-    Returns True if tenant was deleted, False if not found.
+    Deliberately a statement-level DELETE rather than ``session.delete(tenant)``:
+    the ORM cascade would walk ``Tenant.users`` → ``User.embeddings`` and
+    lazy-load the embeddings, which raises under asyncio. Postgres resolves the
+    entire cascade in one statement instead.
+
+    A tenant's own rows never block the delete. The previous guard refused any
+    tenant that still had users — which every tenant does, since onboarding
+    creates a Tenant Admin — and it counted soft-deleted users too, so the ones
+    it complained about were invisible in the UI.
+
+    Returns True if a tenant was deleted, False if no such tenant existed.
     """
-    # Eager-load all relationships so cascade fires on remove()
-    stmt = select(Tenant).options(
-        selectinload(Tenant.users),
-    )
-    result = await session.execute(stmt.where(Tenant.id == tenant_id))
-    tenant = result.scalar_one_or_none()
-
-    if tenant is None:
-        return False
-
-    # Verify no children (should never fail since we loaded everything)
-    if tenant.users:
-        raise TenantError(
-            f"Cannot delete tenant '{tenant.name}': it still has "
-            f"{len(tenant.users)} user(s). Please delete all users first."
-        )
-
-    await session.delete(tenant)
+    result = await session.execute(delete(Tenant).where(Tenant.id == tenant_id))
     await session.flush()
-    return True
+    return (result.rowcount or 0) > 0
