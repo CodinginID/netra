@@ -12,6 +12,7 @@ import {
   UserCheck,
   KeyRound,
   Trash2,
+  CreditCard,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { dailyReport } from '@/api/adminApi'
@@ -34,6 +35,7 @@ export function TenantAdminDashboard() {
     { label: t('attendance.title'), to: '/tenant/attendance', icon: ClipboardList },
     { label: t('daily_status.title'), to: '/tenant/status', icon: UserCheck },
     { label: t('integration.title'), to: '/tenant/integration', icon: KeyRound },
+    { label: t('billing.title'), to: '/tenant/billing', icon: CreditCard },
     { label: t('trash.title'), to: '/tenant/trash', icon: Trash2 },
   ]
   return (

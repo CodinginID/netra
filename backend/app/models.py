@@ -22,7 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.config import settings
@@ -77,6 +77,33 @@ class EmbedPurpose(str, enum.Enum):
     # kiosk = "kiosk"  # future phase
 
 
+class Edition(str, enum.Enum):
+    """Subscription edition: determines the pricing grid (education vs business)."""
+    education = "education"
+    business = "business"
+
+
+class BillingCycle(str, enum.Enum):
+    """How often the subscription renews and invoices are issued."""
+    annual = "annual"
+    semester = "semester"  # 6 months
+    monthly = "monthly"
+
+
+class SubscriptionStatus(str, enum.Enum):
+    trial = "trial"
+    active = "active"
+    past_due = "past_due"
+    canceled = "canceled"
+
+
+class InvoiceStatus(str, enum.Enum):
+    draft = "draft"
+    issued = "issued"
+    paid = "paid"
+    void = "void"
+
+
 # --------------------------------------------------------------------------- #
 # Platform-level
 # --------------------------------------------------------------------------- #
@@ -90,7 +117,7 @@ class Tenant(Base, TimestampMixin):
         Enum(TenantStatus, name="tenant_status"), default=TenantStatus.active, nullable=False
     )
     # branding, attendance defaults, kiosk prefs, etc.
-    config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -192,9 +219,9 @@ class Schedule(Base, TimestampMixin):
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    rules: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    rules: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     grace_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    geofence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    geofence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -222,7 +249,7 @@ class AttendanceRecord(Base, TimestampMixin):
         nullable=False,
     )
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    location: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    location: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     liveness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     device_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("devices.id"), nullable=True
@@ -269,12 +296,12 @@ class ApiKey(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     prefix: Mapped[str] = mapped_column(String(20), nullable=False)  # non-secret display fragment
     key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    scopes: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    scopes: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     # Origins allowed to embed sessions minted by THIS key (frame-ancestors +
     # return_origin check). Scoped per-key, like OAuth client redirect URIs,
     # so it can be set at key-creation time and edited later without touching
     # other keys on the same tenant.
-    allowed_origins: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    allowed_origins: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[ApiKeyStatus] = mapped_column(
         Enum(ApiKeyStatus, name="api_key_status"), default=ApiKeyStatus.active, nullable=False
     )
@@ -327,7 +354,7 @@ class SSOConnection(Base, TimestampMixin):
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     protocol: Mapped[str] = mapped_column(String(50), nullable=False)  # oidc | saml
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
@@ -340,7 +367,7 @@ class AuditLog(Base):
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     actor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     action: Mapped[str] = mapped_column(String(255), nullable=False)
-    detail: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(), nullable=False
     )
@@ -377,7 +404,7 @@ class WebhookEndpoint(Base, TimestampMixin):
     )
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     secret: Mapped[str] = mapped_column(String(255), nullable=False)  # HMAC signing key
-    events: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)  # subscribed events
+    events: Mapped[list] = mapped_column(JSON, default=list, nullable=False)  # subscribed events
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
@@ -393,4 +420,197 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "webhook_endpoints",
     "api_keys",
     "embed_sessions",
+    # --- Billing ---
+    "tenant_subscriptions",
+    "usage_snapshots",
+    "invoices",
+    "invoice_lines",
 )
+
+
+# --------------------------------------------------------------------------- #
+# Billing & Subscription (Phase 8.1)
+# --------------------------------------------------------------------------- #
+class Plan(Base, TimestampMixin):
+    """Platform-level plan template (pricing grid is in plan_tiers)."""
+
+    __tablename__ = "plans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    edition: Mapped[Edition] = mapped_column(
+        Enum(Edition, name="plan_edition"), nullable=False, default=Edition.business
+    )
+    default_billing_cycle: Mapped[BillingCycle] = mapped_column(
+        Enum(BillingCycle, name="billing_cycle"),
+        default=BillingCycle.annual,
+        nullable=False,
+    )
+    currency: Mapped[str] = mapped_column(String(10), default="IDR", nullable=False)
+    features: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    tiers: Mapped[list["PlanTier"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", order_by="PlanTier.sort_order"
+    )
+
+
+class PlanTier(Base, TimestampMixin):
+    """A single band within a plan: min_users → max_users, unit_price, min_charge."""
+
+    __tablename__ = "plan_tiers"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "min_users", "max_users", name="uq_plan_tier_band"),
+        Index("ix_plan_tier_plan", "plan_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    plan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("plans.id", ondelete="CASCADE"), nullable=False
+    )
+    min_users: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)  # NULL = unlimited
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False)  # per user per cycle
+    min_charge: Mapped[int] = mapped_column(Integer, nullable=False)  # minimum billable
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    plan: Mapped[Plan] = relationship(back_populates="tiers")
+
+
+class TenantSubscription(Base, TimestampMixin):
+    """Per-tenant subscription: which plan, billing cycle, prices, dates, status."""
+
+    __tablename__ = "tenant_subscriptions"
+    __table_args__ = (Index("ix_tenant_sub_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    plan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("plans.id"), nullable=False
+    )
+    billing_cycle: Mapped[BillingCycle] = mapped_column(
+        Enum(BillingCycle, name="billing_cycle"),
+        default=BillingCycle.annual,
+        nullable=False,
+    )
+    unit_price_override: Mapped[int | None] = mapped_column(Integer, nullable=True)  # per-user override
+    discount_pct: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # 0-100
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus, name="subscription_status"),
+        default=SubscriptionStatus.trial,
+        nullable=False,
+    )
+
+    plan: Mapped[Plan] = relationship()
+
+
+class UsageSnapshot(Base, TimestampMixin):
+    """Daily peak usage metrics per tenant (for billing calculation)."""
+
+    __tablename__ = "usage_snapshots"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "snapshot_date", name="uq_usage_tenant_date"),
+        Index("ix_usage_tenant_date", "tenant_id", "snapshot_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    snapshot_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    active_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    devices: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    punches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    tenant: Mapped[Tenant] = relationship()
+
+
+class Invoice(Base, TimestampMixin):
+    """Billing invoice: links subscription → usage → line items."""
+
+    __tablename__ = "invoices"
+    __table_args__ = (Index("ix_invoice_tenant", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    invoice_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tenant_subscriptions.id"), nullable=True
+    )
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    billed_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # peak
+    tier_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    subtotal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    discount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_pct: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tax_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(10), default="IDR", nullable=False)
+    status: Mapped[InvoiceStatus] = mapped_column(
+        Enum(InvoiceStatus, name="invoice_status"),
+        default=InvoiceStatus.draft,
+        nullable=False,
+    )
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    lines: Mapped[list["InvoiceLine"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.sort_order"
+    )
+
+
+class InvoiceLine(Base, TimestampMixin):
+    """Individual line item on an invoice (base subscription, add-ons, true-up)."""
+
+    __tablename__ = "invoice_lines"
+    __table_args__ = (Index("ix_invoice_line_invoice", "invoice_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    invoice_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="lines")
+
+
+class DemoRequestStatus(str, enum.Enum):
+    new = "new"
+    contacted = "contacted"
+    closed = "closed"
+
+
+class DemoRequest(Base, TimestampMixin):
+    """Lead captured from the public landing page's demo request form.
+
+    Platform-level (no tenant_id — submitted before any tenant exists) and
+    followed up manually by the platform team, not emailed automatically.
+    """
+
+    __tablename__ = "demo_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    organization: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[DemoRequestStatus] = mapped_column(
+        Enum(DemoRequestStatus, name="demo_request_status"),
+        default=DemoRequestStatus.new,
+        nullable=False,
+    )

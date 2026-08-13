@@ -53,11 +53,13 @@ async def clean_db() -> AsyncIterator[None]:
     """
     from sqlalchemy import text
 
-    from app.core.ratelimit import reset_login_limiter
+    from app.core.ratelimit import reset_demo_request_limiter, reset_login_limiter
 
-    # Login throttling is in-process and per-IP, so attempts accumulate across
-    # tests and a full-suite run would otherwise start 429-ing partway through.
+    # Login/demo-request throttling is in-process and per-IP, so attempts
+    # accumulate across tests and a full-suite run would otherwise start
+    # 429-ing partway through.
     reset_login_limiter()
+    reset_demo_request_limiter()
 
     _assert_safe_test_db()
     await engine.dispose()
@@ -66,7 +68,9 @@ async def clean_db() -> AsyncIterator[None]:
         await conn.execute(
             text(
                 "TRUNCATE consents, attendance_records, face_embeddings, sso_connections, "
-                "schedules, devices, users, tenants, audit_logs RESTART IDENTITY CASCADE"
+                "schedules, devices, users, tenants, audit_logs, "
+                "invoice_lines, invoices, usage_snapshots, tenant_subscriptions, plan_tiers, "
+                "plans, demo_requests RESTART IDENTITY CASCADE"
             )
         )
     yield

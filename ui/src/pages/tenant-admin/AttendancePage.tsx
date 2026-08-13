@@ -120,7 +120,7 @@ export function AttendancePage() {
       link.download = `attendance_${fromDate}_${toDate}.csv`
       link.click()
       URL.revokeObjectURL(link.href)
-    } catch (err) {
+    } catch {
       // Export error handling kept local
     }
   }

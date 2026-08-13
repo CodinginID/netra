@@ -356,3 +356,107 @@ export function useDismissOnboarding(onSuccess?: () => void) {
     onSuccess,
   })
 }
+
+// --------------------------------------------------------------------------- //
+// Billing & Subscription
+// --------------------------------------------------------------------------- //
+
+export function useCreatePlan(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: api.PlanCreate) => api.createPlan(token!, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('plans') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useUpdatePlan(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ planId, payload }: { planId: string; payload: Partial<api.PlanCreate> }) =>
+      api.updatePlan(token!, planId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('plans') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useDeletePlan(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (planId: string) => api.deletePlan(token!, planId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('plans') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useCreateSubscription(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: api.SubscriptionCreate) => api.createSubscription(token!, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('subscriptions') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useUpdateSubscription(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ subId, payload }: { subId: string; payload: Partial<api.SubscriptionOut> }) =>
+      api.updateSubscription(token!, subId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('subscriptions') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useCancelSubscription(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (subId: string) => api.cancelSubscription(token!, subId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('subscriptions') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useUpdateInvoice(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: Partial<api.InvoiceOut> }) =>
+      api.updateInvoice(token!, invoiceId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.billing('invoices') })
+      onSuccess?.()
+    },
+  })
+}
+
+export function useUpdateDemoRequestStatus(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ demoRequestId, status }: { demoRequestId: string; status: 'new' | 'contacted' | 'closed' }) =>
+      api.updateDemoRequestStatus(token!, demoRequestId, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.demoRequests() })
+      onSuccess?.()
+    },
+  })
+}

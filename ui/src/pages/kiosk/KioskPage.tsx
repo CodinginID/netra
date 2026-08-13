@@ -67,7 +67,6 @@ export function KioskPage() {
       setCameraState('unavailable')
     })
     // wsOn is stable; savedToken triggers re-register when token changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedToken, wsOn])
 
   // Camera
@@ -87,11 +86,14 @@ export function KioskPage() {
 
   // Phase 6: idle lock screen + voice mute
   const [locked, setLocked] = useState(false)
-  const lastActivityRef = useRef(Date.now())
+  // Seeded on mount, not during render — Date.now() is impure and would make
+  // the render output depend on when React happened to call it.
+  const lastActivityRef = useRef(0)
   const [voiceMuted, setVoiceMuted] = useState(false)
   const { speak, setEnabled: setVoiceEnabled } = useVoiceGuide()
   useEffect(() => { setVoiceEnabled(!voiceMuted) }, [voiceMuted, setVoiceEnabled])
   useEffect(() => {
+    lastActivityRef.current = Date.now()
     const id = setInterval(() => {
       if (Date.now() - lastActivityRef.current > 5 * 60 * 1000) setLocked(true)
     }, 30_000)

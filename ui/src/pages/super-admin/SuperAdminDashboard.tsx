@@ -16,6 +16,8 @@ import {
   Settings,
   AlertCircle,
   XCircle,
+  CreditCard,
+  CalendarClock,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { DonutChart } from '@/components/charts/DonutChart'
@@ -28,6 +30,8 @@ import { EmptyState } from '@/components/EmptyState'
 const NAV_ITEMS_GLOBAL = [
   { labelKey: 'nav.dashboard' as const, to: '/admin/dashboard', icon: LayoutDashboard },
   { labelKey: 'nav.tenant' as const, to: '/admin/tenants', icon: Building2 },
+  { labelKey: 'nav.billing' as const, to: '/admin/billing', icon: CreditCard },
+  { labelKey: 'nav.demo_requests' as const, to: '/admin/demo-requests', icon: CalendarClock },
   { labelKey: 'nav.trash' as const, to: '/admin/trash', icon: Trash2 },
   { labelKey: 'nav.settings' as const, to: '/admin/settings', icon: Settings },
 ]
@@ -44,6 +48,7 @@ function buildTenantNavItemsKeys(tenantId: string) {
     { labelKey: 'nav.attendance' as const, to: `${base}/attendance`, icon: ClipboardList },
     { labelKey: 'nav.daily_status' as const, to: `${base}/status`, icon: UserCheck },
     { labelKey: 'nav.integration' as const, to: `${base}/integration`, icon: KeyRound },
+    { labelKey: 'nav.billing' as const, to: `${base}/billing`, icon: CreditCard },
     { labelKey: 'nav.trash' as const, to: `${base}/trash`, icon: Trash2 },
     { labelKey: 'nav.settings' as const, to: `${base}/settings`, icon: Settings },
   ]

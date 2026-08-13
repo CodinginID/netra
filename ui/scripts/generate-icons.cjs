@@ -11,7 +11,9 @@ const path = require('path');
 
 // SVG source
 const svgPath = path.join(__dirname, '../src/assets/netra-logo.svg');
-const svg = fs.readFileSync(svgPath, 'utf8');
+// The ICO below is drawn from scratch; we only assert the source logo exists so
+// the script still fails fast when the asset is missing or moved.
+fs.accessSync(svgPath);
 
 // Output directory
 const publicDir = path.join(__dirname, '../public');
@@ -27,7 +29,9 @@ console.log('Output directory:', publicDir);
 // Simple 32x32 favicon.ico (minimal 16x16 BMP embedded in ICO format)
 // This is a teal (#0d9488) square with a white dot in center
 
-function createMinimalICO(size, color, centerX, centerY, radius) {
+// _color/_centerX/_centerY/_radius are kept in the signature to document the
+// intended call shape; the current implementation hardcodes the teal square.
+function createMinimalICO(size, _color, _centerX, _centerY, _radius) {
   // Create raw BMP bitmap data (32x32, 32-bit with alpha)
   const w = size;
   const h = size;

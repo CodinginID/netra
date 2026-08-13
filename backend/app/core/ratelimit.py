@@ -53,12 +53,25 @@ def _client_ip(request: Request) -> str:
 # 10 attempts per minute per IP on auth endpoints.
 _login_limiter = SlidingWindowLimiter(max_attempts=10, window_seconds=60)
 
+# 5 submissions per hour per IP on the public demo request form.
+_demo_request_limiter = SlidingWindowLimiter(max_attempts=5, window_seconds=3600)
+
 
 async def login_rate_limit(request: Request) -> None:
     """FastAPI dependency: throttle auth attempts per client IP."""
     _login_limiter.check(f"auth:{_client_ip(request)}")
 
 
+async def demo_request_rate_limit(request: Request) -> None:
+    """FastAPI dependency: throttle public demo-request submissions per client IP."""
+    _demo_request_limiter.check(f"demo_request:{_client_ip(request)}")
+
+
 def reset_login_limiter() -> None:
     """Clear login throttle state. Used by the test suite between tests."""
     _login_limiter.reset()
+
+
+def reset_demo_request_limiter() -> None:
+    """Clear demo-request throttle state. Used by the test suite between tests."""
+    _demo_request_limiter.reset()

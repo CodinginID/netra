@@ -8,7 +8,9 @@ from app.api.v1 import (
     api_keys,
     attendance,
     auth,
+    billing,
     consent,
+    demo_requests,
     devices,
     embed,
     enrollment,
@@ -40,3 +42,5 @@ api_router.include_router(api_keys.router)
 api_router.include_router(integration.router)
 api_router.include_router(embed.router)
 api_router.include_router(trash.router)
+api_router.include_router(billing.router)
+api_router.include_router(demo_requests.router)

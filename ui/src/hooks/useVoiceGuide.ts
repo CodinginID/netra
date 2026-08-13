@@ -24,7 +24,8 @@ export function useVoiceGuide() {
       u.volume = 1
       synth.speak(u)
     }
-    delayMs > 0 ? setTimeout(go, delayMs) : go()
+    if (delayMs > 0) setTimeout(go, delayMs)
+    else go()
   }, [])
 
   const announcePhase = useCallback((phase: 'front' | 'left' | 'right') => {

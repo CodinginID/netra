@@ -27,6 +27,7 @@ import { AttendancePage } from '@/pages/tenant-admin/AttendancePage'
 import { DailyStatusPage } from '@/pages/tenant-admin/DailyStatusPage'
 import { IntegrationPage } from '@/pages/tenant-admin/IntegrationPage'
 import { TrashPage } from '@/pages/tenant-admin/TrashPage'
+import { TenantBillingPage } from '@/pages/tenant-admin/TenantBillingPage'
 
 // Kiosk (public — device token auth)
 import { KioskPage } from '@/pages/kiosk/KioskPage'
@@ -44,6 +45,10 @@ import {
 import { TenantsPage } from '@/pages/super-admin/TenantsPage'
 import { SettingsPage } from '@/pages/super-admin/SettingsPage'
 import { TenantScopedDashboard } from '@/components/TenantScopedDashboard'
+import { PlansEditor } from '@/pages/super-admin/PlansEditor'
+import { SubscriptionsPage } from '@/pages/super-admin/SubscriptionsPage'
+import { InvoicesPage } from '@/pages/super-admin/InvoicesPage'
+import { DemoRequestsPage } from '@/pages/super-admin/DemoRequestsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,12 +75,12 @@ function useAppReady(): boolean {
       appReadyPromise.then(() => setReady(true))
       return
     }
-    appReadyPromise = new Promise<void>(async (resolve) => {
+    // An async Promise executor would swallow any throw in here, leaving the
+    // promise forever pending and the app stuck on a blank screen. As an async
+    // IIFE the failure surfaces, and the catch lets the app boot anyway.
+    appReadyPromise = (async () => {
       const refreshToken = useAuthStore.getState().refreshToken
-      if (!refreshToken) {
-        resolve()
-        return
-      }
+      if (!refreshToken) return
 
       // Wait for the persisted store to finish rehydrating.
       await new Promise<void>((r) => {
@@ -90,7 +95,8 @@ function useAppReady(): boolean {
       // Run silentRefresh and wait for it to COMPLETE before resolving.
       // This ensures the access token is fresh when routes render.
       await useAuthStore.getState().silentRefresh()
-      resolve()
+    })().catch((err) => {
+      console.error('[netra] app bootstrap failed, continuing unauthenticated', err)
     })
     appReadyPromise.then(() => setReady(true))
   }, [])
@@ -141,6 +147,7 @@ function AppRoutes() {
           <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
           <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
           <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
+          <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
         </Route>
 
@@ -159,6 +166,13 @@ function AppRoutes() {
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
           <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
 
+          {/* Billing routes — platform-level */}
+          <Route path="billing" element={<ErrorBoundary><PlansEditor /></ErrorBoundary>} />
+          <Route path="billing/plans" element={<ErrorBoundary><PlansEditor /></ErrorBoundary>} />
+          <Route path="billing/subscriptions" element={<ErrorBoundary><SubscriptionsPage /></ErrorBoundary>} />
+          <Route path="billing/invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
+          <Route path="demo-requests" element={<ErrorBoundary><DemoRequestsPage /></ErrorBoundary>} />
+
           {/* Tenant-scoped routes — context-switched view for a specific tenant */}
           <Route path="tenants/:tenantId" element={<ErrorBoundary><TenantScopedDashboard /></ErrorBoundary>}>
             <Route index element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
@@ -169,6 +183,7 @@ function AppRoutes() {
             <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
             <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
             <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
+            <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
             <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
           </Route>

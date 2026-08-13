@@ -48,6 +48,12 @@ export const queryKeys = {
     (tenantId === undefined ? ['onboarding'] : ['onboarding', { tenantId }]) as readonly unknown[],
   dailyReport: (date: string, tenantId?: TenantScope) => ['dailyReport', date, { tenantId }] as readonly unknown[],
   dailyStatus: (date: string, tenantId?: TenantScope) => ['dailyStatus', date, { tenantId }] as readonly unknown[],
+  // --- Billing (platform-wide unless scoped) ---
+  billing: (kind: 'plans' | 'subscriptions' | 'invoices' | 'usage', params?: Record<string, unknown>) =>
+    (params ? ['billing', kind, params] : ['billing', kind]) as readonly unknown[],
+  // Platform-level: leads submitted from the public landing page, no tenant.
+  demoRequests: (params?: Record<string, unknown>) =>
+    (params ? ['demoRequests', params] : ['demoRequests']) as readonly unknown[],
 }
 
 // ---- Tenant scope ----
@@ -68,11 +74,15 @@ export const queryKeys = {
  */
 export function useTenantScope(): TenantScope {
   const role = useAuthStore((s) => s.role)
-  let urlTenantId: string | null = null
+  let urlTenantId: string | null
   try {
+    // Deliberate: the router hooks inside useTenantContext throw when this tree
+    // renders outside a <Router> (tests, kiosk shells). That is all-or-nothing
+    // per tree, so hook order stays stable across renders of a given component.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     urlTenantId = useTenantContext().tenantId
   } catch {
-    urlTenantId = null // rendered outside a Router (tests, kiosk shells)
+    urlTenantId = null
   }
   if (urlTenantId) return urlTenantId
   return role === 'super_admin' ? PLATFORM_TENANT_SCOPE : null
@@ -209,5 +219,62 @@ export function useDailyStatus(date: string) {
     queryKey: queryKeys.dailyStatus(date, tenantId),
     queryFn: () => withTenantScope(tenantId, () => api.dailyStatus(token!, date)),
     enabled: !!token,
+  })
+}
+
+// --------------------------------------------------------------------------- //
+// Billing & Subscription Query Hooks
+// --------------------------------------------------------------------------- //
+
+export function usePlans(params?: { page?: number; limit?: number; active_only?: boolean }) {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.billing('plans', params),
+    queryFn: () => api.listPlans(token!, params),
+    enabled: !!token,
+    staleTime: 2 * 60_000,
+  })
+}
+
+export function useSubscription(params?: { page?: number; limit?: number; tenant_id?: string }) {
+  const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
+  return useQuery({
+    queryKey: queryKeys.billing('subscriptions', { ...params, tenantId }),
+    queryFn: () => withTenantScope(tenantId, () => api.listSubscriptions(token!, params)),
+    enabled: !!token,
+    staleTime: 2 * 60_000,
+  })
+}
+
+export function useInvoices(params?: { page?: number; limit?: number; tenant_id?: string; status?: string }) {
+  const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
+  return useQuery({
+    queryKey: queryKeys.billing('invoices', { ...params, tenantId }),
+    queryFn: () => withTenantScope(tenantId, () => api.listInvoices(token!, params)),
+    enabled: !!token,
+    staleTime: 2 * 60_000,
+  })
+}
+
+export function useUsageSnapshots(params?: { page?: number; limit?: number; tenant_id?: string }) {
+  const token = useAuthStore((s) => s.accessToken)
+  const tenantId = useTenantScope()
+  return useQuery({
+    queryKey: queryKeys.billing('usage', { ...params, tenantId }),
+    queryFn: () => withTenantScope(tenantId, () => api.listUsageSnapshots(token!, params)),
+    enabled: !!token,
+    staleTime: 2 * 60_000,
+  })
+}
+
+export function useDemoRequests(params?: { page?: number; limit?: number; status?: 'new' | 'contacted' | 'closed' }) {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.demoRequests(params),
+    queryFn: () => api.listDemoRequests(token!, params),
+    enabled: !!token,
+    staleTime: 30_000,
   })
 }

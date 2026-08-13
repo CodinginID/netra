@@ -18,8 +18,10 @@ from app.models import Role, User
 
 async def seed(email: str, password: str, full_name: str) -> None:
     # Unscoped session (platform context) — super admin has tenant_id = NULL.
+    # platform=True sets app.platform_context='on' so RLS policies allow writes
+    # to tenant-scoped tables when tenant_id is NULL (platform-level records).
     normalized = email.strip().lower()
-    async with get_session(tenant_id=None) as session:
+    async with get_session(tenant_id=None, platform=True) as session:
         existing = (
             await session.execute(select(User).where(User.email == normalized))
         ).scalar_one_or_none()

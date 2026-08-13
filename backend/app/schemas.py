@@ -12,8 +12,13 @@ from app.models import (
     ApiKeyStatus,
     AttendanceStatus,
     AttendanceType,
+    BillingCycle,
+    DemoRequestStatus,
     DeviceStatus,
+    Edition,
+    InvoiceStatus,
     Role,
+    SubscriptionStatus,
     TenantStatus,
 )
 
@@ -274,8 +279,12 @@ class DeviceRegistered(DeviceOut):
 # they read clearly in the dashboard and stay extensible.
 API_SCOPES: dict[str, str] = {
     "attendance:read": "Baca catatan & laporan kehadiran",
+    "attendance:write": "Record attendance (kiosk / device push)",
     "users:read": "Baca daftar pengguna + status enrolled",
     "users:write": "Buat/perbarui pengguna via sinkronisasi (upsert by external_id)",
+    "devices:read": "Read device list and status",
+    "devices:write": "Register / manage devices",
+    "reports:read": "Read reports and exports",
     "embed:enroll": "Mint sesi embed untuk enrollment wajah",
 }
 
@@ -491,3 +500,210 @@ class WebhookRegistered(WebhookOut):
     """
 
     secret: str
+
+
+# --------------------------------------------------------------------------- #
+# Plans
+# --------------------------------------------------------------------------- #
+class PlanSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    code: str
+    name: str
+    edition: Edition
+    default_billing_cycle: BillingCycle
+    currency: str
+    features: dict = {}
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlanCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    edition: Edition
+    default_billing_cycle: BillingCycle = BillingCycle.annual
+    currency: str = Field(default="IDR", max_length=10)
+    features: dict = Field(default_factory=dict)
+
+
+class PlanUpdate(BaseModel):
+    name: str | None = None
+    edition: Edition | None = None
+    default_billing_cycle: BillingCycle | None = None
+    currency: str | None = None
+    features: dict | None = None
+    is_active: bool | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Plan Tiers
+# --------------------------------------------------------------------------- #
+class PlanTierSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    plan_id: str
+    min_users: int
+    max_users: int | None
+    unit_price: int
+    min_charge: int
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlanTierCreate(BaseModel):
+    plan_id: str
+    min_users: int = Field(ge=1)
+    max_users: int | None = None
+    unit_price: int = Field(ge=0)
+    min_charge: int = Field(ge=0)
+    sort_order: int = 0
+
+
+class PlanTierUpdate(BaseModel):
+    unit_price: int | None = None
+    min_charge: int | None = None
+    sort_order: int | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Subscriptions
+# --------------------------------------------------------------------------- #
+class SubscriptionSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    tenant_id: str
+    plan_id: str
+    billing_cycle: BillingCycle
+    unit_price_override: int | None
+    discount_pct: float
+    starts_at: datetime
+    ends_at: datetime
+    trial_ends_at: datetime | None
+    status: SubscriptionStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubscriptionCreate(BaseModel):
+    tenant_id: str
+    plan_id: str
+    billing_cycle: BillingCycle
+    unit_price_override: int | None = None
+    discount_pct: float = Field(ge=0, le=100, default=0.0)
+    starts_at: datetime
+    ends_at: datetime
+    trial_ends_at: datetime | None = None
+    status: SubscriptionStatus = SubscriptionStatus.trial
+
+
+class SubscriptionUpdate(BaseModel):
+    status: SubscriptionStatus | None = None
+    unit_price_override: int | None = None
+    discount_pct: float | None = Field(ge=0, le=100)
+
+
+# --------------------------------------------------------------------------- #
+# Usage Snapshots
+# --------------------------------------------------------------------------- #
+class UsageSnapshotSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    tenant_id: str
+    snapshot_date: datetime
+    active_users: int
+    devices: int
+    punches: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class UsageSnapshotList(BaseModel):
+    tenant_id: str
+    tenant_name: str | None = None
+    snapshot_date: datetime
+    active_users: int
+    devices: int
+    punches: int
+
+
+# --------------------------------------------------------------------------- #
+# Invoices
+# --------------------------------------------------------------------------- #
+class InvoiceLineSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    description: str
+    qty: int
+    unit_price: int
+    amount: int
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvoiceSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    invoice_number: str
+    tenant_id: str
+    subscription_id: str | None
+    period_start: datetime
+    period_end: datetime
+    billed_users: int
+    tier_id: str | None
+    subtotal: int
+    discount: int
+    tax_pct: float
+    tax_amount: int
+    total: int
+    currency: str
+    status: InvoiceStatus
+    issued_at: datetime | None
+    paid_at: datetime | None
+    notes: str | None
+    lines: list[InvoiceLineSchema] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvoiceUpdate(BaseModel):
+    status: InvoiceStatus | None = None
+    notes: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Demo requests (public landing page lead capture)
+# --------------------------------------------------------------------------- #
+class DemoRequestCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    organization: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    phone: str | None = Field(default=None, max_length=50)
+    message: str | None = Field(default=None, max_length=2000)
+
+
+class DemoRequestSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    organization: str
+    email: str
+    phone: str | None
+    message: str | None
+    status: DemoRequestStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class DemoRequestUpdate(BaseModel):
+    status: DemoRequestStatus

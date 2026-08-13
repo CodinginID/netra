@@ -27,7 +27,10 @@ from app.models import (
     DeviceStatus,
     EmbedSession,
     EmbedSessionStatus,
+    Plan,
+    PlanTier,
     Role,
+    TenantSubscription,
 )
 
 # Security schemes — registered with OpenAPI so Swagger UI renders an "Authorize"
@@ -208,6 +211,50 @@ def require_roles(*roles: Role):
 require_super_admin = require_roles(Role.super_admin)
 require_tenant_admin = require_roles(Role.super_admin, Role.tenant_admin)
 require_staff = require_roles(Role.super_admin, Role.tenant_admin, Role.supervisor)
+
+
+async def require_feature(
+    feature: str,
+    principal: Principal = Depends(get_effective_principal),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Check whether the current tenant's subscription plan has a feature enabled.
+
+    ``feature`` is a dot-separated key into the plan's ``features`` JSONB dict,
+    e.g. ``"billing.enabled"`` or ``"reporting.export"``. The check is soft — if
+    the tenant has no subscription or the plan cannot be resolved, the request
+    is allowed through (new tenants on the trial default to everything enabled).
+    """
+    if principal.is_platform:
+        return  # super admin bypasses feature gates
+    if not principal.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenant context for feature gate",
+        )
+
+    stmt = select(Plan).join(PlanTier, Plan.id == PlanTier.plan_id).where(
+        Plan.is_active.is_(True),
+        PlanTier.min_users <= 999999,  # any active tier counts
+    ).limit(1)
+    plan = (await session.execute(stmt)).scalar_one_or_none()
+    if plan is None:
+        return  # no plan → allow (trial / unassigned)
+
+    features: dict = plan.features or {}
+    keys = feature.split(".")
+    for k in keys:
+        if not isinstance(features, dict) or k not in features:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Feature '{feature}' not available on your plan",
+            )
+        features = features[k]
+    if not features:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Feature '{feature}' not available on your plan",
+        )
 
 
 async def get_device_principal(

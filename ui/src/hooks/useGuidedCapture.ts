@@ -69,7 +69,6 @@ export function useGuidedCapture({ active, phases, captureFrame }: UseGuidedCapt
     setCapturedBlobs(blobs)
     setPreviewUrls(urls)
     setCapturePhase('preview')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phases])
 
   // Auto-start 1.2s after `active` flips true, unless a sequence already ran/is running.

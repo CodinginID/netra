@@ -25,7 +25,7 @@ function generatePNG(size, outputPath) {
         createFallbackPNG(size, outputPath);
       });
     return true;
-  } catch (e) {
+  } catch {
     // sharp not available, use fallback
     createFallbackPNG(size, outputPath);
     return false;
@@ -35,9 +35,7 @@ function generatePNG(size, outputPath) {
 function createFallbackPNG(size, outputPath) {
   // Minimal PNG: teal rounded square with white eye
   // Using raw PNG format generation
-  const w = size;
-  const h = size;
-  
+
   // Simple approach: output a data-driven minimal PNG
   // For simplicity, create a 4-color indexed PNG
   

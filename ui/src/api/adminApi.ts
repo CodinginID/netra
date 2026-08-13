@@ -604,3 +604,268 @@ export async function completeOnboarding(token: string): Promise<{ completed: bo
 export async function dismissOnboarding(token: string): Promise<{ dismissed: boolean }> {
   return apiFetch<{ dismissed: boolean }>(`${API_BASE}/onboarding/dismiss`, token, { method: 'POST' })
 }
+
+// --------------------------------------------------------------------------- //
+// Billing & Subscription
+// --------------------------------------------------------------------------- //
+
+export interface PlanOut {
+  id: string
+  code: string
+  name: string
+  edition: 'education' | 'business'
+  default_billing_cycle: 'annual' | 'semester' | 'monthly'
+  currency: string
+  features: Record<string, unknown>
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PlanCreate {
+  code: string
+  name: string
+  edition: 'education' | 'business'
+  default_billing_cycle?: 'annual' | 'semester' | 'monthly'
+  currency?: string
+  features?: Record<string, unknown>
+  is_active?: boolean
+}
+
+export interface PlanTierOut {
+  id: string
+  plan_id: string
+  min_users: number
+  max_users: number | null
+  unit_price: number
+  min_charge: number
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface PlanTierCreate {
+  min_users: number
+  max_users: number | null
+  unit_price: number
+  min_charge: number
+  sort_order: number
+}
+
+export interface SubscriptionOut {
+  id: string
+  tenant_id: string
+  plan_id: string
+  billing_cycle: 'annual' | 'semester' | 'monthly'
+  unit_price_override: number | null
+  discount_pct: number
+  starts_at: string
+  ends_at: string
+  trial_ends_at: string | null
+  status: 'trial' | 'active' | 'past_due' | 'canceled'
+  created_at: string
+  updated_at: string
+}
+
+export interface SubscriptionCreate {
+  tenant_id: string
+  plan_id: string
+  billing_cycle: 'annual' | 'semester' | 'monthly'
+  unit_price_override?: number | null
+  discount_pct?: number
+  starts_at: string
+  ends_at: string
+  trial_ends_at?: string | null
+  status?: 'trial' | 'active' | 'past_due' | 'canceled'
+}
+
+export interface InvoiceLineOut {
+  id: string
+  description: string
+  qty: number
+  unit_price: number
+  amount: number
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface InvoiceOut {
+  id: string
+  invoice_number: string
+  tenant_id: string
+  subscription_id: string | null
+  period_start: string
+  period_end: string
+  billed_users: number
+  tier_id: string | null
+  subtotal: number
+  discount: number
+  tax_pct: number
+  tax_amount: number
+  total: number
+  currency: string
+  status: 'draft' | 'issued' | 'paid' | 'void'
+  issued_at: string | null
+  paid_at: string | null
+  notes: string | null
+  lines: InvoiceLineOut[]
+  created_at: string
+  updated_at: string
+}
+
+export interface UsageSnapshotOut {
+  id: string
+  tenant_id: string
+  snapshot_date: string
+  active_users: number
+  devices: number
+  punches: number
+  created_at: string
+  updated_at: string
+}
+
+export async function listPlans(token: string, params?: { page?: number; limit?: number; active_only?: boolean }): Promise<PaginatedResponse<PlanOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.active_only) qs.set('active_only', 'true')
+  const raw = await apiFetch<unknown>(`${API_BASE}/billing/plans${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<PlanOut>(raw)
+}
+
+export async function getPlan(token: string, planId: string): Promise<PlanOut> {
+  return apiFetch<PlanOut>(`${API_BASE}/billing/plans/${planId}`, token)
+}
+
+export async function createPlan(token: string, payload: PlanCreate): Promise<PlanOut> {
+  return apiFetch<PlanOut>(`${API_BASE}/billing/plans`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updatePlan(token: string, planId: string, payload: Partial<PlanCreate>): Promise<PlanOut> {
+  return apiFetch<PlanOut>(`${API_BASE}/billing/plans/${planId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deletePlan(token: string, planId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/billing/plans/${planId}`, token, { method: 'DELETE' })
+}
+
+export async function listPlanTiers(token: string, planId: string): Promise<PlanTierOut[]> {
+  return apiFetch<PlanTierOut[]>(`${API_BASE}/billing/plans/${planId}/tiers`, token)
+}
+
+export async function createPlanTier(token: string, planId: string, payload: PlanTierCreate): Promise<PlanTierOut> {
+  return apiFetch<PlanTierOut>(`${API_BASE}/billing/plans/${planId}/tiers`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deletePlanTier(token: string, planId: string, tierId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/billing/plans/${planId}/tiers/${tierId}`, token, { method: 'DELETE' })
+}
+
+export async function listSubscriptions(token: string, params?: { tenant_id?: string; page?: number; limit?: number }): Promise<PaginatedResponse<SubscriptionOut>> {
+  const qs = new URLSearchParams()
+  if (params?.tenant_id) qs.set('tenant_id', params.tenant_id)
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  const raw = await apiFetch<unknown>(`${API_BASE}/billing/subscriptions${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<SubscriptionOut>(raw)
+}
+
+export async function getSubscription(token: string, subId: string): Promise<SubscriptionOut> {
+  return apiFetch<SubscriptionOut>(`${API_BASE}/billing/subscriptions/${subId}`, token)
+}
+
+export async function createSubscription(token: string, payload: SubscriptionCreate): Promise<SubscriptionOut> {
+  return apiFetch<SubscriptionOut>(`${API_BASE}/billing/subscriptions`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateSubscription(token: string, subId: string, payload: Partial<Pick<SubscriptionOut, 'status' | 'unit_price_override' | 'discount_pct'>>): Promise<SubscriptionOut> {
+  return apiFetch<SubscriptionOut>(`${API_BASE}/billing/subscriptions/${subId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function cancelSubscription(token: string, subId: string): Promise<void> {
+  return apiFetch<void>(`${API_BASE}/billing/subscriptions/${subId}`, token, { method: 'DELETE' })
+}
+
+export async function listUsageSnapshots(token: string, params?: { tenant_id?: string; page?: number; limit?: number }): Promise<PaginatedResponse<UsageSnapshotOut>> {
+  const qs = new URLSearchParams()
+  if (params?.tenant_id) qs.set('tenant_id', params.tenant_id)
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  const raw = await apiFetch<unknown>(`${API_BASE}/billing/usage${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<UsageSnapshotOut>(raw)
+}
+
+export async function listInvoices(token: string, params?: { page?: number; limit?: number; tenant_id?: string; status?: string }): Promise<PaginatedResponse<InvoiceOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.tenant_id) qs.set('tenant_id', params.tenant_id)
+  if (params?.status) qs.set('status', params.status)
+  const raw = await apiFetch<unknown>(`${API_BASE}/billing/invoices${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<InvoiceOut>(raw)
+}
+
+export async function getInvoice(token: string, invoiceId: string): Promise<InvoiceOut> {
+  return apiFetch<InvoiceOut>(`${API_BASE}/billing/invoices/${invoiceId}`, token)
+}
+
+export async function updateInvoice(token: string, invoiceId: string, payload: Partial<Pick<InvoiceOut, 'status' | 'notes'>>): Promise<InvoiceOut> {
+  return apiFetch<InvoiceOut>(`${API_BASE}/billing/invoices/${invoiceId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+// --------------------------------------------------------------------------- //
+// Demo requests (leads submitted from the public landing page)
+// --------------------------------------------------------------------------- //
+export interface DemoRequestOut {
+  id: string
+  name: string
+  organization: string
+  email: string
+  phone: string | null
+  message: string | null
+  status: 'new' | 'contacted' | 'closed'
+  created_at: string
+  updated_at: string
+}
+
+export async function listDemoRequests(
+  token: string,
+  params?: { page?: number; limit?: number; status?: 'new' | 'contacted' | 'closed' },
+): Promise<PaginatedResponse<DemoRequestOut>> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.status) qs.set('status', params.status)
+  const raw = await apiFetch<unknown>(`${API_BASE}/demo-requests${qs.toString() ? `?${qs}` : ''}`, token)
+  return normalizePaginated<DemoRequestOut>(raw)
+}
+
+export async function updateDemoRequestStatus(
+  token: string,
+  demoRequestId: string,
+  demoStatus: 'new' | 'contacted' | 'closed',
+): Promise<DemoRequestOut> {
+  return apiFetch<DemoRequestOut>(`${API_BASE}/demo-requests/${demoRequestId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: demoStatus }),
+  })
+}
