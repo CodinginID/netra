@@ -12,6 +12,7 @@ from app.api.deps import (
     get_db,
     get_db_unscoped,
     require_super_admin,
+    require_tenant_admin,
 )
 from app.models import Invoice, InvoiceLine, InvoiceStatus, Plan, PlanTier, SubscriptionStatus, TenantSubscription, UsageSnapshot
 from app.schemas import (
@@ -344,7 +345,7 @@ async def list_subscriptions(
 )
 async def get_subscription(
     sub_id: str,
-    principal: Principal = Depends(get_db),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[SubscriptionSchema]:
     if principal.platform_scope:
@@ -367,7 +368,7 @@ async def get_subscription(
 async def update_subscription(
     sub_id: str,
     payload: SubscriptionUpdate,
-    principal: Principal = Depends(get_db),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[SubscriptionSchema]:
     if principal.platform_scope:
@@ -479,7 +480,7 @@ async def list_usage_snapshots(
     response_model=Envelope[PageData[dict]],
 )
 async def list_invoices(
-    principal: Principal = Depends(get_db),
+    principal: Principal = Depends(require_tenant_admin),
     tenant_id: str | None = Query(None),
     status_filter: InvoiceStatus | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
@@ -546,7 +547,7 @@ async def list_invoices(
 )
 async def get_invoice(
     invoice_id: str,
-    principal: Principal = Depends(get_db),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     if principal.platform_scope:
@@ -609,7 +610,7 @@ async def get_invoice(
 async def update_invoice(
     invoice_id: str,
     payload: InvoiceUpdate,
-    principal: Principal = Depends(get_db),
+    principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
     if principal.platform_scope:
