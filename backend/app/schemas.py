@@ -556,7 +556,9 @@ class PlanTierSchema(BaseModel):
 
 
 class PlanTierCreate(BaseModel):
-    plan_id: str
+    # No plan_id: the tier's plan comes from the {plan_id} path segment.
+    # It used to be required here while create_plan_tier ignored it entirely,
+    # so every caller that trusted the URL — including the UI — got a 422.
     min_users: int = Field(ge=1)
     max_users: int | None = None
     unit_price: int = Field(ge=0)
@@ -605,7 +607,10 @@ class SubscriptionCreate(BaseModel):
 class SubscriptionUpdate(BaseModel):
     status: SubscriptionStatus | None = None
     unit_price_override: int | None = None
-    discount_pct: float | None = Field(ge=0, le=100)
+    # default=None is what makes this optional: Field(ge=..., le=...) alone
+    # leaves the field REQUIRED despite the `| None`, so a PATCH carrying only
+    # {"status": ...} was rejected with 422.
+    discount_pct: float | None = Field(default=None, ge=0, le=100)
 
 
 # --------------------------------------------------------------------------- #
@@ -668,6 +673,7 @@ class InvoiceSchema(BaseModel):
     currency: str
     status: InvoiceStatus
     issued_at: datetime | None
+    due_date: datetime | None
     paid_at: datetime | None
     notes: str | None
     lines: list[InvoiceLineSchema] = []
@@ -675,9 +681,28 @@ class InvoiceSchema(BaseModel):
     updated_at: datetime
 
 
+class InvoiceCreate(BaseModel):
+    tenant_id: str
+    subscription_id: str | None = None
+    period_start: datetime
+    period_end: datetime
+    billed_users: int = Field(default=0, ge=0)
+    tier_id: str | None = None
+    subtotal: int = Field(default=0, ge=0)
+    discount: int = Field(default=0, ge=0)
+    tax_pct: float = Field(default=0.0, ge=0, le=100)
+    tax_amount: int = Field(default=0, ge=0)
+    total: int = Field(default=0, ge=0)
+    currency: str = "IDR"
+    status: InvoiceStatus = InvoiceStatus.draft
+    notes: str | None = None
+    # No invoice_number: it is reserved server-side from the monthly counter.
+
+
 class InvoiceUpdate(BaseModel):
     status: InvoiceStatus | None = None
     notes: str | None = None
+    due_date: datetime | None = None
 
 
 # --------------------------------------------------------------------------- #

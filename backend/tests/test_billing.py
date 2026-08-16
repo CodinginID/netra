@@ -26,7 +26,10 @@ from app.models import (
     InvoiceStatus,
     Plan,
     PlanTier,
+    Role,
     SubscriptionStatus,
+    Tenant,
+    TenantStatus,
     TenantSubscription,
     UsageSnapshot,
 )
@@ -36,6 +39,30 @@ async def _token(client: AsyncClient, **payload) -> str:
     resp = await client.post("/api/v1/auth/login", json=payload)
     assert resp.status_code == 200, resp.text
     return resp.json()["data"]["access_token"]
+
+
+def _platform_headers(token: str) -> dict[str, str]:
+    """Auth headers for a super admin acting across every tenant.
+
+    Billing endpoints that touch tenant-scoped rows open their session via
+    ``get_db``, which refuses an ambiguous scope: a super admin's JWT carries
+    no tenant, so ``X-Tenant-Id`` has to say which one — or ``*`` for all of
+    them. Tests that omitted the header got 400, not the 200 they asserted.
+    """
+    return {"Authorization": f"Bearer {token}", "X-Tenant-Id": "*"}
+
+
+async def _create_tenant_in_session(session: AsyncSession, slug: str) -> str:
+    """Create a real tenant row directly in the session and return its id.
+
+    Service-level tests used to invent ids like ``"tenant-a"``. Every
+    tenant-scoped table carries a foreign key to ``tenants``, so those inserts
+    died on ForeignKeyViolationError the first time the suite actually ran.
+    """
+    tenant = Tenant(name=f"Test {slug}", slug=slug, status=TenantStatus.active)
+    session.add(tenant)
+    await session.flush()
+    return tenant.id
 
 
 async def _create_tenant(client: AsyncClient, super_admin_token: str, slug: str = "test-tenant") -> str:
@@ -368,13 +395,13 @@ async def test_update_subscription_status(client: AsyncClient, super_admin):
     )
     sub_id = sub_resp.json()["data"]["id"]
 
-    # Update status to active
+    # Update status to active — tenant-scoped endpoint, needs an explicit scope
     resp = await client.patch(
         f"/api/v1/billing/subscriptions/{sub_id}",
-        headers=headers,
+        headers=_platform_headers(token),
         json={"status": "active"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["status"] == "active"
 
 
@@ -544,9 +571,9 @@ async def test_list_invoices(client: AsyncClient, super_admin):
         },
     )
 
-    # List invoices
-    resp = await client.get("/api/v1/billing/invoices", headers=headers)
-    assert resp.status_code == 200
+    # List invoices — tenant-scoped endpoint, needs an explicit scope
+    resp = await client.get("/api/v1/billing/invoices", headers=_platform_headers(token))
+    assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["total"] >= 1
 
@@ -605,16 +632,21 @@ async def test_update_invoice(client: AsyncClient, super_admin):
             "status": "draft",
         },
     )
+    assert inv_resp.status_code == 201, inv_resp.text
     inv_id = inv_resp.json()["data"]["id"]
 
     # Update invoice status to issued
     resp = await client.patch(
         f"/api/v1/billing/invoices/{inv_id}",
-        headers=headers,
+        headers=_platform_headers(token),
         json={"status": "issued"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["data"]["status"] == "issued"
+    assert resp.status_code == 200, resp.text
+    body = resp.json()["data"]
+    assert body["status"] == "issued"
+    # Issuing stamps both dates; the deadline follows the default net terms.
+    assert body["issued_at"] is not None
+    assert body["due_date"] is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -637,7 +669,7 @@ async def test_usage_snapshot_idempotent():
 
         from app.services import billing_service
 
-        tenant_id = "test-tenant-id"
+        tenant_id = await _create_tenant_in_session(session, "usage-idem")
         snap_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         # First record
@@ -667,8 +699,10 @@ async def test_tenant_isolation_subscriptions():
 
         # Create two subscriptions for different tenants
         plan_resp = await _create_plan_in_session(session, "iso-test")
+        tenant_a = await _create_tenant_in_session(session, "iso-tenant-a")
+        tenant_b = await _create_tenant_in_session(session, "iso-tenant-b")
         sub1 = TenantSubscription(
-            tenant_id="tenant-a",
+            tenant_id=tenant_a,
             plan_id=plan_resp.id,
             billing_cycle="annual",
             discount_pct=0,
@@ -677,7 +711,7 @@ async def test_tenant_isolation_subscriptions():
             status=SubscriptionStatus.trial,
         )
         sub2 = TenantSubscription(
-            tenant_id="tenant-b",
+            tenant_id=tenant_b,
             plan_id=plan_resp.id,
             billing_cycle="annual",
             discount_pct=0,
@@ -690,11 +724,11 @@ async def test_tenant_isolation_subscriptions():
         await session.flush()
 
         # Query with explicit tenant_id filter
-        stmt = select(TenantSubscription).where(TenantSubscription.tenant_id == "tenant-a")
+        stmt = select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_a)
         result = await session.execute(stmt)
         subs = list(result.scalars())
         assert len(subs) == 1
-        assert subs[0].tenant_id == "tenant-a"
+        assert subs[0].tenant_id == tenant_a
 
 
 async def _create_plan_in_session(session: AsyncSession, code: str) -> Plan:
@@ -716,30 +750,62 @@ async def _create_plan_in_session(session: AsyncSession, code: str) -> Plan:
 # --------------------------------------------------------------------------- #
 # Feature gating
 # --------------------------------------------------------------------------- #
+# ``require_feature`` is a plain coroutine taking (feature, principal, session)
+# — not a dependency factory. These tests used to call it as
+# ``require_feature("x")(MockPlan())``, which merely built a coroutine and then
+# tried to call it, raising TypeError before any assertion could run.
+#
+# Note the gate resolves "the plan" as *any* active plan carrying a tier, not
+# the plan the tenant is actually subscribed to. That is worth revisiting, but
+# the function has no callers in app/ today, so these tests pin the behaviour
+# as it stands rather than the behaviour it arguably should have.
 @pytest.mark.asyncio
 async def test_require_feature_check():
-    """Test that require_feature dependency correctly checks plan features."""
-    from app.api.deps import require_feature
+    """A feature enabled on the active plan passes the gate."""
+    from fastapi import HTTPException  # noqa: F401  (symmetry with the test below)
 
-    # Mock a plan with billing.enabled feature
-    class MockPlan:
-        features = {"billing.enabled": True}
+    from app.api.deps import Principal, require_feature
 
-    # This should not raise
-    await require_feature("billing.enabled")(MockPlan())
+    async with SessionFactory() as session:
+        await _set_tenant(session, None, platform=True)
+        tenant_id = await _create_tenant_in_session(session, "feature-on")
+        plan = await _create_plan_in_session(session, "feature-on-plan")
+        plan.features = {"billing": {"enabled": True}}
+        session.add(
+            PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
+        )
+        await session.flush()
+
+        principal = Principal(
+            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
+        )
+        # Does not raise.
+        await require_feature("billing.enabled", principal, session)
 
 
 @pytest.mark.asyncio
 async def test_require_feature_missing():
-    """Test that require_feature raises when feature is missing."""
-    from app.api.deps import require_feature
+    """A feature absent from the active plan is refused with 403."""
+    from fastapi import HTTPException
 
-    class MockPlan:
-        features = {}
+    from app.api.deps import Principal, require_feature
 
-    # This should raise
-    with pytest.raises(Exception):
-        await require_feature("billing.enabled")(MockPlan())
+    async with SessionFactory() as session:
+        await _set_tenant(session, None, platform=True)
+        tenant_id = await _create_tenant_in_session(session, "feature-off")
+        plan = await _create_plan_in_session(session, "feature-off-plan")
+        plan.features = {}
+        session.add(
+            PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
+        )
+        await session.flush()
+
+        principal = Principal(
+            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
+        )
+        with pytest.raises(HTTPException) as exc:
+            await require_feature("billing.enabled", principal, session)
+        assert exc.value.status_code == 403
 
 
 # --------------------------------------------------------------------------- #
@@ -752,6 +818,11 @@ async def test_billing_service_get_plan_by_code():
         await _set_tenant(session, None, platform=True)
 
         from app.services import billing_service
+
+        # clean_db truncates every table before each test, so the plan this
+        # looks up has to be created here. It used to assume a "starter" plan
+        # survived from some earlier test.
+        await _create_plan_in_session(session, "starter")
 
         plan = await billing_service.get_plan_by_code(session, "starter")
         assert plan is not None
@@ -781,8 +852,9 @@ async def test_billing_service_create_invoice():
 
         # Create a mock subscription
         plan = await _create_plan_in_session(session, "inv-svc-test")
+        tenant_id = await _create_tenant_in_session(session, "inv-svc-tenant")
         sub = TenantSubscription(
-            tenant_id="test-tenant-inv",
+            tenant_id=tenant_id,
             plan_id=plan.id,
             billing_cycle="annual",
             discount_pct=0,
@@ -796,7 +868,7 @@ async def test_billing_service_create_invoice():
         # Create invoice
         invoice = await billing_service.create_invoice(
             session,
-            tenant_id="test-tenant-inv",
+            tenant_id=tenant_id,
             subscription_id=sub.id,
             period_start=datetime.now(timezone.utc).isoformat(),
             period_end=(datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
@@ -810,5 +882,8 @@ async def test_billing_service_create_invoice():
             currency="IDR",
         )
         assert invoice is not None
-        assert invoice.tenant_id == "test-tenant-inv"
+        assert invoice.tenant_id == tenant_id
         assert invoice.total == 2775000
+        # The service reserves the number itself — it is NOT NULL and unique,
+        # so leaving it unset used to make this call fail outright.
+        assert invoice.invoice_number.startswith("INV-")

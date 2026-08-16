@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Invoice,
+    InvoiceCounter,
     InvoiceLine,
     InvoiceStatus,
     Plan,
@@ -21,6 +23,29 @@ from app.models import (
 
 class BillingError(Exception):
     pass
+
+
+async def next_invoice_number(session: AsyncSession, when: datetime | None = None) -> str:
+    """Reserve and format the next invoice number, e.g. ``INV-202608-0001``.
+
+    The counter resets each month. Reservation is a single atomic statement, so
+    concurrent callers each get a distinct number instead of colliding on the
+    ``invoice_number`` unique constraint.
+    """
+    moment = when or datetime.now(timezone.utc)
+    period = moment.strftime("%Y%m")
+
+    stmt = (
+        pg_insert(InvoiceCounter)
+        .values(period=period, next_value=1)
+        .on_conflict_do_update(
+            index_elements=[InvoiceCounter.period],
+            set_={"next_value": InvoiceCounter.next_value + 1},
+        )
+        .returning(InvoiceCounter.next_value)
+    )
+    seq = (await session.execute(stmt)).scalar_one()
+    return f"INV-{period}-{seq:04d}"
 
 
 async def get_plan_by_code(session: AsyncSession, code: str) -> Plan:
@@ -158,8 +183,14 @@ async def create_invoice(
     currency: str,
     notes: str | None = None,
 ) -> Invoice:
-    """Create a new invoice for a tenant."""
+    """Create a new invoice for a tenant.
+
+    ``invoice_number`` is reserved here rather than passed in: it is NOT NULL
+    and unique, and leaving it unset made every call to this function fail on
+    a NotNullViolationError.
+    """
     invoice = Invoice(
+        invoice_number=await next_invoice_number(session),
         tenant_id=tenant_id,
         subscription_id=subscription_id,
         period_start=datetime.fromisoformat(period_start).replace(tzinfo=timezone.utc),

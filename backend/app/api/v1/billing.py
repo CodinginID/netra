@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +17,10 @@ from app.api.deps import (
     require_tenant_admin,
 )
 from app.models import Invoice, InvoiceLine, InvoiceStatus, Plan, PlanTier, SubscriptionStatus, TenantSubscription, UsageSnapshot
+from app.core.config import settings
 from app.schemas import (
     Envelope,
+    InvoiceCreate,
     InvoiceLineSchema,
     InvoiceSchema,
     InvoiceUpdate,
@@ -475,6 +479,62 @@ async def list_usage_snapshots(
 # --------------------------------------------------------------------------- #
 # Invoices (tenant-scoped, tenant admin can see own; super admin can see all)
 # --------------------------------------------------------------------------- #
+@router.post(
+    "/invoices",
+    response_model=Envelope[InvoiceSchema],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_super_admin)],
+)
+async def create_invoice(
+    payload: InvoiceCreate,
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[InvoiceSchema]:
+    """Issue an invoice for a tenant.
+
+    Super-admin only: invoices are raised by the platform, not by the tenant
+    being billed. The invoice number comes from the monthly counter, never from
+    the client.
+    """
+    invoice = Invoice(
+        invoice_number=await billing_service.next_invoice_number(session),
+        tenant_id=payload.tenant_id,
+        subscription_id=payload.subscription_id,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        billed_users=payload.billed_users,
+        tier_id=payload.tier_id,
+        subtotal=payload.subtotal,
+        discount=payload.discount,
+        tax_pct=payload.tax_pct,
+        tax_amount=payload.tax_amount,
+        total=payload.total,
+        currency=payload.currency,
+        status=payload.status,
+        notes=payload.notes,
+    )
+    # Created straight into 'issued' — stamp the same dates the draft→issued
+    # transition in update_invoice would have stamped.
+    if invoice.status == InvoiceStatus.issued:
+        invoice.issued_at = datetime.now(timezone.utc)
+        invoice.due_date = invoice.issued_at + timedelta(days=settings.invoice_net_days)
+
+    session.add(invoice)
+    await session.flush()
+    # Load `lines` explicitly: InvoiceSchema reads it, and letting Pydantic
+    # touch the unloaded relationship triggers a lazy load outside the async
+    # context, which fails with MissingGreenlet rather than returning [].
+    await session.refresh(invoice, attribute_names=["lines"])
+
+    await audit_service.record(
+        session,
+        action="billing.invoice.created",
+        actor="",
+        tenant_id=invoice.tenant_id,
+        detail={"invoice_number": invoice.invoice_number, "total": invoice.total},
+    )
+    return Envelope(data=InvoiceSchema.model_validate(invoice))
+
+
 @router.get(
     "/invoices",
     response_model=Envelope[PageData[dict]],
@@ -521,6 +581,7 @@ async def list_invoices(
             "currency": r.currency,
             "status": r.status.value,
             "issued_at": r.issued_at.isoformat() if r.issued_at else None,
+            "due_date": r.due_date.isoformat() if r.due_date else None,
             "paid_at": r.paid_at.isoformat() if r.paid_at else None,
             "notes": r.notes,
             "lines": [],
@@ -582,6 +643,7 @@ async def get_invoice(
             "currency": inv.currency,
             "status": inv.status.value,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,
             "lines": [
@@ -623,10 +685,25 @@ async def update_invoice(
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
+    became_issued = (
+        payload.status == InvoiceStatus.issued and inv.status != InvoiceStatus.issued
+    )
     if payload.status is not None:
         inv.status = payload.status
     if payload.notes is not None:
         inv.notes = payload.notes
+    if payload.due_date is not None:
+        inv.due_date = payload.due_date
+
+    if became_issued:
+        if inv.issued_at is None:
+            inv.issued_at = datetime.now(timezone.utc)
+        # Fill the deadline only when nobody supplied one, so an explicit
+        # due_date in this very request survives the default net terms.
+        if inv.due_date is None:
+            inv.due_date = inv.issued_at + timedelta(days=settings.invoice_net_days)
+    if payload.status == InvoiceStatus.paid and inv.paid_at is None:
+        inv.paid_at = datetime.now(timezone.utc)
 
     await session.flush()
     await session.refresh(inv)
@@ -661,6 +738,7 @@ async def update_invoice(
             "currency": inv.currency,
             "status": inv.status.value,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,
             "lines": [
