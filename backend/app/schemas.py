@@ -681,6 +681,35 @@ class InvoiceSchema(BaseModel):
     updated_at: datetime
 
 
+class CurrencyTotal(BaseModel):
+    currency: str
+    total: int
+
+
+class MoneyBucket(BaseModel):
+    """A count of invoices plus their value, split by currency.
+
+    Totals are never summed across currencies — Invoice.currency is per row,
+    so a combined figure would be meaningless.
+    """
+
+    count: int = 0
+    by_currency: list[CurrencyTotal] = []
+
+
+class BillingSummary(BaseModel):
+    """Operational figures for the billing dashboard: who needs chasing."""
+
+    unpaid: MoneyBucket
+    overdue: MoneyBucket
+    draft: MoneyBucket
+    paid_this_month: MoneyBucket
+    trials_ending: int
+    past_due_count: int
+    subscriptions_ending: int
+    tenants_without_subscription: int
+
+
 class InvoiceCreate(BaseModel):
     tenant_id: str
     subscription_id: str | None = None

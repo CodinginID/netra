@@ -19,6 +19,7 @@ from app.api.deps import (
 from app.models import Invoice, InvoiceLine, InvoiceStatus, Plan, PlanTier, SubscriptionStatus, TenantSubscription, UsageSnapshot
 from app.core.config import settings
 from app.schemas import (
+    BillingSummary,
     Envelope,
     InvoiceCreate,
     InvoiceLineSchema,
@@ -474,6 +475,26 @@ async def list_usage_snapshots(
             pages=max(1, (total + limit - 1) // limit),
         )
     )
+
+
+# --------------------------------------------------------------------------- #
+# Operational summary (platform-level dashboard)
+# --------------------------------------------------------------------------- #
+@router.get(
+    "/summary",
+    response_model=Envelope[BillingSummary],
+    dependencies=[Depends(require_super_admin)],
+)
+async def billing_summary(
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[BillingSummary]:
+    """Figures behind the billing dashboard: unpaid, overdue, and what lapses soon.
+
+    An empty platform returns zeros, not 404 — "nothing to chase" is a valid
+    answer and the dashboard should render it as such.
+    """
+    data = await billing_service.operational_summary(session)
+    return Envelope(data=BillingSummary.model_validate(data))
 
 
 # --------------------------------------------------------------------------- #

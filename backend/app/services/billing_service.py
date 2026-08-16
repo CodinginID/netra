@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,6 +16,8 @@ from app.models import (
     Plan,
     PlanTier,
     SubscriptionStatus,
+    Tenant,
+    TenantStatus,
     TenantSubscription,
     UsageSnapshot,
 )
@@ -46,6 +48,105 @@ async def next_invoice_number(session: AsyncSession, when: datetime | None = Non
     )
     seq = (await session.execute(stmt)).scalar_one()
     return f"INV-{period}-{seq:04d}"
+
+
+# How far ahead the dashboard looks when flagging things about to lapse.
+# Named here rather than inlined so the two windows are visible side by side
+# and cannot drift apart between the query and the UI copy.
+TRIAL_ENDING_WINDOW_DAYS = 7
+SUBSCRIPTION_ENDING_WINDOW_DAYS = 30
+
+
+async def operational_summary(session: AsyncSession, now: datetime | None = None) -> dict:
+    """Aggregate the "who needs chasing" figures for the billing dashboard.
+
+    Every number is computed by the database. Pulling invoices into Python to
+    sum them would degrade as the invoice table grows, which is exactly the
+    direction it only ever moves.
+
+    Money is reported per currency: ``Invoice.currency`` is per row, so adding
+    totals across currencies would produce a number that means nothing.
+    """
+    moment = now or datetime.now(timezone.utc)
+    month_start = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    unpaid = (Invoice.status == InvoiceStatus.issued) & (Invoice.paid_at.is_(None))
+    overdue = unpaid & (Invoice.due_date.isnot(None)) & (Invoice.due_date < moment)
+    draft = Invoice.status == InvoiceStatus.draft
+    paid_this_month = (Invoice.status == InvoiceStatus.paid) & (Invoice.paid_at >= month_start)
+
+    def _count(cond):
+        return func.count().filter(cond)
+
+    def _sum(cond):
+        return func.coalesce(func.sum(Invoice.total).filter(cond), 0)
+
+    stmt = select(
+        Invoice.currency,
+        _count(unpaid), _sum(unpaid),
+        _count(overdue), _sum(overdue),
+        _count(draft), _sum(draft),
+        _count(paid_this_month), _sum(paid_this_month),
+    ).group_by(Invoice.currency)
+
+    buckets: dict[str, dict] = {
+        name: {"count": 0, "by_currency": []}
+        for name in ("unpaid", "overdue", "draft", "paid_this_month")
+    }
+    for row in (await session.execute(stmt)).all():
+        currency = row[0]
+        for offset, name in enumerate(("unpaid", "overdue", "draft", "paid_this_month")):
+            count, total = row[1 + offset * 2], row[2 + offset * 2]
+            if count:
+                buckets[name]["count"] += count
+                buckets[name]["by_currency"].append(
+                    {"currency": currency, "total": int(total)}
+                )
+
+    async def _scalar(stmt_) -> int:
+        return (await session.execute(stmt_)).scalar() or 0
+
+    trials_ending = await _scalar(
+        select(func.count()).select_from(TenantSubscription).where(
+            TenantSubscription.status == SubscriptionStatus.trial,
+            TenantSubscription.trial_ends_at.isnot(None),
+            TenantSubscription.trial_ends_at >= moment,
+            TenantSubscription.trial_ends_at
+            <= moment + timedelta(days=TRIAL_ENDING_WINDOW_DAYS),
+        )
+    )
+    past_due_count = await _scalar(
+        select(func.count()).select_from(TenantSubscription).where(
+            TenantSubscription.status == SubscriptionStatus.past_due
+        )
+    )
+    subscriptions_ending = await _scalar(
+        select(func.count()).select_from(TenantSubscription).where(
+            TenantSubscription.status == SubscriptionStatus.active,
+            TenantSubscription.ends_at >= moment,
+            TenantSubscription.ends_at
+            <= moment + timedelta(days=SUBSCRIPTION_ENDING_WINDOW_DAYS),
+        )
+    )
+    # Soft-deleted tenants are excluded: they are on their way out, so listing
+    # them as "missing a subscription" would be permanent noise.
+    tenants_without_subscription = await _scalar(
+        select(func.count()).select_from(Tenant).where(
+            Tenant.status == TenantStatus.active,
+            Tenant.deleted_at.is_(None),
+            ~select(TenantSubscription.id)
+            .where(TenantSubscription.tenant_id == Tenant.id)
+            .exists(),
+        )
+    )
+
+    return {
+        **buckets,
+        "trials_ending": trials_ending,
+        "past_due_count": past_due_count,
+        "subscriptions_ending": subscriptions_ending,
+        "tenants_without_subscription": tenants_without_subscription,
+    }
 
 
 async def get_plan_by_code(session: AsyncSession, code: str) -> Plan:
