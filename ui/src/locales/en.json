@@ -930,5 +930,16 @@
   "billing.summary.subscriptions_ending": "Subscriptions ending within 30 days",
   "billing.summary.tenants_without_subscription": "Active tenants with no subscription",
   "billing.summary.view": "View",
-  "invoice.due_date": "Due date"
+  "invoice.due_date": "Due date",
+  "billing.usage.title": "Usage Monitoring",
+  "billing.usage.desc": "Latest usage per tenant, the 7-day trend, and who has outgrown their plan.",
+  "billing.usage.tenant": "Tenant",
+  "billing.usage.trend_7d": "7-day trend",
+  "billing.usage.plan": "Plan",
+  "billing.usage.no_plan": "No subscription",
+  "billing.usage.over_tier": "Over limit of {{max}}",
+  "billing.usage.never_collected": "No usage recorded yet. Collection runs daily at 00:30 UTC; the first data appears tomorrow.",
+  "billing.usage.no_match": "No tenant matches that search.",
+  "billing.usage.stale_badge": "Collection stalled",
+  "billing.usage.stale_desc": "Newest snapshot is {{days}} days old ({{date}}). The daily job has probably stopped — check the backend logs."
 }

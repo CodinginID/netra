@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,6 +147,112 @@ async def operational_summary(session: AsyncSession, now: datetime | None = None
         "subscriptions_ending": subscriptions_ending,
         "tenants_without_subscription": tenants_without_subscription,
     }
+
+
+#: How far back the usage view looks when computing a trend.
+USAGE_TREND_WINDOW_DAYS = 7
+
+
+async def usage_by_tenant(session: AsyncSession, now: datetime | None = None) -> list[dict]:
+    """Latest usage snapshot per tenant, with a 7-day trend and tier headroom.
+
+    "Latest per tenant" is resolved with a window function in one query. Asking
+    per tenant in a loop would issue a query per tenant on a page that exists
+    precisely to compare tenants against each other.
+    """
+    moment = now or datetime.now(timezone.utc)
+    cutoff = moment - timedelta(days=USAGE_TREND_WINDOW_DAYS)
+
+    ranked = select(
+        UsageSnapshot.tenant_id,
+        UsageSnapshot.snapshot_date,
+        UsageSnapshot.active_users,
+        UsageSnapshot.devices,
+        UsageSnapshot.punches,
+        func.row_number()
+        .over(
+            partition_by=UsageSnapshot.tenant_id,
+            order_by=UsageSnapshot.snapshot_date.desc(),
+        )
+        .label("rn"),
+    ).subquery()
+
+    latest = select(ranked).where(ranked.c.rn == 1).subquery()
+
+    # Baseline for the trend: the newest snapshot at or before the cutoff.
+    baseline = select(
+        UsageSnapshot.tenant_id,
+        UsageSnapshot.active_users.label("baseline_users"),
+        func.row_number()
+        .over(
+            partition_by=UsageSnapshot.tenant_id,
+            order_by=UsageSnapshot.snapshot_date.desc(),
+        )
+        .label("rn"),
+    ).where(UsageSnapshot.snapshot_date <= cutoff).subquery()
+    baseline_latest = select(baseline).where(baseline.c.rn == 1).subquery()
+
+    # The plan's ceiling is the top band's max_users — NULL (unlimited) if any
+    # band is open-ended. Joining the band that *contains* current usage would
+    # be wrong here: a tenant that has outgrown its plan matches no band at all,
+    # so it would silently read as within limits, the exact opposite of the
+    # signal this column exists to give.
+    ceiling = (
+        select(
+            PlanTier.plan_id.label("plan_id"),
+            case(
+                (func.bool_or(PlanTier.max_users.is_(None)), None),
+                else_=func.max(PlanTier.max_users),
+            ).label("max_users"),
+        )
+        .group_by(PlanTier.plan_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(
+            latest.c.tenant_id,
+            Tenant.name,
+            latest.c.snapshot_date,
+            latest.c.active_users,
+            latest.c.devices,
+            latest.c.punches,
+            baseline_latest.c.baseline_users,
+            Plan.name.label("plan_name"),
+            ceiling.c.max_users,
+        )
+        .join(Tenant, Tenant.id == latest.c.tenant_id)
+        .outerjoin(baseline_latest, baseline_latest.c.tenant_id == latest.c.tenant_id)
+        .outerjoin(TenantSubscription, TenantSubscription.tenant_id == latest.c.tenant_id)
+        .outerjoin(Plan, Plan.id == TenantSubscription.plan_id)
+        .outerjoin(ceiling, ceiling.c.plan_id == Plan.id)
+        .order_by(latest.c.active_users.desc())
+    )
+
+    rows = []
+    for r in (await session.execute(stmt)).all():
+        active_users = r.active_users or 0
+        rows.append(
+            {
+                "tenant_id": r.tenant_id,
+                "tenant_name": r.name,
+                "snapshot_date": r.snapshot_date.isoformat(),
+                "active_users": active_users,
+                "devices": r.devices or 0,
+                "punches": r.punches or 0,
+                # None (not 0) when there is no baseline yet: "no comparison
+                # available" and "flat" are different facts, and showing a flat
+                # arrow for a brand-new tenant would be a lie.
+                "active_users_delta_7d": (
+                    None if r.baseline_users is None else active_users - r.baseline_users
+                ),
+                "plan_name": r.plan_name,
+                "tier_max_users": r.max_users,
+                # Exactly at max_users is within the tier; one above is over.
+                "over_tier": r.max_users is not None and active_users > r.max_users,
+            }
+        )
+    return rows
 
 
 async def get_plan_by_code(session: AsyncSession, code: str) -> Plan:

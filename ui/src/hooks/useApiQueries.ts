@@ -49,7 +49,7 @@ export const queryKeys = {
   dailyReport: (date: string, tenantId?: TenantScope) => ['dailyReport', date, { tenantId }] as readonly unknown[],
   dailyStatus: (date: string, tenantId?: TenantScope) => ['dailyStatus', date, { tenantId }] as readonly unknown[],
   // --- Billing (platform-wide unless scoped) ---
-  billing: (kind: 'plans' | 'subscriptions' | 'invoices' | 'usage' | 'summary', params?: Record<string, unknown>) =>
+  billing: (kind: 'plans' | 'subscriptions' | 'invoices' | 'usage' | 'summary' | 'usage-by-tenant', params?: Record<string, unknown>) =>
     (params ? ['billing', kind, params] : ['billing', kind]) as readonly unknown[],
   // Platform-level: leads submitted from the public landing page, no tenant.
   demoRequests: (params?: Record<string, unknown>) =>
@@ -269,6 +269,17 @@ export function useBillingSummary() {
     queryFn: () => api.getBillingSummary(token!),
     enabled: !!token,
     staleTime: 60_000,
+  })
+}
+
+/** Per-tenant usage comparison. Platform-wide, so it takes no tenant scope. */
+export function useUsageByTenant() {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.billing('usage-by-tenant'),
+    queryFn: () => api.getUsageByTenant(token!),
+    enabled: !!token,
+    staleTime: 5 * 60_000,
   })
 }
 

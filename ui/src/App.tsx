@@ -49,6 +49,7 @@ import { PlansEditor } from '@/pages/super-admin/PlansEditor'
 import { SubscriptionsPage } from '@/pages/super-admin/SubscriptionsPage'
 import { InvoicesPage } from '@/pages/super-admin/InvoicesPage'
 import { BillingSummaryPage } from '@/pages/super-admin/BillingSummaryPage'
+import { UsagePage } from '@/pages/super-admin/UsagePage'
 import { DemoRequestsPage } from '@/pages/super-admin/DemoRequestsPage'
 
 const queryClient = new QueryClient({
@@ -173,6 +174,7 @@ function AppRoutes() {
           <Route path="billing/plans" element={<ErrorBoundary><PlansEditor /></ErrorBoundary>} />
           <Route path="billing/subscriptions" element={<ErrorBoundary><SubscriptionsPage /></ErrorBoundary>} />
           <Route path="billing/invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
+          <Route path="billing/usage" element={<ErrorBoundary><UsagePage /></ErrorBoundary>} />
           <Route path="demo-requests" element={<ErrorBoundary><DemoRequestsPage /></ErrorBoundary>} />
 
           {/* Tenant-scoped routes — context-switched view for a specific tenant */}

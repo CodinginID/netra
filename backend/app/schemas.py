@@ -681,6 +681,23 @@ class InvoiceSchema(BaseModel):
     updated_at: datetime
 
 
+class TenantUsageRow(BaseModel):
+    """A tenant's latest usage snapshot, with trend and tier headroom."""
+
+    tenant_id: str
+    tenant_name: str
+    snapshot_date: str
+    active_users: int
+    devices: int
+    punches: int
+    #: None when there is no snapshot old enough to compare against. Distinct
+    #: from 0, which means measured and unchanged.
+    active_users_delta_7d: int | None = None
+    plan_name: str | None = None
+    tier_max_users: int | None = None
+    over_tier: bool = False
+
+
 class CurrencyTotal(BaseModel):
     currency: str
     total: int

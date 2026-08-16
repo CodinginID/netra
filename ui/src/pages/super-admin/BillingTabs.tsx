@@ -6,6 +6,7 @@ const TABS = [
   { to: '/admin/billing/plans', labelKey: 'nav.plans' as const },
   { to: '/admin/billing/subscriptions', labelKey: 'nav.subscriptions' as const },
   { to: '/admin/billing/invoices', labelKey: 'nav.invoices' as const },
+  { to: '/admin/billing/usage', labelKey: 'nav.usage' as const },
 ]
 
 export function BillingTabs() {

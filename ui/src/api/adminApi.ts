@@ -743,6 +743,20 @@ export interface BillingSummaryOut {
   tenants_without_subscription: number
 }
 
+export interface TenantUsageRow {
+  tenant_id: string
+  tenant_name: string
+  snapshot_date: string
+  active_users: number
+  devices: number
+  punches: number
+  /** Null when no snapshot is old enough to compare against — distinct from 0. */
+  active_users_delta_7d: number | null
+  plan_name: string | null
+  tier_max_users: number | null
+  over_tier: boolean
+}
+
 export interface UsageSnapshotOut {
   id: string
   tenant_id: string
@@ -838,6 +852,11 @@ export async function listUsageSnapshots(token: string, params?: { tenant_id?: s
   if (params?.limit) qs.set('limit', String(params.limit))
   const raw = await apiFetch<unknown>(`${API_BASE}/billing/usage${qs.toString() ? `?${qs}` : ''}`, token)
   return normalizePaginated<UsageSnapshotOut>(raw)
+}
+
+/** Latest usage per tenant with trend and tier headroom. Super admin only. */
+export async function getUsageByTenant(token: string): Promise<TenantUsageRow[]> {
+  return apiFetch<TenantUsageRow[]>(`${API_BASE}/billing/usage/by-tenant`, token)
 }
 
 /** Operational figures for the billing dashboard. Super admin only. */

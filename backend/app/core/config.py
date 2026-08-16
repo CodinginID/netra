@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     # one to negotiate terms per tenant.
     invoice_net_days: int = Field(default=14, ge=1, le=180)
 
+    # Background jobs (daily usage snapshots). Off in tests and CI, where a
+    # background task would hold connections against a database the suite
+    # truncates between every test.
+    enable_scheduler: bool = Field(default=True)
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

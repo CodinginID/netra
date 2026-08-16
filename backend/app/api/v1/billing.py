@@ -35,6 +35,7 @@ from app.schemas import (
     SubscriptionCreate,
     SubscriptionSchema,
     SubscriptionUpdate,
+    TenantUsageRow,
 )
 from app.services import audit_service, billing_service
 
@@ -433,18 +434,50 @@ async def cancel_subscription(
 # Usage Snapshots (platform + tenant-scoped)
 # --------------------------------------------------------------------------- #
 @router.get(
-    "/usage",
-    response_model=Envelope[PageData[dict]],
+    "/usage/by-tenant",
+    response_model=Envelope[list[TenantUsageRow]],
     dependencies=[Depends(require_super_admin)],
 )
+async def usage_by_tenant(
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[list[TenantUsageRow]]:
+    """One row per tenant: latest usage, 7-day trend, and whether it exceeds its tier.
+
+    Empty until the daily snapshot job has run at least once. The UI
+    distinguishes "not collected yet" from "collection stopped" — those look
+    identical here but mean opposite things.
+    """
+    rows = await billing_service.usage_by_tenant(session)
+    return Envelope(data=[TenantUsageRow.model_validate(r) for r in rows])
+
+
+
+@router.get(
+    "/usage",
+    response_model=Envelope[PageData[dict]],
+)
 async def list_usage_snapshots(
+    principal: Principal = Depends(require_tenant_admin),
     tenant_id: str | None = Query(None, description="Filter by tenant"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_unscoped),
 ) -> Envelope[PageData[dict]]:
+    """Raw usage snapshots.
+
+    Was super-admin only while the tenant admin billing page called it, so that
+    page's usage card answered 403 for every real tenant admin.
+
+    A caller without platform scope is pinned to their own tenant and the
+    tenant_id query parameter is ignored — otherwise relaxing the guard would
+    let a tenant admin read another tenant's usage by guessing an id. The
+    session stays unscoped because a super admin genuinely reads across
+    tenants; isolation is enforced by the explicit WHERE below.
+    """
     stmt = select(UsageSnapshot)
-    if tenant_id:
+    if not principal.platform_scope:
+        stmt = stmt.where(UsageSnapshot.tenant_id == principal.tenant_id)
+    elif tenant_id:
         stmt = stmt.where(UsageSnapshot.tenant_id == tenant_id)
 
     count_stmt = select(func.count()).select_from(stmt.subquery())

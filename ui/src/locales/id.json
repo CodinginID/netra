@@ -788,7 +788,7 @@
   "nav.billing": "Billing",
   "nav.subscriptions": "Langganan",
   "nav.invoices": "Faktur",
-  "nav.usage": "Penggunaan",
+  "nav.usage": "Usage",
   "nav.plans": "Paket",
   "nav.demo_requests": "Permintaan Demo",
   "demo_requests.title": "Permintaan Demo",
@@ -930,5 +930,16 @@
   "billing.summary.subscriptions_ending": "Langganan berakhir dalam 30 hari",
   "billing.summary.tenants_without_subscription": "Tenant aktif tanpa langganan",
   "billing.summary.view": "Lihat",
-  "invoice.due_date": "Tenggat"
+  "invoice.due_date": "Tenggat",
+  "billing.usage.title": "Pemantauan Usage",
+  "billing.usage.desc": "Pemakaian terakhir tiap tenant, tren 7 hari, dan yang melewati batas paket.",
+  "billing.usage.tenant": "Tenant",
+  "billing.usage.trend_7d": "Tren 7 hari",
+  "billing.usage.plan": "Paket",
+  "billing.usage.no_plan": "Tanpa langganan",
+  "billing.usage.over_tier": "Lewat batas {{max}}",
+  "billing.usage.never_collected": "Belum ada data usage. Pengumpulan berjalan otomatis tiap hari pukul 00.30 UTC; data pertama muncul besok.",
+  "billing.usage.no_match": "Tidak ada tenant yang cocok dengan pencarian.",
+  "billing.usage.stale_badge": "Pengumpulan tertunda",
+  "billing.usage.stale_desc": "Snapshot terakhir {{days}} hari lalu ({{date}}). Job harian kemungkinan berhenti — periksa log backend."
 }
