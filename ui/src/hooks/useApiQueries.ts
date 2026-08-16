@@ -49,7 +49,7 @@ export const queryKeys = {
   dailyReport: (date: string, tenantId?: TenantScope) => ['dailyReport', date, { tenantId }] as readonly unknown[],
   dailyStatus: (date: string, tenantId?: TenantScope) => ['dailyStatus', date, { tenantId }] as readonly unknown[],
   // --- Billing (platform-wide unless scoped) ---
-  billing: (kind: 'plans' | 'subscriptions' | 'invoices' | 'usage', params?: Record<string, unknown>) =>
+  billing: (kind: 'plans' | 'subscriptions' | 'invoices' | 'usage' | 'summary', params?: Record<string, unknown>) =>
     (params ? ['billing', kind, params] : ['billing', kind]) as readonly unknown[],
   // Platform-level: leads submitted from the public landing page, no tenant.
   demoRequests: (params?: Record<string, unknown>) =>
@@ -255,6 +255,20 @@ export function useInvoices(params?: { page?: number; limit?: number; tenant_id?
     queryFn: () => withTenantScope(tenantId, () => api.listInvoices(token!, params)),
     enabled: !!token,
     staleTime: 2 * 60_000,
+  })
+}
+
+/**
+ * Operational billing figures. Platform-wide by definition, so it takes no
+ * tenant scope — the endpoint is super-admin only and spans every tenant.
+ */
+export function useBillingSummary() {
+  const token = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: queryKeys.billing('summary'),
+    queryFn: () => api.getBillingSummary(token!),
+    enabled: !!token,
+    staleTime: 60_000,
   })
 }
 

@@ -707,11 +707,40 @@ export interface InvoiceOut {
   currency: string
   status: 'draft' | 'issued' | 'paid' | 'void'
   issued_at: string | null
+  /** Null while the invoice is a draft — a draft has no deadline yet. */
+  due_date: string | null
   paid_at: string | null
   notes: string | null
   lines: InvoiceLineOut[]
   created_at: string
   updated_at: string
+}
+
+export interface CurrencyTotal {
+  currency: string
+  total: number
+}
+
+/**
+ * A count of invoices and their value, split by currency.
+ *
+ * Totals are never combined across currencies: `Invoice.currency` is per row,
+ * so one merged number would be meaningless. Render each entry on its own line.
+ */
+export interface MoneyBucket {
+  count: number
+  by_currency: CurrencyTotal[]
+}
+
+export interface BillingSummaryOut {
+  unpaid: MoneyBucket
+  overdue: MoneyBucket
+  draft: MoneyBucket
+  paid_this_month: MoneyBucket
+  trials_ending: number
+  past_due_count: number
+  subscriptions_ending: number
+  tenants_without_subscription: number
 }
 
 export interface UsageSnapshotOut {
@@ -809,6 +838,11 @@ export async function listUsageSnapshots(token: string, params?: { tenant_id?: s
   if (params?.limit) qs.set('limit', String(params.limit))
   const raw = await apiFetch<unknown>(`${API_BASE}/billing/usage${qs.toString() ? `?${qs}` : ''}`, token)
   return normalizePaginated<UsageSnapshotOut>(raw)
+}
+
+/** Operational figures for the billing dashboard. Super admin only. */
+export async function getBillingSummary(token: string): Promise<BillingSummaryOut> {
+  return apiFetch<BillingSummaryOut>(`${API_BASE}/billing/summary`, token)
 }
 
 export async function listInvoices(token: string, params?: { page?: number; limit?: number; tenant_id?: string; status?: string }): Promise<PaginatedResponse<InvoiceOut>> {

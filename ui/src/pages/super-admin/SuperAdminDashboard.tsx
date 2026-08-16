@@ -1,4 +1,4 @@
-import { Outlet, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
+import { Outlet, Navigate, useNavigate, useLocation, useParams, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   Building2,
@@ -18,10 +18,11 @@ import {
   XCircle,
   CreditCard,
   CalendarClock,
+  Wallet,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { DonutChart } from '@/components/charts/DonutChart'
-import { useTenants, useUsers, useDailyReport } from '@/hooks/useApiQueries'
+import { useTenants, useUsers, useDailyReport, useBillingSummary } from '@/hooks/useApiQueries'
 import { useI18n } from '@/store/i18nStore'
 import type { TenantOut } from '@/api/adminApi'
 import { EmptyState } from '@/components/EmptyState'
@@ -228,6 +229,71 @@ export function TenantAdminHomePage() {
   )
 }
 
+/**
+ * One-line billing alert above the fold: what is owed, and what is late.
+ *
+ * Renders nothing when there is nothing to chase. A dashboard that announces
+ * the absence of problems just adds a row to scan past every morning.
+ */
+function BillingAlertStrip() {
+  const { t } = useI18n()
+  const { data } = useBillingSummary()
+  if (!data) return null
+
+  const attention = data.overdue.count + data.trials_ending + data.past_due_count
+  if (!data.unpaid.count && !attention) return null
+
+  return (
+    <Link
+      to="/admin/billing/summary"
+      className="data-card"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        padding: '14px 20px',
+        marginBottom: 24,
+        textDecoration: 'none',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Wallet size={20} color="var(--color-brand)" />
+        <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          {data.unpaid.by_currency.length
+            ? data.unpaid.by_currency
+                .map((row) =>
+                  new Intl.NumberFormat('id-ID', {
+                    style: 'currency',
+                    currency: row.currency,
+                    maximumFractionDigits: 0,
+                  }).format(row.total),
+                )
+                .join(' · ')
+            : '-'}
+        </span>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>
+          {t('billing.summary.invoice_count', { count: data.unpaid.count })}
+        </span>
+        {data.overdue.count > 0 && (
+          <span className="badge badge-red">
+            {t('billing.summary.overdue_count', { count: data.overdue.count })}
+          </span>
+        )}
+        {data.trials_ending > 0 && (
+          <span className="badge badge-orange">
+            {t('billing.summary.trials_ending_count', { count: data.trials_ending })}
+          </span>
+        )}
+      </div>
+      <span style={{ color: 'var(--color-brand)', fontWeight: 600, fontSize: 14 }}>
+        {t('billing.summary.view')} <ArrowUpRight size={14} style={{ verticalAlign: 'middle' }} />
+      </span>
+    </Link>
+  )
+}
+
 export function SuperAdminHomePage() {
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -273,6 +339,8 @@ export function SuperAdminHomePage() {
           </div>
         ))}
       </div>
+
+      <BillingAlertStrip />
 
       {tenants.length > 0 && (
         <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
