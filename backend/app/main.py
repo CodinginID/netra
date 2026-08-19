@@ -36,12 +36,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             try:
                 from app.services.soft_delete import purge_expired
 
-                counts = await purge_expired(days=30)
-
-                # Log every run, including empty ones: a purge that silently
-                # stopped deleting is indistinguishable from "nothing expired"
-                # unless the zero is on the record.
-                log.info("auto_purge_completed", **counts)
+                await purge_expired(days=30)
             except Exception as exc:
                 log.error("auto_purge_failed", error=str(exc))
 
