@@ -47,7 +47,7 @@ function CreateSubscriptionModal({ onClose, onCreated }: CreateSubscriptionModal
 
   const [tenantId, setTenantId] = useState('')
   const [planId, setPlanId] = useState('')
-  const [billingCycle, setBillingCycle] = useState<'annual' | 'semester' | 'monthly'>('annual')
+  const [billingCycle, setBillingCycle] = useState<'annual' | 'semiannual' | 'monthly'>('annual')
   const [discountPct, setDiscountPct] = useState(0)
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
@@ -103,10 +103,10 @@ function CreateSubscriptionModal({ onClose, onCreated }: CreateSubscriptionModal
               id="sub-cycle"
               className="field-input"
               value={billingCycle}
-              onChange={(e) => setBillingCycle(e.target.value as 'annual' | 'semester' | 'monthly')}
+              onChange={(e) => setBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
               <option value="annual">Annual</option>
-              <option value="semester">Semester</option>
+              <option value="semiannual">Semiannual</option>
               <option value="monthly">Monthly</option>
             </select>
           </div>

@@ -56,38 +56,30 @@ async def record_for_tenant(
     if sub.ends_at and sub.ends_at < _get_period_start():
         return None
 
-    # Count active users today
-    today_start = _get_period_start()
-    stmt = (
-        select(func.count(func.distinct(AttendanceRecord.user_id)))
-        .where(
-            AttendanceRecord.tenant_id == tenant_id,
-            AttendanceRecord.occurred_at >= today_start,
-        )
+    # Count over the day the snapshot is dated for. This used to read from
+    # today's 00:00 onwards while stamping the row with yesterday's date, so
+    # every snapshot filed a partial count of today under yesterday — and the
+    # day it claimed to describe was never counted at all.
+    day_start = snap_date
+    day_end = snap_date + timedelta(days=1)
+    in_day = (
+        AttendanceRecord.tenant_id == tenant_id,
+        AttendanceRecord.occurred_at >= day_start,
+        AttendanceRecord.occurred_at < day_end,
+        AttendanceRecord.deleted_at.is_(None),
     )
+
+    stmt = select(func.count(func.distinct(AttendanceRecord.user_id))).where(*in_day)
     result = await session.execute(stmt)
     active_users = result.scalar() or 0
 
-    # Count active devices today
-    stmt = (
-        select(func.count(func.distinct(AttendanceRecord.device_id)))
-        .where(
-            AttendanceRecord.tenant_id == tenant_id,
-            AttendanceRecord.occurred_at >= today_start,
-            AttendanceRecord.device_id.isnot(None),
-        )
+    stmt = select(func.count(func.distinct(AttendanceRecord.device_id))).where(
+        *in_day, AttendanceRecord.device_id.isnot(None)
     )
     result = await session.execute(stmt)
     devices = result.scalar() or 0
 
-    # Count punches today
-    stmt = (
-        select(func.count())
-        .where(
-            AttendanceRecord.tenant_id == tenant_id,
-            AttendanceRecord.occurred_at >= today_start,
-        )
-    )
+    stmt = select(func.count()).where(*in_day)
     result = await session.execute(stmt)
     punches = result.scalar() or 0
 

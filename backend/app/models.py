@@ -77,16 +77,10 @@ class EmbedPurpose(str, enum.Enum):
     # kiosk = "kiosk"  # future phase
 
 
-class Edition(str, enum.Enum):
-    """Subscription edition: determines the pricing grid (education vs business)."""
-    education = "education"
-    business = "business"
-
-
 class BillingCycle(str, enum.Enum):
     """How often the subscription renews and invoices are issued."""
     annual = "annual"
-    semester = "semester"  # 6 months
+    semiannual = "semiannual"  # 6 months
     monthly = "monthly"
 
 
@@ -439,9 +433,6 @@ class Plan(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    edition: Mapped[Edition] = mapped_column(
-        Enum(Edition, name="plan_edition"), nullable=False, default=Edition.business
-    )
     default_billing_cycle: Mapped[BillingCycle] = mapped_column(
         Enum(BillingCycle, name="billing_cycle"),
         default=BillingCycle.annual,
@@ -561,6 +552,9 @@ class Invoice(Base, TimestampMixin):
         nullable=False,
     )
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: When payment falls due. Nullable on purpose — a draft has no deadline
+    #: yet, and inventing one would surface drafts as phantom arrears.
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -586,6 +580,25 @@ class InvoiceLine(Base, TimestampMixin):
     amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     invoice: Mapped[Invoice] = relationship(back_populates="lines")
+
+
+class InvoiceCounter(Base):
+    """Per-month counter backing human-readable invoice numbers.
+
+    One row per ``YYYYMM`` period. The counter is bumped with a single
+    ``INSERT ... ON CONFLICT DO UPDATE ... RETURNING`` so two invoices created
+    in the same instant cannot be handed the same number. Deriving the next
+    number from ``MAX(invoice_number)`` would race under exactly the concurrency
+    that matters — a monthly billing run issuing many invoices at once.
+
+    Deliberately NOT tenant-scoped: the sequence is platform-wide, so this table
+    stays out of ``TENANT_SCOPED_TABLES`` and carries no RLS policy.
+    """
+
+    __tablename__ = "invoice_counters"
+
+    period: Mapped[str] = mapped_column(String(6), primary_key=True)  # YYYYMM
+    next_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class DemoRequestStatus(str, enum.Enum):

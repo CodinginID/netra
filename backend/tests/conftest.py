@@ -69,7 +69,8 @@ async def clean_db() -> AsyncIterator[None]:
             text(
                 "TRUNCATE consents, attendance_records, face_embeddings, sso_connections, "
                 "schedules, devices, users, tenants, audit_logs, "
-                "invoice_lines, invoices, usage_snapshots, tenant_subscriptions, plan_tiers, "
+                "invoice_lines, invoices, invoice_counters, usage_snapshots, "
+                "tenant_subscriptions, plan_tiers, "
                 "plans, demo_requests RESTART IDENTITY CASCADE"
             )
         )

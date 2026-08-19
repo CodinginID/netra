@@ -15,7 +15,6 @@ from app.models import (
     BillingCycle,
     DemoRequestStatus,
     DeviceStatus,
-    Edition,
     InvoiceStatus,
     Role,
     SubscriptionStatus,
@@ -511,7 +510,6 @@ class PlanSchema(BaseModel):
     id: str
     code: str
     name: str
-    edition: Edition
     default_billing_cycle: BillingCycle
     currency: str
     features: dict = {}
@@ -523,7 +521,6 @@ class PlanSchema(BaseModel):
 class PlanCreate(BaseModel):
     code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
-    edition: Edition
     default_billing_cycle: BillingCycle = BillingCycle.annual
     currency: str = Field(default="IDR", max_length=10)
     features: dict = Field(default_factory=dict)
@@ -531,7 +528,6 @@ class PlanCreate(BaseModel):
 
 class PlanUpdate(BaseModel):
     name: str | None = None
-    edition: Edition | None = None
     default_billing_cycle: BillingCycle | None = None
     currency: str | None = None
     features: dict | None = None
@@ -556,7 +552,9 @@ class PlanTierSchema(BaseModel):
 
 
 class PlanTierCreate(BaseModel):
-    plan_id: str
+    # No plan_id: the tier's plan comes from the {plan_id} path segment.
+    # It used to be required here while create_plan_tier ignored it entirely,
+    # so every caller that trusted the URL — including the UI — got a 422.
     min_users: int = Field(ge=1)
     max_users: int | None = None
     unit_price: int = Field(ge=0)
@@ -605,7 +603,10 @@ class SubscriptionCreate(BaseModel):
 class SubscriptionUpdate(BaseModel):
     status: SubscriptionStatus | None = None
     unit_price_override: int | None = None
-    discount_pct: float | None = Field(ge=0, le=100)
+    # default=None is what makes this optional: Field(ge=..., le=...) alone
+    # leaves the field REQUIRED despite the `| None`, so a PATCH carrying only
+    # {"status": ...} was rejected with 422.
+    discount_pct: float | None = Field(default=None, ge=0, le=100)
 
 
 # --------------------------------------------------------------------------- #
@@ -668,6 +669,7 @@ class InvoiceSchema(BaseModel):
     currency: str
     status: InvoiceStatus
     issued_at: datetime | None
+    due_date: datetime | None
     paid_at: datetime | None
     notes: str | None
     lines: list[InvoiceLineSchema] = []
@@ -675,9 +677,89 @@ class InvoiceSchema(BaseModel):
     updated_at: datetime
 
 
+class TenantUsageRow(BaseModel):
+    """A tenant's latest usage snapshot, with trend and tier headroom."""
+
+    tenant_id: str
+    tenant_name: str
+    snapshot_date: str
+    active_users: int
+    devices: int
+    punches: int
+    #: None when there is no snapshot old enough to compare against. Distinct
+    #: from 0, which means measured and unchanged.
+    active_users_delta_7d: int | None = None
+    plan_name: str | None = None
+    tier_max_users: int | None = None
+    over_tier: bool = False
+
+
+class CurrencyTotal(BaseModel):
+    currency: str
+    total: int
+
+
+class MoneyBucket(BaseModel):
+    """A count of invoices plus their value, split by currency.
+
+    Totals are never summed across currencies — Invoice.currency is per row,
+    so a combined figure would be meaningless.
+    """
+
+    count: int = 0
+    by_currency: list[CurrencyTotal] = []
+
+
+class BillingSummary(BaseModel):
+    """Operational figures for the billing dashboard: who needs chasing."""
+
+    unpaid: MoneyBucket
+    overdue: MoneyBucket
+    draft: MoneyBucket
+    paid_this_month: MoneyBucket
+    trials_ending: int
+    past_due_count: int
+    subscriptions_ending: int
+    tenants_without_subscription: int
+
+
+class InvoiceCreate(BaseModel):
+    tenant_id: str
+    subscription_id: str | None = None
+    period_start: datetime
+    period_end: datetime
+    billed_users: int = Field(default=0, ge=0)
+    tier_id: str | None = None
+    subtotal: int = Field(default=0, ge=0)
+    discount: int = Field(default=0, ge=0)
+    tax_pct: float = Field(default=0.0, ge=0, le=100)
+    tax_amount: int = Field(default=0, ge=0)
+    total: int = Field(default=0, ge=0)
+    currency: str = "IDR"
+    status: InvoiceStatus = InvoiceStatus.draft
+    notes: str | None = None
+    # No invoice_number: it is reserved server-side from the monthly counter.
+
+
+class InvoiceGenerate(BaseModel):
+    """Inputs for a usage-derived invoice.
+
+    Only the period and the tax rate: everything with a price on it is measured
+    from attendance records and the tenant's plan, so it cannot be dictated by
+    the caller.
+    """
+
+    tenant_id: str
+    period_start: datetime
+    period_end: datetime
+    tax_pct: float = Field(default=0.0, ge=0, le=100)
+    notes: str | None = None
+
+
 class InvoiceUpdate(BaseModel):
     status: InvoiceStatus | None = None
     notes: str | None = None
+    due_date: datetime | None = None
 
 
 # --------------------------------------------------------------------------- #

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +17,12 @@ from app.api.deps import (
     require_tenant_admin,
 )
 from app.models import Invoice, InvoiceLine, InvoiceStatus, Plan, PlanTier, SubscriptionStatus, TenantSubscription, UsageSnapshot
+from app.core.config import settings
 from app.schemas import (
+    BillingSummary,
     Envelope,
+    InvoiceCreate,
+    InvoiceGenerate,
     InvoiceLineSchema,
     InvoiceSchema,
     InvoiceUpdate,
@@ -30,6 +36,7 @@ from app.schemas import (
     SubscriptionCreate,
     SubscriptionSchema,
     SubscriptionUpdate,
+    TenantUsageRow,
 )
 from app.services import audit_service, billing_service
 
@@ -60,7 +67,6 @@ async def create_plan(
     plan = Plan(
         code=payload.code,
         name=payload.name,
-        edition=payload.edition,
         default_billing_cycle=payload.default_billing_cycle,
         currency=payload.currency,
         features=payload.features or {},
@@ -428,18 +434,50 @@ async def cancel_subscription(
 # Usage Snapshots (platform + tenant-scoped)
 # --------------------------------------------------------------------------- #
 @router.get(
-    "/usage",
-    response_model=Envelope[PageData[dict]],
+    "/usage/by-tenant",
+    response_model=Envelope[list[TenantUsageRow]],
     dependencies=[Depends(require_super_admin)],
 )
+async def usage_by_tenant(
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[list[TenantUsageRow]]:
+    """One row per tenant: latest usage, 7-day trend, and whether it exceeds its tier.
+
+    Empty until the daily snapshot job has run at least once. The UI
+    distinguishes "not collected yet" from "collection stopped" — those look
+    identical here but mean opposite things.
+    """
+    rows = await billing_service.usage_by_tenant(session)
+    return Envelope(data=[TenantUsageRow.model_validate(r) for r in rows])
+
+
+
+@router.get(
+    "/usage",
+    response_model=Envelope[PageData[dict]],
+)
 async def list_usage_snapshots(
+    principal: Principal = Depends(require_tenant_admin),
     tenant_id: str | None = Query(None, description="Filter by tenant"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_unscoped),
 ) -> Envelope[PageData[dict]]:
+    """Raw usage snapshots.
+
+    Was super-admin only while the tenant admin billing page called it, so that
+    page's usage card answered 403 for every real tenant admin.
+
+    A caller without platform scope is pinned to their own tenant and the
+    tenant_id query parameter is ignored — otherwise relaxing the guard would
+    let a tenant admin read another tenant's usage by guessing an id. The
+    session stays unscoped because a super admin genuinely reads across
+    tenants; isolation is enforced by the explicit WHERE below.
+    """
     stmt = select(UsageSnapshot)
-    if tenant_id:
+    if not principal.platform_scope:
+        stmt = stmt.where(UsageSnapshot.tenant_id == principal.tenant_id)
+    elif tenant_id:
         stmt = stmt.where(UsageSnapshot.tenant_id == tenant_id)
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -473,8 +511,128 @@ async def list_usage_snapshots(
 
 
 # --------------------------------------------------------------------------- #
+# Operational summary (platform-level dashboard)
+# --------------------------------------------------------------------------- #
+@router.get(
+    "/summary",
+    response_model=Envelope[BillingSummary],
+    dependencies=[Depends(require_super_admin)],
+)
+async def billing_summary(
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[BillingSummary]:
+    """Figures behind the billing dashboard: unpaid, overdue, and what lapses soon.
+
+    An empty platform returns zeros, not 404 — "nothing to chase" is a valid
+    answer and the dashboard should render it as such.
+    """
+    data = await billing_service.operational_summary(session)
+    return Envelope(data=BillingSummary.model_validate(data))
+
+
+# --------------------------------------------------------------------------- #
 # Invoices (tenant-scoped, tenant admin can see own; super admin can see all)
 # --------------------------------------------------------------------------- #
+@router.post(
+    "/invoices",
+    response_model=Envelope[InvoiceSchema],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_super_admin)],
+)
+async def create_invoice(
+    payload: InvoiceCreate,
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[InvoiceSchema]:
+    """Issue an invoice for a tenant.
+
+    Super-admin only: invoices are raised by the platform, not by the tenant
+    being billed. The invoice number comes from the monthly counter, never from
+    the client.
+    """
+    invoice = Invoice(
+        invoice_number=await billing_service.next_invoice_number(session),
+        tenant_id=payload.tenant_id,
+        subscription_id=payload.subscription_id,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        billed_users=payload.billed_users,
+        tier_id=payload.tier_id,
+        subtotal=payload.subtotal,
+        discount=payload.discount,
+        tax_pct=payload.tax_pct,
+        tax_amount=payload.tax_amount,
+        total=payload.total,
+        currency=payload.currency,
+        status=payload.status,
+        notes=payload.notes,
+    )
+    # Created straight into 'issued' — stamp the same dates the draft→issued
+    # transition in update_invoice would have stamped.
+    if invoice.status == InvoiceStatus.issued:
+        invoice.issued_at = datetime.now(timezone.utc)
+        invoice.due_date = invoice.issued_at + timedelta(days=settings.invoice_net_days)
+
+    session.add(invoice)
+    await session.flush()
+    # Load `lines` explicitly: InvoiceSchema reads it, and letting Pydantic
+    # touch the unloaded relationship triggers a lazy load outside the async
+    # context, which fails with MissingGreenlet rather than returning [].
+    await session.refresh(invoice, attribute_names=["lines"])
+
+    await audit_service.record(
+        session,
+        action="billing.invoice.created",
+        actor="",
+        tenant_id=invoice.tenant_id,
+        detail={"invoice_number": invoice.invoice_number, "total": invoice.total},
+    )
+    return Envelope(data=InvoiceSchema.model_validate(invoice))
+
+
+@router.post(
+    "/invoices/generate",
+    response_model=Envelope[InvoiceSchema],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_super_admin)],
+)
+async def generate_invoice(
+    payload: InvoiceGenerate,
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[InvoiceSchema]:
+    """Raise an invoice for a period from measured usage.
+
+    Unlike ``POST /invoices``, no amount is accepted from the caller: the
+    billable user count comes from attendance records in the period, and the
+    plan's tier band turns it into money.
+    """
+    try:
+        invoice = await billing_service.generate_invoice(
+            session,
+            tenant_id=payload.tenant_id,
+            period_start=payload.period_start,
+            period_end=payload.period_end,
+            tax_pct=payload.tax_pct,
+            notes=payload.notes,
+        )
+    except billing_service.BillingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await session.refresh(invoice, attribute_names=["lines"])
+
+    await audit_service.record(
+        session,
+        action="billing.invoice.generated",
+        actor="",
+        tenant_id=invoice.tenant_id,
+        detail={
+            "invoice_number": invoice.invoice_number,
+            "billed_users": invoice.billed_users,
+            "total": invoice.total,
+        },
+    )
+    return Envelope(data=InvoiceSchema.model_validate(invoice))
+
+
 @router.get(
     "/invoices",
     response_model=Envelope[PageData[dict]],
@@ -521,6 +679,7 @@ async def list_invoices(
             "currency": r.currency,
             "status": r.status.value,
             "issued_at": r.issued_at.isoformat() if r.issued_at else None,
+            "due_date": r.due_date.isoformat() if r.due_date else None,
             "paid_at": r.paid_at.isoformat() if r.paid_at else None,
             "notes": r.notes,
             "lines": [],
@@ -582,6 +741,7 @@ async def get_invoice(
             "currency": inv.currency,
             "status": inv.status.value,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,
             "lines": [
@@ -623,10 +783,25 @@ async def update_invoice(
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
+    became_issued = (
+        payload.status == InvoiceStatus.issued and inv.status != InvoiceStatus.issued
+    )
     if payload.status is not None:
         inv.status = payload.status
     if payload.notes is not None:
         inv.notes = payload.notes
+    if payload.due_date is not None:
+        inv.due_date = payload.due_date
+
+    if became_issued:
+        if inv.issued_at is None:
+            inv.issued_at = datetime.now(timezone.utc)
+        # Fill the deadline only when nobody supplied one, so an explicit
+        # due_date in this very request survives the default net terms.
+        if inv.due_date is None:
+            inv.due_date = inv.issued_at + timedelta(days=settings.invoice_net_days)
+    if payload.status == InvoiceStatus.paid and inv.paid_at is None:
+        inv.paid_at = datetime.now(timezone.utc)
 
     await session.flush()
     await session.refresh(inv)
@@ -661,6 +836,7 @@ async def update_invoice(
             "currency": inv.currency,
             "status": inv.status.value,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,
             "lines": [

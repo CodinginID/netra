@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -35,20 +36,51 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             try:
                 from app.services.soft_delete import purge_expired
 
-                counts = await purge_expired(days=30)
-
-                # Log every run, including empty ones: a purge that silently
-                # stopped deleting is indistinguishable from "nothing expired"
-                # unless the zero is on the record.
-                log.info("auto_purge_completed", **counts)
+                await purge_expired(days=30)
             except Exception as exc:
                 log.error("auto_purge_failed", error=str(exc))
 
+    async def _usage_snapshot_loop() -> None:
+        """Background loop: record daily per-tenant usage snapshots at 00:30 UTC.
+
+        Anchored to a wall-clock time rather than "24h after startup" like the
+        purge loop above. A run time that drifts with every restart would make
+        consecutive days cover unequal spans, and the whole point of these rows
+        is comparing one day against another.
+
+        Safe to run on more than one replica: record_usage_snapshot upserts on
+        (tenant_id, snapshot_date).
+        """
+        while True:
+            now = datetime.now(timezone.utc)
+            target = now.replace(hour=0, minute=30, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+            await asyncio.sleep((target - now).total_seconds())
+            try:
+                from app.services.usage_snapshot import record_all
+
+                counts = await record_all()
+
+                # Log every run, including the empty ones: a job that quietly
+                # stopped recording is indistinguishable from "no tenants were
+                # due" unless the zero is on the record.
+                log.info("usage_snapshot_completed", **counts)
+            except Exception as exc:
+                log.error("usage_snapshot_failed", error=str(exc))
+
     purge_task = asyncio.create_task(_purge_loop())
+    # Disabled in tests and CI, where a background task would open connections
+    # against a database the suite is busy truncating.
+    snapshot_task = (
+        asyncio.create_task(_usage_snapshot_loop()) if settings.enable_scheduler else None
+    )
 
     yield
 
     purge_task.cancel()
+    if snapshot_task is not None:
+        snapshot_task.cancel()
     await dispose_engine()
     log.info("shutdown")
 

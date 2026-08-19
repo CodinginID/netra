@@ -18,15 +18,6 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function EditionBadge({ edition }: { edition: PlanOut['edition'] }) {
-  const { t } = useI18n()
-  return (
-    <span className={`badge ${edition === 'business' ? 'badge-blue' : 'badge-green'}`}>
-      {t(`plan.edition.${edition}`)}
-    </span>
-  )
-}
-
 function ActiveBadge({ isActive }: { isActive: boolean }) {
   const { t } = useI18n()
   return (
@@ -49,8 +40,7 @@ function CreatePlanModal({ onClose, onCreated }: CreatePlanModalProps) {
 
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
-  const [edition, setEdition] = useState<'education' | 'business'>('business')
-  const [defaultBillingCycle, setDefaultBillingCycle] = useState<'annual' | 'semester' | 'monthly'>('annual')
+  const [defaultBillingCycle, setDefaultBillingCycle] = useState<'annual' | 'semiannual' | 'monthly'>('annual')
   const [currency, setCurrency] = useState('IDR')
 
   const handleSubmit = async (e: FormEvent) => {
@@ -60,7 +50,6 @@ function CreatePlanModal({ onClose, onCreated }: CreatePlanModalProps) {
       await createPlan.mutateAsync({
         name,
         code,
-        edition,
         default_billing_cycle: defaultBillingCycle,
         currency,
       })
@@ -98,27 +87,15 @@ function CreatePlanModal({ onClose, onCreated }: CreatePlanModalProps) {
             />
           </div>
           <div className="field">
-            <label htmlFor="plan-edition">{t('plan.edition')}</label>
-            <select
-              id="plan-edition"
-              className="field-input"
-              value={edition}
-              onChange={(e) => setEdition(e.target.value as 'education' | 'business')}
-            >
-              <option value="business">{t('plan.edition.business')}</option>
-              <option value="education">{t('plan.edition.education')}</option>
-            </select>
-          </div>
-          <div className="field">
             <label htmlFor="plan-cycle">{t('plan.default_billing_cycle')}</label>
             <select
               id="plan-cycle"
               className="field-input"
               value={defaultBillingCycle}
-              onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semester' | 'monthly')}
+              onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
               <option value="annual">Annual</option>
-              <option value="semester">Semester</option>
+              <option value="semiannual">Semiannual</option>
               <option value="monthly">Monthly</option>
             </select>
           </div>
@@ -159,7 +136,6 @@ function EditPlanModal({ plan, onClose, onUpdated }: EditPlanModalProps) {
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
 
   const [name, setName] = useState(plan.name)
-  const [edition, setEdition] = useState(plan.edition)
   const [defaultBillingCycle, setDefaultBillingCycle] = useState(plan.default_billing_cycle)
   const [currency, setCurrency] = useState(plan.currency)
   const [isActive, setIsActive] = useState(plan.is_active)
@@ -170,7 +146,7 @@ function EditPlanModal({ plan, onClose, onUpdated }: EditPlanModalProps) {
     try {
       await updatePlan.mutateAsync({
         planId: plan.id,
-        payload: { name, edition, default_billing_cycle: defaultBillingCycle, currency, is_active: isActive },
+        payload: { name, default_billing_cycle: defaultBillingCycle, currency, is_active: isActive },
       })
       show(t('toast_plan_updated'), 'success')
       onUpdated()
@@ -196,27 +172,15 @@ function EditPlanModal({ plan, onClose, onUpdated }: EditPlanModalProps) {
             />
           </div>
           <div className="field">
-            <label htmlFor="edit-plan-edition">{t('plan.edition')}</label>
-            <select
-              id="edit-plan-edition"
-              className="field-input"
-              value={edition}
-              onChange={(e) => setEdition(e.target.value as 'education' | 'business')}
-            >
-              <option value="business">{t('plan.edition.business')}</option>
-              <option value="education">{t('plan.edition.education')}</option>
-            </select>
-          </div>
-          <div className="field">
             <label htmlFor="edit-plan-cycle">{t('plan.default_billing_cycle')}</label>
             <select
               id="edit-plan-cycle"
               className="field-input"
               value={defaultBillingCycle}
-              onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semester' | 'monthly')}
+              onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
               <option value="annual">Annual</option>
-              <option value="semester">Semester</option>
+              <option value="semiannual">Semiannual</option>
               <option value="monthly">Monthly</option>
             </select>
           </div>
@@ -359,7 +323,6 @@ export function PlansEditor() {
             <tr>
               <th>{t('plan.code')}</th>
               <th>{t('plan.name')}</th>
-              <th>{t('plan.edition')}</th>
               <th>{t('plan.default_billing_cycle')}</th>
               <th>{t('plan.currency')}</th>
               <th>{t('plan.is_active')}</th>
@@ -373,7 +336,6 @@ export function PlansEditor() {
                 <tr key={`sk-${i}`}>
                   <td><div className="skeleton skeleton-text sm" /></td>
                   <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-badge" /></td>
                   <td><div className="skeleton skeleton-text sm" /></td>
                   <td><div className="skeleton skeleton-text sm" /></td>
                   <td><div className="skeleton skeleton-badge" /></td>
@@ -384,7 +346,7 @@ export function PlansEditor() {
 
             {!isLoading && plans.length === 0 && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={7}>
                   <div className="empty-state">{t('billing.no_plans')}</div>
                 </td>
               </tr>
@@ -395,7 +357,6 @@ export function PlansEditor() {
                 <tr key={plan.id}>
                   <td style={{ fontWeight: 600 }}>{plan.code}</td>
                   <td>{plan.name}</td>
-                  <td><EditionBadge edition={plan.edition} /></td>
                   <td style={{ textTransform: 'capitalize' }}>{plan.default_billing_cycle}</td>
                   <td>{plan.currency}</td>
                   <td><ActiveBadge isActive={plan.is_active} /></td>

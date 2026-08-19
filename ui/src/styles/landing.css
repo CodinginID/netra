@@ -402,12 +402,16 @@
 .lp-step-d { font-size: 13px; color: var(--lp-text2); line-height: 1.6; }
 
 /* pricing */
+/* auto-fit rather than a fixed 2 columns: the pricing section is a single
+   neutral plan now, and a hardcoded pair left an empty half beside it. The
+   max-width stops one card from stretching the full section width. */
 .lp-prices {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
+  max-width: 480px;
+  margin-inline: auto;
 }
-@media (max-width: 820px) { .lp-prices { grid-template-columns: 1fr; } }
 .lp-price {
   display: flex;
   flex-direction: column;

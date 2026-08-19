@@ -112,6 +112,17 @@ class Settings(BaseSettings):
     # Minutes an embed session token stays valid after minting.
     embed_ttl_minutes: int = Field(default=15, ge=1, le=1440)
 
+    # --- Billing --- #
+    # Default payment terms: days from issue date to due date. Applied when an
+    # invoice is issued without an explicit due_date; a caller may still send
+    # one to negotiate terms per tenant.
+    invoice_net_days: int = Field(default=14, ge=1, le=180)
+
+    # Background jobs (daily usage snapshots). Off in tests and CI, where a
+    # background task would hold connections against a database the suite
+    # truncates between every test.
+    enable_scheduler: bool = Field(default=True)
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

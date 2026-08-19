@@ -10,6 +10,8 @@ import structlog
 # Request-scoped context vars, injected into every log line.
 request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
 tenant_id_ctx: ContextVar[str | None] = ContextVar("tenant_id", default=None)
+scope_ctx: ContextVar[dict] = ContextVar("scope", default={})
+timing_ctx: ContextVar[dict] = ContextVar("timing", default={})
 
 
 def _inject_context(_: object, __: str, event_dict: dict) -> dict:
@@ -22,6 +24,17 @@ def _inject_context(_: object, __: str, event_dict: dict) -> dict:
     return event_dict
 
 
+def _inject_http(_: object, __: str, event_dict: dict) -> dict:
+    """Inject HTTP request attributes from middleware scope into every log line."""
+    scope = scope_ctx.get()
+    event_dict.setdefault("method", scope.get("method"))
+    event_dict.setdefault("path", scope.get("path"))
+    event_dict.setdefault("status_code", scope.get("status_code"))
+    if scope.get("process_time_ms") is not None:
+        event_dict["process_time_ms"] = scope["process_time_ms"]
+    return event_dict
+
+
 def configure_logging(*, debug: bool = False, json_logs: bool = True) -> None:
     """Configure structlog to emit JSON or pretty console output.
 
@@ -30,11 +43,16 @@ def configure_logging(*, debug: bool = False, json_logs: bool = True) -> None:
     """
     logging.basicConfig(format="%(message)s", level=logging.DEBUG if debug else logging.INFO)
 
+    # Suppress watchfiles (uvicorn --reload's file watcher) from leaking
+    # "N changes detected" INFO logs into the application log stream.
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+
     processors: list = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         _inject_context,
+        _inject_http,
     ]
     if json_logs or not debug:
         processors.append(structlog.processors.JSONRenderer())
