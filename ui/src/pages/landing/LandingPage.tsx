@@ -24,10 +24,13 @@ function resetTilt(e: MouseEvent<HTMLDivElement>) {
 }
 
 /** Public pricing cards. Only the entry-band price is shown — the full tier
- * grid lives in the billing tables and is negotiated per tenant. */
+ * grid lives in the billing tables and is negotiated per tenant.
+ *
+ * One card, not one per sector: the product bills on active users, so a school
+ * and a factory are on the same terms and splitting them into "Education" and
+ * "Business" implied a difference in the plans that never existed. */
 const PLANS = [
-  { id: 'edu', mailto: 'mailto:hello@codingin.id?subject=Netra%20Education%20—%20Penawaran' },
-  { id: 'biz', mailto: 'mailto:hello@codingin.id?subject=Netra%20Business%20—%20Penawaran' },
+  { id: 'std', feats: 6, mailto: 'mailto:hello@codingin.id?subject=Netra%20—%20Penawaran' },
 ] as const
 
 /** Rows for the daily-status mock. Shapes mirror the real roster: initials,
@@ -483,7 +486,7 @@ export function LandingPage() {
                 <span>{t(`landing.pr_${plan.id}_unit`)}</span>
               </div>
               <ul className="lp-price-feats">
-                {[1, 2, 3, 4].map((n) => (
+                {Array.from({ length: plan.feats }, (_, i) => i + 1).map((n) => (
                   <li key={n}>{t(`landing.pr_${plan.id}_f${n}`)}</li>
                 ))}
               </ul>

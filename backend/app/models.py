@@ -77,16 +77,10 @@ class EmbedPurpose(str, enum.Enum):
     # kiosk = "kiosk"  # future phase
 
 
-class Edition(str, enum.Enum):
-    """Subscription edition: determines the pricing grid (education vs business)."""
-    education = "education"
-    business = "business"
-
-
 class BillingCycle(str, enum.Enum):
     """How often the subscription renews and invoices are issued."""
     annual = "annual"
-    semester = "semester"  # 6 months
+    semiannual = "semiannual"  # 6 months
     monthly = "monthly"
 
 
@@ -439,9 +433,6 @@ class Plan(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    edition: Mapped[Edition] = mapped_column(
-        Enum(Edition, name="plan_edition"), nullable=False, default=Edition.business
-    )
     default_billing_cycle: Mapped[BillingCycle] = mapped_column(
         Enum(BillingCycle, name="billing_cycle"),
         default=BillingCycle.annual,

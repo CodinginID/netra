@@ -15,7 +15,6 @@ from app.models import (
     BillingCycle,
     DemoRequestStatus,
     DeviceStatus,
-    Edition,
     InvoiceStatus,
     Role,
     SubscriptionStatus,
@@ -511,7 +510,6 @@ class PlanSchema(BaseModel):
     id: str
     code: str
     name: str
-    edition: Edition
     default_billing_cycle: BillingCycle
     currency: str
     features: dict = {}
@@ -523,7 +521,6 @@ class PlanSchema(BaseModel):
 class PlanCreate(BaseModel):
     code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
-    edition: Edition
     default_billing_cycle: BillingCycle = BillingCycle.annual
     currency: str = Field(default="IDR", max_length=10)
     features: dict = Field(default_factory=dict)
@@ -531,7 +528,6 @@ class PlanCreate(BaseModel):
 
 class PlanUpdate(BaseModel):
     name: str | None = None
-    edition: Edition | None = None
     default_billing_cycle: BillingCycle | None = None
     currency: str | None = None
     features: dict | None = None
@@ -743,6 +739,21 @@ class InvoiceCreate(BaseModel):
     status: InvoiceStatus = InvoiceStatus.draft
     notes: str | None = None
     # No invoice_number: it is reserved server-side from the monthly counter.
+
+
+class InvoiceGenerate(BaseModel):
+    """Inputs for a usage-derived invoice.
+
+    Only the period and the tax rate: everything with a price on it is measured
+    from attendance records and the tenant's plan, so it cannot be dictated by
+    the caller.
+    """
+
+    tenant_id: str
+    period_start: datetime
+    period_end: datetime
+    tax_pct: float = Field(default=0.0, ge=0, le=100)
+    notes: str | None = None
 
 
 class InvoiceUpdate(BaseModel):

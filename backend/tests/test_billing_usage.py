@@ -75,7 +75,6 @@ async def _plan_with_tier(session, code: str, max_users: int | None) -> Plan:
     plan = Plan(
         code=code,
         name=f"Plan {code}",
-        edition="business",
         default_billing_cycle="annual",
         currency="IDR",
         features={},

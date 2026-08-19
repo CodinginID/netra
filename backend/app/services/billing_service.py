@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    AttendanceRecord,
     Invoice,
     InvoiceCounter,
     InvoiceLine,
@@ -25,6 +26,21 @@ from app.models import (
 
 class BillingError(Exception):
     pass
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalise a period boundary to UTC.
+
+    ``create_invoice`` stores dates by re-parsing an ISO string and stamping
+    ``tzinfo=utc`` on the result, which moves the instant when the caller sent
+    an offset like +07:00. Converting up front keeps the window we meter and
+    the period we record on the invoice as the same stretch of time. A naive
+    datetime is read as UTC rather than as server-local, so the answer does not
+    depend on where the process happens to run.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 async def next_invoice_number(session: AsyncSession, when: datetime | None = None) -> str:
@@ -266,11 +282,17 @@ async def get_plan_by_code(session: AsyncSession, code: str) -> Plan:
 
 
 async def get_plan_tier(session: AsyncSession, plan_id: str, min_users: int) -> PlanTier:
-    """Get the applicable tier for a plan given the number of users."""
+    """Get the applicable tier for a plan given the number of users.
+
+    Ordered by ``min_users`` rather than ``sort_order``: the band that applies
+    is a property of the numbers, not of the order an admin happened to type
+    the rows in. Ordering by sort_order meant one mis-numbered row silently
+    billed a tenant at another band's rate.
+    """
     stmt = (
         select(PlanTier)
         .where(PlanTier.plan_id == plan_id, PlanTier.min_users <= min_users)
-        .order_by(PlanTier.sort_order.desc())
+        .order_by(PlanTier.min_users.desc())
         .limit(1)
     )
     result = await session.execute(stmt)
@@ -278,6 +300,35 @@ async def get_plan_tier(session: AsyncSession, plan_id: str, min_users: int) -> 
     if not tier:
         raise BillingError(f"No tier found for plan {plan_id} with {min_users} users")
     return tier
+
+
+async def count_billable_users(
+    session: AsyncSession,
+    tenant_id: str,
+    period_start: datetime,
+    period_end: datetime,
+) -> int:
+    """Distinct users with at least one attendance record in the period.
+
+    This is the billing unit: a headcount would bill a school for students who
+    left and a factory for a roster it never trimmed, while daily peaks swing
+    on weekends and holidays. Counting distinct users across the whole period
+    self-corrects — a seasonal site bills high in busy months and low in quiet
+    ones without anyone renegotiating a tier.
+
+    Deliberately NOT derived from ``usage_snapshots``: a distinct count cannot
+    be summed or maxed across days without counting the same person repeatedly.
+    Snapshots stay for trend charts; invoices come from the records themselves.
+
+    Soft-deleted records are excluded — they are retained rows, not usage.
+    """
+    stmt = select(func.count(func.distinct(AttendanceRecord.user_id))).where(
+        AttendanceRecord.tenant_id == tenant_id,
+        AttendanceRecord.occurred_at >= period_start,
+        AttendanceRecord.occurred_at < period_end,
+        AttendanceRecord.deleted_at.is_(None),
+    )
+    return (await session.execute(stmt)).scalar() or 0
 
 
 async def get_subscription_by_tenant(session: AsyncSession, tenant_id: str) -> TenantSubscription:
@@ -441,6 +492,90 @@ async def add_invoice_line(
     await session.flush()
     await session.refresh(line)
     return line
+
+
+async def generate_invoice(
+    session: AsyncSession,
+    tenant_id: str,
+    period_start: datetime,
+    period_end: datetime,
+    tax_pct: float = 0.0,
+    notes: str | None = None,
+) -> Invoice:
+    """Build an invoice for a period from measured usage.
+
+    ``create_invoice`` takes the money as arguments, which means whoever calls
+    it decides what the tenant owes. This derives it instead: measured usage
+    picks the band, the band sets the price, and ``min_charge`` is the floor a
+    quiet month cannot fall below.
+
+    Kept alongside ``create_invoice`` rather than replacing it — manual
+    invoices are still how corrections and one-off charges get raised.
+    """
+    period_start = _as_utc(period_start)
+    period_end = _as_utc(period_end)
+    if period_end <= period_start:
+        raise BillingError("period_end must be after period_start")
+
+    sub = await get_subscription_by_tenant(session, tenant_id)
+    plan = await session.get(Plan, sub.plan_id)
+    if plan is None:
+        raise BillingError(f"Plan {sub.plan_id} not found for tenant {tenant_id}")
+
+    billed_users = await count_billable_users(session, tenant_id, period_start, period_end)
+    tier = await get_plan_tier(session, sub.plan_id, billed_users)
+
+    unit_price = sub.unit_price_override if sub.unit_price_override is not None else tier.unit_price
+
+    # The floor applies to what usage earns, before the tenant's discount —
+    # a negotiated discount should reduce the bill, not be swallowed by the
+    # minimum and silently ignored.
+    usage_amount = unit_price * billed_users
+    subtotal = max(usage_amount, tier.min_charge)
+    discount = round(subtotal * (sub.discount_pct or 0.0) / 100)
+    taxable = subtotal - discount
+    tax_amount = round(taxable * (tax_pct or 0.0) / 100)
+
+    invoice = await create_invoice(
+        session,
+        tenant_id=tenant_id,
+        subscription_id=sub.id,
+        period_start=period_start.isoformat(),
+        period_end=period_end.isoformat(),
+        billed_users=billed_users,
+        tier_id=tier.id,
+        subtotal=subtotal,
+        discount=discount,
+        tax_pct=tax_pct or 0.0,
+        tax_amount=tax_amount,
+        total=taxable + tax_amount,
+        currency=plan.currency,
+        notes=notes,
+    )
+
+    await add_invoice_line(
+        session,
+        invoice_id=invoice.id,
+        description=f"{plan.name} — {billed_users} pengguna aktif",
+        qty=billed_users,
+        unit_price=unit_price,
+        amount=usage_amount,
+        sort_order=0,
+    )
+    # Only shown when it actually bit, so the tenant can see why the total is
+    # above what the per-user maths alone would give.
+    if subtotal > usage_amount:
+        await add_invoice_line(
+            session,
+            invoice_id=invoice.id,
+            description="Penyesuaian tagihan minimum",
+            qty=1,
+            unit_price=subtotal - usage_amount,
+            amount=subtotal - usage_amount,
+            sort_order=1,
+        )
+
+    return invoice
 
 
 async def get_invoice_by_number(session: AsyncSession, invoice_number: str) -> Invoice:

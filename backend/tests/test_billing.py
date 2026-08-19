@@ -106,7 +106,6 @@ async def test_create_plan(client: AsyncClient, super_admin):
         json={
             "code": "starter",
             "name": "Starter Plan",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
             "features": {"billing.enabled": True},
@@ -131,7 +130,6 @@ async def test_list_plans(client: AsyncClient, super_admin):
         json={
             "code": "test-plan",
             "name": "Test Plan",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -156,7 +154,6 @@ async def test_update_plan(client: AsyncClient, super_admin):
         json={
             "code": "update-test",
             "name": "Before Update",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -185,7 +182,6 @@ async def test_delete_plan(client: AsyncClient, super_admin):
         json={
             "code": "delete-test",
             "name": "To Delete",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -212,7 +208,6 @@ async def test_create_plan_tier(client: AsyncClient, super_admin):
         json={
             "code": "tier-test",
             "name": "Tier Test Plan",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -250,7 +245,6 @@ async def test_list_plan_tiers(client: AsyncClient, super_admin):
         json={
             "code": "list-tier-test",
             "name": "List Tier Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -289,7 +283,6 @@ async def test_delete_plan_tier(client: AsyncClient, super_admin):
         json={
             "code": "delete-tier-test",
             "name": "Delete Tier Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -334,7 +327,6 @@ async def test_create_subscription(client: AsyncClient, super_admin):
         json={
             "code": "sub-test",
             "name": "Subscription Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -374,7 +366,6 @@ async def test_update_subscription_status(client: AsyncClient, super_admin):
         json={
             "code": "status-test",
             "name": "Status Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -418,7 +409,6 @@ async def test_cancel_subscription(client: AsyncClient, super_admin):
         json={
             "code": "cancel-test",
             "name": "Cancel Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -469,7 +459,6 @@ async def test_create_invoice(client: AsyncClient, super_admin):
         json={
             "code": "invoice-test",
             "name": "Invoice Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -529,7 +518,6 @@ async def test_list_invoices(client: AsyncClient, super_admin):
         json={
             "code": "list-inv-test",
             "name": "List Invoice Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -591,7 +579,6 @@ async def test_update_invoice(client: AsyncClient, super_admin):
         json={
             "code": "update-inv-test",
             "name": "Update Invoice Test",
-            "edition": "business",
             "default_billing_cycle": "annual",
             "currency": "IDR",
         },
@@ -736,7 +723,6 @@ async def _create_plan_in_session(session: AsyncSession, code: str) -> Plan:
     plan = Plan(
         code=code,
         name=f"Test Plan {code}",
-        edition="business",
         default_billing_cycle="annual",
         currency="IDR",
         features={},
@@ -755,15 +741,29 @@ async def _create_plan_in_session(session: AsyncSession, code: str) -> Plan:
 # ``require_feature("x")(MockPlan())``, which merely built a coroutine and then
 # tried to call it, raising TypeError before any assertion could run.
 #
-# Note the gate resolves "the plan" as *any* active plan carrying a tier, not
-# the plan the tenant is actually subscribed to. That is worth revisiting, but
-# the function has no callers in app/ today, so these tests pin the behaviour
-# as it stands rather than the behaviour it arguably should have.
+# The gate resolves the plan through the tenant's own subscription, so each of
+# these tests binds one. It used to pick *any* active plan carrying a tier,
+# which meant one tenant's entitlements answered for everybody.
+async def _subscribe(session: AsyncSession, tenant_id: str, plan_id: str) -> None:
+    """Give a tenant a live subscription to a plan."""
+    now = datetime.now(timezone.utc)
+    session.add(
+        TenantSubscription(
+            tenant_id=tenant_id,
+            plan_id=plan_id,
+            billing_cycle="annual",
+            discount_pct=0,
+            starts_at=now,
+            ends_at=now + timedelta(days=365),
+            status=SubscriptionStatus.active,
+        )
+    )
+    await session.flush()
+
+
 @pytest.mark.asyncio
 async def test_require_feature_check():
-    """A feature enabled on the active plan passes the gate."""
-    from fastapi import HTTPException  # noqa: F401  (symmetry with the test below)
-
+    """A feature enabled on the tenant's own plan passes the gate."""
     from app.api.deps import Principal, require_feature
 
     async with SessionFactory() as session:
@@ -775,6 +775,7 @@ async def test_require_feature_check():
             PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
         )
         await session.flush()
+        await _subscribe(session, tenant_id, plan.id)
 
         principal = Principal(
             subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
@@ -785,7 +786,7 @@ async def test_require_feature_check():
 
 @pytest.mark.asyncio
 async def test_require_feature_missing():
-    """A feature absent from the active plan is refused with 403."""
+    """A feature absent from the tenant's own plan is refused with 403."""
     from fastapi import HTTPException
 
     from app.api.deps import Principal, require_feature
@@ -799,6 +800,47 @@ async def test_require_feature_missing():
             PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
         )
         await session.flush()
+        await _subscribe(session, tenant_id, plan.id)
+
+        principal = Principal(
+            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
+        )
+        with pytest.raises(HTTPException) as exc:
+            await require_feature("billing.enabled", principal, session)
+        assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_require_feature_reads_only_the_tenants_own_plan():
+    """Another tenant's generous plan does not unlock this tenant's gate.
+
+    This is the case the old query got wrong: it selected any active plan with
+    a tier, so whichever plan sorted first granted its features to everyone.
+    """
+    from fastapi import HTTPException
+
+    from app.api.deps import Principal, require_feature
+
+    async with SessionFactory() as session:
+        await _set_tenant(session, None, platform=True)
+
+        generous = await _create_plan_in_session(session, "generous-plan")
+        generous.features = {"billing": {"enabled": True}}
+        session.add(
+            PlanTier(plan_id=generous.id, min_users=1, unit_price=0, min_charge=0)
+        )
+        stingy = await _create_plan_in_session(session, "stingy-plan")
+        stingy.features = {}
+        session.add(
+            PlanTier(plan_id=stingy.id, min_users=1, unit_price=0, min_charge=0)
+        )
+        await session.flush()
+
+        other_tenant = await _create_tenant_in_session(session, "the-generous-one")
+        await _subscribe(session, other_tenant, generous.id)
+
+        tenant_id = await _create_tenant_in_session(session, "the-stingy-one")
+        await _subscribe(session, tenant_id, stingy.id)
 
         principal = Principal(
             subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id

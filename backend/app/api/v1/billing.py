@@ -22,6 +22,7 @@ from app.schemas import (
     BillingSummary,
     Envelope,
     InvoiceCreate,
+    InvoiceGenerate,
     InvoiceLineSchema,
     InvoiceSchema,
     InvoiceUpdate,
@@ -66,7 +67,6 @@ async def create_plan(
     plan = Plan(
         code=payload.code,
         name=payload.name,
-        edition=payload.edition,
         default_billing_cycle=payload.default_billing_cycle,
         currency=payload.currency,
         features=payload.features or {},
@@ -585,6 +585,50 @@ async def create_invoice(
         actor="",
         tenant_id=invoice.tenant_id,
         detail={"invoice_number": invoice.invoice_number, "total": invoice.total},
+    )
+    return Envelope(data=InvoiceSchema.model_validate(invoice))
+
+
+@router.post(
+    "/invoices/generate",
+    response_model=Envelope[InvoiceSchema],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_super_admin)],
+)
+async def generate_invoice(
+    payload: InvoiceGenerate,
+    session: AsyncSession = Depends(get_db_unscoped),
+) -> Envelope[InvoiceSchema]:
+    """Raise an invoice for a period from measured usage.
+
+    Unlike ``POST /invoices``, no amount is accepted from the caller: the
+    billable user count comes from attendance records in the period, and the
+    plan's tier band turns it into money.
+    """
+    try:
+        invoice = await billing_service.generate_invoice(
+            session,
+            tenant_id=payload.tenant_id,
+            period_start=payload.period_start,
+            period_end=payload.period_end,
+            tax_pct=payload.tax_pct,
+            notes=payload.notes,
+        )
+    except billing_service.BillingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await session.refresh(invoice, attribute_names=["lines"])
+
+    await audit_service.record(
+        session,
+        action="billing.invoice.generated",
+        actor="",
+        tenant_id=invoice.tenant_id,
+        detail={
+            "invoice_number": invoice.invoice_number,
+            "billed_users": invoice.billed_users,
+            "total": invoice.total,
+        },
     )
     return Envelope(data=InvoiceSchema.model_validate(invoice))
 

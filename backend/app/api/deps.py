@@ -28,8 +28,8 @@ from app.models import (
     EmbedSession,
     EmbedSessionStatus,
     Plan,
-    PlanTier,
     Role,
+    SubscriptionStatus,
     TenantSubscription,
 )
 
@@ -233,13 +233,23 @@ async def require_feature(
             detail="No tenant context for feature gate",
         )
 
-    stmt = select(Plan).join(PlanTier, Plan.id == PlanTier.plan_id).where(
-        Plan.is_active.is_(True),
-        PlanTier.min_users <= 999999,  # any active tier counts
-    ).limit(1)
+    # Resolve the plan through THIS tenant's subscription. Selecting any active
+    # plan meant every tenant was judged against whichever plan happened to
+    # sort first — one tenant's entitlements silently granted to all of them.
+    stmt = (
+        select(Plan)
+        .join(TenantSubscription, TenantSubscription.plan_id == Plan.id)
+        .where(
+            TenantSubscription.tenant_id == principal.tenant_id,
+            TenantSubscription.status.in_(
+                (SubscriptionStatus.trial, SubscriptionStatus.active)
+            ),
+        )
+        .limit(1)
+    )
     plan = (await session.execute(stmt)).scalar_one_or_none()
     if plan is None:
-        return  # no plan → allow (trial / unassigned)
+        return  # no live subscription → allow (trial / unassigned)
 
     features: dict = plan.features or {}
     keys = feature.split(".")

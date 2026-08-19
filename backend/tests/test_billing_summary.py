@@ -90,7 +90,6 @@ async def _plan(session, code: str) -> Plan:
     plan = Plan(
         code=code,
         name=f"Plan {code}",
-        edition="business",
         default_billing_cycle="annual",
         currency="IDR",
         features={},

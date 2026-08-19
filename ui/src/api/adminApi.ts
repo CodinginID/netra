@@ -613,8 +613,7 @@ export interface PlanOut {
   id: string
   code: string
   name: string
-  edition: 'education' | 'business'
-  default_billing_cycle: 'annual' | 'semester' | 'monthly'
+  default_billing_cycle: 'annual' | 'semiannual' | 'monthly'
   currency: string
   features: Record<string, unknown>
   is_active: boolean
@@ -625,8 +624,7 @@ export interface PlanOut {
 export interface PlanCreate {
   code: string
   name: string
-  edition: 'education' | 'business'
-  default_billing_cycle?: 'annual' | 'semester' | 'monthly'
+  default_billing_cycle?: 'annual' | 'semiannual' | 'monthly'
   currency?: string
   features?: Record<string, unknown>
   is_active?: boolean
@@ -656,7 +654,7 @@ export interface SubscriptionOut {
   id: string
   tenant_id: string
   plan_id: string
-  billing_cycle: 'annual' | 'semester' | 'monthly'
+  billing_cycle: 'annual' | 'semiannual' | 'monthly'
   unit_price_override: number | null
   discount_pct: number
   starts_at: string
@@ -670,7 +668,7 @@ export interface SubscriptionOut {
 export interface SubscriptionCreate {
   tenant_id: string
   plan_id: string
-  billing_cycle: 'annual' | 'semester' | 'monthly'
+  billing_cycle: 'annual' | 'semiannual' | 'monthly'
   unit_price_override?: number | null
   discount_pct?: number
   starts_at: string
