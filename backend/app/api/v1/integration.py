@@ -67,11 +67,14 @@ async def list_attendance(
     user_id: str | None = Query(None, description="Filter to a single user"),
     date_from: str | None = Query(None, alias="from", description="YYYY-MM-DD (inclusive)"),
     date_to: str | None = Query(None, alias="to", description="YYYY-MM-DD (inclusive)"),
-    _: ApiPrincipal = Depends(ATTENDANCE_READ),
+    principal: ApiPrincipal = Depends(ATTENDANCE_READ),
     session: AsyncSession = Depends(get_api_db),
 ) -> Envelope[dict]:
     """Paginated attendance records for the calling tenant."""
-    filters = [AttendanceRecord.deleted_at.is_(None), AttendanceRecord.tenant_id == principal.tenant_id]
+    filters = [
+        AttendanceRecord.deleted_at.is_(None),
+        AttendanceRecord.tenant_id == principal.tenant_id,
+    ]
     if user_id is not None:
         filters.append(AttendanceRecord.user_id == user_id)
     if date_from is not None:
@@ -133,11 +136,15 @@ async def daily_status(
 async def list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=1000),
-    _: ApiPrincipal = Depends(USERS_READ),
+    principal: ApiPrincipal = Depends(USERS_READ),
     session: AsyncSession = Depends(get_api_db),
 ) -> Envelope[dict]:
     """Paginated end-users for the calling tenant, with their enrolled flag."""
-    filters = [User.role == Role.end_user, User.deleted_at.is_(None), User.tenant_id == principal.tenant_id]
+    filters = [
+        User.role == Role.end_user,
+        User.deleted_at.is_(None),
+        User.tenant_id == principal.tenant_id,
+    ]
     total = (await session.execute(select(func.count(User.id)).where(*filters))).scalar() or 0
     offset = (page - 1) * limit
     rows = (

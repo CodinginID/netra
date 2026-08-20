@@ -1,7 +1,7 @@
 """Trash management — hard-delete purge of all soft-deleted entities."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
