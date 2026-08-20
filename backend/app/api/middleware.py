@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.core.logging import request_id_ctx, scope_ctx, tenant_id_ctx, timing_ctx
+from app.core.logging import request_id_ctx, scope_ctx, tenant_id_ctx
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -18,19 +18,32 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         token_r = request_id_ctx.set(request_id)
         token_t = tenant_id_ctx.set(None)
 
-        # Capture HTTP request context for every log line in this request.
-        token_scope = scope_ctx.set({"method": request.method, "path": request.url.path})
+        # Capture HTTP request context for every log line in this request. The
+        # dict is kept as a local: the context default is read-only, so writing
+        # through scope_ctx.get() is only valid on a request that got this far.
+        scope: dict[str, object] = {"method": request.method, "path": request.url.path}
+        token_s = scope_ctx.set(scope)
 
-        # Start timing — process_time_ms is reported in the post-response log.
+        # Start timing. Note that nothing emits a log line after the block
+        # below, so the status and duration written into the scope are only
+        # visible to a caller that adds one — see the note in core/logging.
         start = time.perf_counter()
+        status_code: int | None = None
         try:
             response = await call_next(request)
+            status_code = response.status_code
         finally:
-            process_time_ms = (time.perf_counter() - start) * 1000
-            scope_ctx.get().update(
-                {"status_code": response.status_code, "process_time_ms": round(process_time_ms, 2)}
-            )
-            timing_ctx.get().update({"process_time_ms": process_time_ms})
+            # `response` is deliberately not read here. When call_next raises —
+            # a client disconnecting mid-request, or any unhandled error — it
+            # was never assigned, so reading it raised UnboundLocalError from
+            # inside the finally and that replaced the real exception on its
+            # way out. status_code simply stays None when there is no response
+            # to ask, and the duration is still recorded either way: a request
+            # that blew up is the one whose timing is worth having.
+            scope["process_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+            if status_code is not None:
+                scope["status_code"] = status_code
+            scope_ctx.reset(token_s)
             request_id_ctx.reset(token_r)
             tenant_id_ctx.reset(token_t)
         response.headers["x-request-id"] = request_id

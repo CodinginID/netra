@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from contextvars import ContextVar
+from types import MappingProxyType
 
 import structlog
 
 # Request-scoped context vars, injected into every log line.
 request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
 tenant_id_ctx: ContextVar[str | None] = ContextVar("tenant_id", default=None)
-scope_ctx: ContextVar[dict] = ContextVar("scope", default={})
-timing_ctx: ContextVar[dict] = ContextVar("timing", default={})
+# The middleware sets a fresh dict per request. The default is read-only rather
+# than a plain {}: it is shared by every caller, so one request writing timing
+# into it would stamp that request's numbers on every startup and background-job
+# log line for the life of the process.
+scope_ctx: ContextVar[Mapping[str, object]] = ContextVar("scope", default=MappingProxyType({}))
 
 
 def _inject_context(_: object, __: str, event_dict: dict) -> dict:
@@ -25,7 +30,13 @@ def _inject_context(_: object, __: str, event_dict: dict) -> dict:
 
 
 def _inject_http(_: object, __: str, event_dict: dict) -> dict:
-    """Inject HTTP request attributes from middleware scope into every log line."""
+    """Inject HTTP request attributes from middleware scope into every log line.
+
+    In practice that means method and path: status_code and process_time_ms are
+    only written once the response exists, which is after the last log line of
+    the request has already been emitted. They are here so that adding a
+    completion log line in the middleware is all it takes to surface them.
+    """
     scope = scope_ctx.get()
     event_dict.setdefault("method", scope.get("method"))
     event_dict.setdefault("path", scope.get("path"))
