@@ -1153,37 +1153,6 @@
   padding: 16px 20px;
   margin-bottom: 16px;
 }
-.schedule-form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-/* ── Schedule row card ── */
-.schedule-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  margin-bottom: 8px;
-}
-.schedule-row-name { flex: 1 1 180px; }
-.schedule-row-name strong { display: block; font-weight: 600; font-size: 15px; color: var(--color-text); }
-.schedule-row-name span { font-size: 13px; color: var(--color-text-muted); margin-top: 2px; display: block; }
-.schedule-row-time {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  flex: 0 0 150px;
-}
-.schedule-row-grace { font-size: 13px; color: var(--color-text-secondary); flex: 0 0 140px; }
-.schedule-row-badge { flex: 0 0 90px; }
-.schedule-row-actions { display: flex; gap: 4px; }
-
 /* ── Confirm dialog (tenants) ── */
 .confirm-text {
   font-size: 14px;

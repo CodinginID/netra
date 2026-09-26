@@ -145,25 +145,6 @@
 .record-card-row .label { color: var(--color-text-muted); }
 .record-card-row .value { color: var(--color-text); font-weight: 500; }
 
-/* ── Schedule row cards mobile ── */
-.schedule-row {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px 16px;
-}
-/* Reset ALL flex children — otherwise .schedule-row-name (flex: 1 1 180px)
-   grows vertically in a column and leaves a big empty gap. */
-.schedule-row-name,
-.schedule-row-time,
-.schedule-row-grace,
-.schedule-row-badge,
-.schedule-row-actions {
-  flex: 0 0 auto !important;
-  font-size: 13px;
-}
-.schedule-row-actions { margin-top: 4px; }
-
 /* ── Activity row mobile ── */
 .activity-row {
   flex-direction: column;
@@ -198,9 +179,6 @@
   flex-direction: column;
   align-items: stretch;
   padding: 14px 16px;
-}
-.schedule-form-field {
-  width: 100%;
 }
 
 /* ── Toast mobile — show at bottom above nav ── */

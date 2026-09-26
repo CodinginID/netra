@@ -1,15 +1,10 @@
 import { useState } from 'react'
-import { Plus, Clock, Edit2, Trash2, X } from 'lucide-react'
+import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
 import { useI18n } from '@/store/i18nStore'
-import {
-  type ScheduleOut,
-  type ScheduleCreate,
-  type SessionRule,
-  type ScheduleRules,
-} from '@/api/adminApi'
+import type { ScheduleCreate, ScheduleOut } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
 import { SwipeCard } from '@/components/SwipeCard'
 import { PullToRefresh } from '@/components/PullToRefresh'
@@ -17,157 +12,14 @@ import { MobileFab } from '@/components/MobileFab'
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
 import { useSchedules } from '@/hooks/useApiQueries'
 import { useCreateSchedule, useUpdateSchedule, useDeleteSchedule, useRestoreSchedule } from '@/hooks/useApiMutations'
-import { DayHoursEditor } from './ScheduleDayHours'
-import { dayRowsToRules, initDayRows, useDaySummary, type DayRow } from './scheduleDays'
+import { ScheduleCard } from './ScheduleCard'
+import { ScheduleFormModal } from './ScheduleFormModal'
 import '@/styles/layout.css'
+import '@/styles/schedules.css'
 
-function StatusBadge({ active }: { active: boolean }) {
-  return (
-    <span className={`badge ${active ? 'badge-blue' : 'badge-gray'}`}>
-      {active ? 'Default' : 'Normal'}
-    </span>
-  )
-}
+type Filter = 'all' | 'shift' | 'session'
 
-interface ScheduleFormProps {
-  onSubmit: (payload: { name: string; rules: ScheduleRules; grace_minutes: number }) => void
-  onCancel: () => void
-  submitting: boolean
-  initial?: ScheduleOut
-}
-
-const DEFAULT_SESSION: SessionRule = { name: 'Sesi 1', start: '07:30', end: '09:00' }
-
-function ScheduleFormFields({
-  scheduleType, setScheduleType,
-  dayRows, setDayRows,
-  graceMinutes, setGraceMinutes,
-  sessions, setSessions,
-}: {
-  scheduleType: 'shift' | 'session'
-  setScheduleType: (t: 'shift' | 'session') => void
-  dayRows: DayRow[]; setDayRows: (rows: DayRow[]) => void
-  graceMinutes: number; setGraceMinutes: (v: number) => void
-  sessions: SessionRule[]; setSessions: (s: SessionRule[]) => void
-}) {
-  const { t } = useI18n()
-  function updateSession(i: number, key: keyof SessionRule, val: string) {
-    setSessions(sessions.map((s, idx) => idx === i ? { ...s, [key]: val } : s))
-  }
-  return (
-    <>
-      <div className="schedule-type-row">
-        {(['shift', 'session'] as const).map((st) => (
-          <button key={st} type="button"
-            className={`schedule-type-btn${scheduleType === st ? ' schedule-type-btn--active' : ''}`}
-            onClick={() => setScheduleType(st)}
-          >
-            {st === 'shift' ? t('schedules.shift') : t('schedules.session')}
-          </button>
-        ))}
-      </div>
-
-      {scheduleType === 'shift' ? (
-        <DayHoursEditor rows={dayRows} onChange={setDayRows} />
-      ) : (
-        <div className="session-list">
-          {sessions.map((s, i) => (
-            <div key={i} className="session-row">
-              <input className="field-input" placeholder={t('schedules.session_name')} value={s.name} onChange={(e) => updateSession(i, 'name', e.target.value)} required aria-label={t('schedules.session_name')} />
-              <input className="field-input" type="time" value={s.start} onChange={(e) => updateSession(i, 'start', e.target.value)} required aria-label={t('schedules.session_start')} />
-              <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>–</span>
-              <input className="field-input" type="time" value={s.end} onChange={(e) => updateSession(i, 'end', e.target.value)} required aria-label={t('schedules.session_end')} />
-              {sessions.length > 1 && (
-                <button type="button" className="btn-icon btn-icon-danger" aria-label={t('schedules.delete_session')} onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSessions([...sessions, { name: `Sesi ${sessions.length + 1}`, start: '07:00', end: '08:30' }])}>
-            <Plus size={14} /> Tambah Sesi
-          </button>
-        </div>
-      )}
-
-      <label className="schedule-form-field" style={{ width: 140 }}>
-        Toleransi (menit)
-        <input className="field-input" type="number" min={0} value={graceMinutes} onChange={(e) => setGraceMinutes(Number(e.target.value))} required />
-      </label>
-    </>
-  )
-}
-
-function ScheduleForm({ onSubmit, onCancel, submitting }: ScheduleFormProps) {
-  const { t } = useI18n()
-  const [name, setName] = useState('')
-  const [scheduleType, setScheduleType] = useState<'shift' | 'session'>('shift')
-  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows())
-  const [graceMinutes, setGraceMinutes] = useState(15)
-  const [sessions, setSessions] = useState<SessionRule[]>([DEFAULT_SESSION])
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const rules: ScheduleRules = scheduleType === 'shift'
-      ? dayRowsToRules(dayRows)
-      : { type: 'session', sessions }
-    onSubmit({ name: name.trim(), rules, grace_minutes: graceMinutes })
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="data-card" style={{ padding: '20px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <label className="schedule-form-field">{t('schedules.form_name')}
-        <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('schedules.form_name_placeholder')} required />
-      </label>
-      <ScheduleFormFields {...{ scheduleType, setScheduleType, dayRows, setDayRows, graceMinutes, setGraceMinutes, sessions, setSessions }} />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim() || (scheduleType === 'shift' && !dayRows.some((r) => r.enabled))}>{submitting ? t('common.saving') : t('common.save')}</button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
-      </div>
-    </form>
-  )
-}
-
-function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
-  schedule: ScheduleOut
-  onSubmit: (payload: Partial<ScheduleCreate>) => void
-  onClose: () => void
-  submitting: boolean
-}) {
-  const { t } = useI18n()
-  const [name, setName] = useState(schedule.name)
-  const [scheduleType, setScheduleType] = useState<'shift' | 'session'>(schedule.rules.type === 'session' ? 'session' : 'shift')
-  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows(schedule.rules))
-  const [graceMinutes, setGraceMinutes] = useState(schedule.grace_minutes)
-  const [sessions, setSessions] = useState<SessionRule[]>(schedule.rules.sessions ?? [DEFAULT_SESSION])
-  const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const rules: ScheduleRules = scheduleType === 'shift'
-      ? dayRowsToRules(dayRows)
-      : { type: 'session', sessions }
-    onSubmit({ name: name.trim(), rules, grace_minutes: graceMinutes })
-  }
-
-  return (
-    <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
-      <div className="modal-card" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">{t('schedules.edit_title')}</h3>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field"><label htmlFor="edit-schedule-name">{t('schedules.form_name')}</label>
-            <input id="edit-schedule-name" className="field-input" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <ScheduleFormFields {...{ scheduleType, setScheduleType, dayRows, setDayRows, graceMinutes, setGraceMinutes, sessions, setSessions }} />
-          <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim() || (scheduleType === 'shift' && !dayRows.some((r) => r.enabled))}>{submitting ? t('common.saving') : t('common.save_changes')}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
+const typeOf = (s: ScheduleOut): Exclude<Filter, 'all'> => (s.rules.type === 'session' ? 'session' : 'shift')
 
 function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
   schedule: ScheduleOut
@@ -195,16 +47,14 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
   )
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
-
 export function SchedulesPage() {
   const { t } = useI18n()
   const { show } = useToast()
-  const daySummary = useDaySummary()
   useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
-  const [showForm, setShowForm] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState<ScheduleOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduleOut | null>(null)
 
@@ -212,93 +62,95 @@ export function SchedulesPage() {
   const schedules = paginatedSchedules?.items ?? []
   const total = paginatedSchedules?.total ?? 0
   const pages = paginatedSchedules?.pages ?? 0
+  // The filter works on the loaded page; counts are for that page too.
+  const counts = {
+    all: schedules.length,
+    shift: schedules.filter((s) => typeOf(s) === 'shift').length,
+    session: schedules.filter((s) => typeOf(s) === 'session').length,
+  }
+  const visible = filter === 'all' ? schedules : schedules.filter((s) => typeOf(s) === filter)
 
   const createMutation = useCreateSchedule(() => {
-    setShowForm(false)
-    show('Jadwal berhasil disimpan', 'success')
+    setShowCreate(false)
+    show(t('schedules.toast_created'), 'success')
   })
-
-  const updateMutation = useUpdateSchedule(() => {
-    setEditTarget(null)
-    show('Jadwal berhasil diperbarui', 'success')
-  })
-
+  const updateMutation = useUpdateSchedule()
   const deleteMutation = useDeleteSchedule()
   const restoreMutation = useRestoreSchedule()
 
-  function handleCreate(payload: { name: string; rules: ScheduleRules; grace_minutes: number }) {
+  function handleCreate(payload: ScheduleCreate) {
     createMutation.mutate(payload, {
-      onError: (err) => {
-        show(err instanceof Error ? err.message : 'Gagal menyimpan jadwal', 'error')
-      },
+      onError: (err) => show(err instanceof Error ? err.message : t('schedules.toast_create_failed'), 'error'),
     })
   }
 
-  function handleEdit(payload: Partial<ScheduleCreate>) {
-    if (!editTarget) return
-    updateMutation.mutate({ scheduleId: editTarget.id, payload }, {
-      onError: (err) => {
-        show(err instanceof Error ? err.message : 'Gagal memperbarui jadwal', 'error')
+  function handleUpdate(schedule: ScheduleOut, payload: Partial<ScheduleCreate>, toastKey: string) {
+    updateMutation.mutate({ scheduleId: schedule.id, payload }, {
+      onSuccess: () => {
+        setEditTarget(null)
+        show(t(toastKey, { name: schedule.name }), 'success')
       },
+      onError: (err) => show(err instanceof Error ? err.message : t('schedules.toast_update_failed'), 'error'),
     })
   }
 
   function handleDelete() {
     if (!deleteTarget) return
-    const deletedSchedule = { ...deleteTarget }
-    deleteMutation.mutate(deletedSchedule.id, {
+    const deleted = { ...deleteTarget }
+    deleteMutation.mutate(deleted.id, {
       onSuccess: () => {
         setDeleteTarget(null)
-        show(`${deletedSchedule.name} berhasil dihapus`, 'success', {
-          label: 'Undo',
+        show(t('schedules.toast_deleted', { name: deleted.name }), 'success', {
+          label: t('common.undo'),
           onClick: () => {
-            restoreMutation.mutate(deletedSchedule.id, {
-              onError: () => {
-                show('Gagal membatalkan penghapusan', 'error')
-              },
+            restoreMutation.mutate(deleted.id, {
+              onError: () => show(t('schedules.toast_restore_failed'), 'error'),
             })
           },
         })
       },
-      onError: (err) => {
-        show(err instanceof Error ? err.message : 'Gagal menghapus jadwal', 'error')
-      },
+      onError: (err) => show(err instanceof Error ? err.message : t('schedules.toast_delete_failed'), 'error'),
     })
   }
 
   return (
-    <div>
-      <div className="page-toolbar" style={{ marginBottom: '1.5rem' }}>
-        <h2 className="page-title">Jadwal Kerja</h2>
-        {!showForm && (
-          <button className="btn btn-primary add-fab-twin" onClick={() => setShowForm(true)}>
-            <Plus size={16} /> Tambah Jadwal
-          </button>
-        )}
+    <div className="sp">
+      <div className="sp-header">
+        <div>
+          <h2 className="page-title" style={{ margin: 0 }}>{t('schedules.title')}</h2>
+          <p className="sp-subtitle">{t('schedules.subtitle')}</p>
+        </div>
+        <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
+          <Plus size={16} /> {t('schedules.add')}
+        </button>
       </div>
 
       {error && <div className="error-banner">{error.message}</div>}
 
-      {showForm && (
-        <ScheduleForm
-          onSubmit={handleCreate}
-          onCancel={() => setShowForm(false)}
-          submitting={createMutation.isPending}
-        />
+      {!isLoading && schedules.length > 0 && (
+        <div className="sp-toolbar">
+          <div className="seg seg--inline" role="group" aria-label={t('schedules.filter_label')}>
+            {(['all', 'shift', 'session'] as const).map((f) => (
+              <button key={f} type="button" className={`seg-btn${filter === f ? ' seg-btn--active' : ''}`}
+                aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                {t(`schedules.filter_${f}`)} · {counts[f]}
+              </button>
+            ))}
+          </div>
+          <div className="sp-legend" aria-hidden="true">
+            <span><i className="sp-legend-on" />{t('schedules.legend_workday')}</span>
+            <span><i className="sp-legend-off" />{t('schedules.day_off')}</span>
+          </div>
+        </div>
       )}
 
       {isLoading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="data-card"
-              style={{ padding: '16px 20px', display: 'flex', gap: 16 }}
-            >
-              <div className="skeleton skeleton-text" style={{ flex: 2 }} />
-              <div className="skeleton skeleton-text" style={{ flex: 1 }} />
-              <div className="skeleton skeleton-text" style={{ flex: 1 }} />
-              <div className="skeleton skeleton-badge" />
+        <div className="sp-grid">
+          {[1, 2].map((i) => (
+            <div key={i} className="sc-card">
+              <div className="skeleton skeleton-text" style={{ width: '45%' }} />
+              <div className="skeleton skeleton-text sm" style={{ width: '65%' }} />
+              <div className="skeleton" style={{ height: 72, borderRadius: 8 }} />
             </div>
           ))}
         </div>
@@ -308,76 +160,50 @@ export function SchedulesPage() {
         <div className="data-card">
           <EmptyState
             icon="calendar"
-            title="Belum ada jadwal"
-            description="Buat jadwal kehadiran default untuk tenant Anda"
-            action={
-              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                Tambah Jadwal
-              </button>
-            }
+            title={t('schedules.empty')}
+            description={t('schedules.empty_desc')}
+            action={<button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('schedules.add')}</button>}
           />
         </div>
       )}
 
       {!isLoading && schedules.length > 0 && (
         <PullToRefresh onRefresh={() => refetch()}>
-          {schedules.map((s) => (
-            <SwipeCard
-              key={s.id}
-              left={{ icon: <Edit2 size={20} />, label: t('common.edit'), variant: 'primary', onAction: () => setEditTarget(s) }}
-              right={{ icon: <Trash2 size={20} />, label: t('common.delete'), variant: 'danger', onAction: () => setDeleteTarget(s) }}
-            >
-            <div className="data-card schedule-row">
-              <div className="schedule-row-name">
-                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {s.name}
-                  <span className={`badge ${s.rules.type === 'session' ? 'badge-blue' : 'badge-gray'}`} style={{ fontSize: 10, padding: '1px 7px' }}>
-                    {s.rules.type === 'session' ? 'Sesi' : 'Shift'}
-                  </span>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {s.rules.type === 'session' ? `${s.rules.sessions?.length ?? 0} sesi` : daySummary(s.rules).days}
-                </div>
-              </div>
-
-              <div className="schedule-row-time">
-                <Clock size={15} />
-                {s.rules.type === 'session' && s.rules.sessions?.length
-                  ? `${s.rules.sessions[0].start} – ${s.rules.sessions[s.rules.sessions.length - 1].end}`
-                  : daySummary(s.rules).hours}
-              </div>
-
-              <div className="schedule-row-grace">
-                Toleransi: {s.grace_minutes} menit
-              </div>
-
-              <div className="schedule-row-badge">
-                <StatusBadge active={s.is_default} />
-              </div>
-
-              <div className="schedule-row-actions">
-                <button className="btn btn-ghost btn-sm" title="Edit" aria-label="Ubah jadwal" onClick={() => setEditTarget(s)}>
-                  <Edit2 size={16} />
-                </button>
-                <button className="btn btn-danger btn-sm" title="Hapus" aria-label="Hapus jadwal" onClick={() => setDeleteTarget(s)}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
+          {visible.length === 0 ? (
+            <p className="sp-empty-filter">{t('schedules.filter_empty')}</p>
+          ) : (
+            <div className="sp-grid">
+              {visible.map((s) => (
+                <SwipeCard
+                  key={s.id}
+                  left={{ icon: <Edit2 size={20} />, label: t('common.edit'), variant: 'primary', onAction: () => setEditTarget(s) }}
+                  right={{ icon: <Trash2 size={20} />, label: t('common.delete'), variant: 'danger', onAction: () => setDeleteTarget(s) }}
+                >
+                  <ScheduleCard
+                    schedule={s}
+                    onEdit={() => setEditTarget(s)}
+                    onDelete={() => setDeleteTarget(s)}
+                    onMakeDefault={() => handleUpdate(s, { is_default: true }, 'schedules.toast_default')}
+                  />
+                </SwipeCard>
+              ))}
             </div>
-            </SwipeCard>
-          ))}
+          )}
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         </PullToRefresh>
       )}
 
-      <MobileFab onClick={() => setShowForm(true)} label="Tambah Jadwal">
+      <MobileFab onClick={() => setShowCreate(true)} label={t('schedules.add')}>
         <Plus size={24} />
       </MobileFab>
 
+      {showCreate && (
+        <ScheduleFormModal onSubmit={handleCreate} onClose={() => setShowCreate(false)} submitting={createMutation.isPending} />
+      )}
       {editTarget && (
-        <EditScheduleModal
-          schedule={editTarget}
-          onSubmit={handleEdit}
+        <ScheduleFormModal
+          initial={editTarget}
+          onSubmit={(payload) => handleUpdate(editTarget, payload, 'schedules.toast_updated')}
           onClose={() => setEditTarget(null)}
           submitting={updateMutation.isPending}
         />

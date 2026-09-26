@@ -1037,12 +1037,6 @@ a:focus-visible {
 }
 
 /* ── Schedule type selector ── */
-.schedule-type-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
 .schedule-type-btn {
   padding: 6px 16px;
   border-radius: var(--radius-md);
@@ -1063,18 +1057,6 @@ a:focus-visible {
   color: var(--color-brand-text);
   font-weight: 600;
 }
-
-/* ── Session rows ── */
-.session-list { display: flex; flex-direction: column; gap: 8px; }
-
-.session-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.session-row .field-input { flex: 1; min-width: 80px; }
 
 /* ── Action (⋮) menu ── */
 .action-menu { position: relative; display: inline-flex; }
@@ -1115,18 +1097,6 @@ a:focus-visible {
 .action-menu-item--danger:focus-visible { background: var(--color-danger-bg); }
 .action-menu-hint { display: block; font-size: 12px; line-height: 1.35; margin-top: 2px; color: var(--color-text-muted); }
 .action-menu-divider { height: 1px; margin: 4px 0; background: var(--color-border); }
-
-/* ── Per-day schedule hours ── */
-.day-hours { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
-.day-hours-legend { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; padding: 0; }
-.day-hours-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 38px; }
-.day-hours-row .field-input { flex: 1; min-width: 96px; max-width: 160px; }
-.day-hours-day { display: inline-flex; align-items: center; gap: 8px; width: 72px; font-size: 14px; color: var(--color-text); cursor: pointer; }
-.day-hours-row--off .day-hours-day { color: var(--color-text-muted); }
-.day-hours-sep { color: var(--color-text-muted); font-size: 13px; }
-.day-hours-off { font-size: 13px; color: var(--color-text-muted); }
-.day-hours-apply { align-self: flex-start; }
-.day-hours-error { font-size: 13px; color: var(--color-danger, #dc2626); }
 
 /* ── Live badge ── */
 .live-badge {
