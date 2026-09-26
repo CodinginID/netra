@@ -2,52 +2,18 @@ import { useState } from 'react'
 import { Minus, Plus, X } from 'lucide-react'
 import { useI18n } from '@/store/i18nStore'
 import { useModalA11y } from '@/hooks/useModalA11y'
-import type { ScheduleCreate, ScheduleOut, ScheduleRules, SessionRule } from '@/api/adminApi'
+import type { ScheduleCreate, ScheduleOut, ScheduleRules } from '@/api/adminApi'
 import { DayHoursEditor, Switch } from './ScheduleDayHours'
-import { dayMinutes, dayRowsToRules, initDayRows, rowsValid, type DayRow } from './scheduleDays'
+import { SessionsEditor } from './ScheduleSessionsEditor'
+import {
+  dayRowsToRules, initDayRows, initSessionPlan, rowsValid, sessionPlanToRules, sessionPlanValid, sessionsOn,
+  type DayRow, type SessionPlan,
+} from './scheduleDays'
 
 type ScheduleType = 'shift' | 'session'
 
 const GRACE_MAX = 240
 const GRACE_STEP = 5
-
-function SessionsEditor({ sessions, onChange }: { sessions: SessionRule[]; onChange: (s: SessionRule[]) => void }) {
-  const { t } = useI18n()
-  const update = (i: number, key: keyof SessionRule, val: string) =>
-    onChange(sessions.map((s, idx) => (idx === i ? { ...s, [key]: val } : s)))
-  return (
-    <section className="dh" aria-labelledby="ss-title">
-      <div className="dh-head">
-        <div>
-          <h3 id="ss-title" className="sf-section-title">{t('schedules.sessions_label')}</h3>
-          <p className="sf-section-desc">{t('schedules.sessions_desc')}</p>
-        </div>
-      </div>
-      <div className="ss-list">
-        {sessions.map((s, i) => (
-          <div key={i} className="ss-row">
-            <span className="ss-no" aria-hidden="true">{i + 1}</span>
-            <input className="field-input" placeholder={t('schedules.session_name')} value={s.name} required
-              aria-label={t('schedules.session_name')} onChange={(e) => update(i, 'name', e.target.value)} />
-            <input className="field-input dh-time" type="time" value={s.start} required
-              aria-label={t('schedules.session_start')} onChange={(e) => update(i, 'start', e.target.value)} />
-            <span className="dh-sep">–</span>
-            <input className="field-input dh-time" type="time" value={s.end} required
-              aria-label={t('schedules.session_end')} onChange={(e) => update(i, 'end', e.target.value)} />
-            <button type="button" className="btn btn-ghost btn-sm ss-remove" aria-label={t('schedules.delete_session')}
-              disabled={sessions.length === 1} onClick={() => onChange(sessions.filter((_, j) => j !== i))}>
-              <X size={15} />
-            </button>
-          </div>
-        ))}
-        <button type="button" className="btn btn-ghost btn-sm ss-add"
-          onClick={() => onChange([...sessions, { name: `${t('schedules.session_prefix')} ${sessions.length + 1}`, start: '07:00', end: '08:30' }])}>
-          <Plus size={14} /> {t('schedules.add_session')}
-        </button>
-      </div>
-    </section>
-  )
-}
 
 /** Create (no `initial`) or edit a schedule. */
 export function ScheduleFormModal({ initial, onSubmit, onClose, submitting }: {
@@ -60,21 +26,20 @@ export function ScheduleFormModal({ initial, onSubmit, onClose, submitting }: {
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
   const [name, setName] = useState(initial?.name ?? '')
   const [type, setType] = useState<ScheduleType>(initial?.rules.type === 'session' ? 'session' : 'shift')
-  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows(initial?.rules))
-  const [sessions, setSessions] = useState<SessionRule[]>(
-    initial?.rules.sessions?.length ? initial.rules.sessions : [{ name: `${t('schedules.session_prefix')} 1`, start: '07:30', end: '09:00' }],
-  )
+  // Each editor starts from the saved rules only when they are of its type.
+  const isSessionRules = initial?.rules.type === 'session'
+  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows(isSessionRules ? undefined : initial?.rules))
+  const [plan, setPlan] = useState<SessionPlan>(() => initSessionPlan(isSessionRules ? initial?.rules : undefined))
   const [grace, setGrace] = useState(initial?.grace_minutes ?? 15)
   const [isDefault, setIsDefault] = useState(initial?.is_default ?? false)
 
-  const sessionsValid = sessions.every((s) => s.name.trim() && dayMinutes(s.start, s.end) !== null)
-  const valid = name.trim() !== '' && (type === 'shift' ? rowsValid(dayRows) : sessionsValid)
+  const valid = name.trim() !== '' && (type === 'shift' ? rowsValid(dayRows) : sessionPlanValid(plan))
   const clampGrace = (v: number) => Math.min(GRACE_MAX, Math.max(0, Number.isFinite(v) ? Math.round(v) : 0))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!valid) return
-    const body: ScheduleRules = type === 'shift' ? dayRowsToRules(dayRows) : { type: 'session', sessions }
+    const body: ScheduleRules = type === 'shift' ? dayRowsToRules(dayRows) : sessionPlanToRules(plan)
     // PATCH replaces `rules` whole — carry over configured holidays.
     const holidays = initial?.rules.holidays
     const rules = holidays?.length ? { ...body, holidays } : body
@@ -84,7 +49,10 @@ export function ScheduleFormModal({ initial, onSubmit, onClose, submitting }: {
     onSubmit(payload)
   }
 
-  const graceExample = type === 'shift' ? dayRows.find((r) => r.enabled)?.start : sessions[0]?.start
+  const firstSessionDay = plan.days.findIndex(Boolean)
+  const graceExample = type === 'shift'
+    ? dayRows.find((r) => r.enabled)?.start
+    : firstSessionDay >= 0 ? sessionsOn(plan, firstSessionDay)[0]?.start : undefined
 
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
@@ -122,7 +90,7 @@ export function ScheduleFormModal({ initial, onSubmit, onClose, submitting }: {
 
             {type === 'shift'
               ? <DayHoursEditor rows={dayRows} onChange={setDayRows} />
-              : <SessionsEditor sessions={sessions} onChange={setSessions} />}
+              : <SessionsEditor plan={plan} onChange={setPlan} />}
 
             <div className="sf-grid">
               <div className="sf-box">

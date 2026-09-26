@@ -58,13 +58,27 @@ def _shift_bounds(rules: dict, when: datetime) -> tuple[time | None, time | None
     return _parse_hhmm(hours.get("start")), _parse_hhmm(hours.get("end"))
 
 
+def _sessions_for(rules: dict, when: datetime) -> list[dict] | None:
+    """Sessions of a session schedule on ``when``'s weekday; None = day off.
+
+    ``day_sessions`` maps ISO weekday ("1" = Mon … "7" = Sun) to that day's list
+    of ``{"name", "start", "end"}``; a weekday missing from it is a day off.
+    Without ``day_sessions`` the flat ``sessions`` apply every day (legacy).
+    """
+    day_sessions = rules.get("day_sessions")
+    if not isinstance(day_sessions, dict):
+        return rules.get("sessions") or []
+    return day_sessions.get(str(when.isoweekday())) or None
+
+
 def _window_bounds(schedule: Schedule | None, when: datetime) -> tuple[time | None, time | None]:
     """(start, end) time-of-day for the schedule on ``when``, for shift or session rules."""
     if schedule is None:
         return None, None
     rules = schedule.rules or {}
     if rules.get("type") == "session":
-        sessions = rules.get("sessions") or []
+        # An empty list or a day off: no window restriction.
+        sessions = _sessions_for(rules, when)
         if not sessions:
             return None, None
         return _parse_hhmm(sessions[0].get("start")), _parse_hhmm(sessions[-1].get("end"))
@@ -176,13 +190,12 @@ def _parse_hhmm(value: str | None) -> time | None:
 
 
 def _compute_session_status(
-    rules: dict,
+    sessions: list[dict],
     grace_minutes: int,
     att_type: AttendanceType,
     now_t: time,
 ) -> AttendanceStatus:
     """Status for session-based schedules (school / university periods)."""
-    sessions = rules.get("sessions") or []
     if not sessions:
         return AttendanceStatus.on_time
     now_m = now_t.hour * 60 + now_t.minute
@@ -218,9 +231,12 @@ def compute_status(
     if occurred_at.date().isoformat() in holidays:
         return AttendanceStatus.on_time
 
-    # Session-based schedule (school / university periods)
+    # Session-based schedule (school / university periods). Day off: no penalty.
     if rules.get("type") == "session":
-        return _compute_session_status(rules, schedule.grace_minutes or 0, att_type, now_t)
+        sessions = _sessions_for(rules, occurred_at)
+        if sessions is None:
+            return AttendanceStatus.on_time
+        return _compute_session_status(sessions, schedule.grace_minutes or 0, att_type, now_t)
 
     # Shift-based (default). Non-working weekday: no penalty, like a holiday.
     bounds = _shift_bounds(rules, occurred_at)
@@ -256,7 +272,7 @@ def _compute_late_minutes(
         return 0
     rules = schedule.rules or {}
     if rules.get("type") == "session":
-        sessions = rules.get("sessions") or []
+        sessions = _sessions_for(rules, occurred_at)
         if not sessions:
             return 0
         first_start = _parse_hhmm(sessions[0].get("start"))

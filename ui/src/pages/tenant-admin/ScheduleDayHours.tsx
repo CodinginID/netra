@@ -1,11 +1,9 @@
 import { Copy } from 'lucide-react'
 import { useI18n } from '@/store/i18nStore'
 import {
-  ISO_DAYS, applyPreset, copyFirstToAll, dayMinutes, matchingPreset, useScheduleFormat, weeklyMinutes,
-  type DayPreset, type DayRow,
+  ISO_DAYS, PRESETS, applyPreset, copyFirstToAll, dayMinutes, matchingPreset, useScheduleFormat, weeklyMinutes,
+  type DayRow,
 } from './scheduleDays'
-
-const PRESETS: DayPreset[] = ['weekdays', 'mon_sat', 'daily']
 
 /** An on/off switch; a real button so it is keyboard- and screen-reader-operable. */
 export function Switch({ checked, onChange, label, disabled }: {

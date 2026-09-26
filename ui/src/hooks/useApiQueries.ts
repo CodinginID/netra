@@ -26,7 +26,7 @@ export const queryKeys = {
     if (params) key.push(params)
     return key as readonly unknown[]
   },
-  schedules: (params?: { page?: number; limit?: number; tenantId?: TenantScope }) => {
+  schedules: (params?: { page?: number; limit?: number; type?: api.ScheduleType; tenantId?: TenantScope }) => {
     const key: unknown[] = ['schedules']
     if (params) key.push(params)
     return key as readonly unknown[]
@@ -129,7 +129,7 @@ export function useApiKeyScopes() {
   })
 }
 
-export function useSchedules(params?: { page?: number; limit?: number }) {
+export function useSchedules(params?: { page?: number; limit?: number; type?: api.ScheduleType }) {
   const token = useAuthStore((s) => s.accessToken)
   const tenantId = useTenantScope()
   return useQuery({

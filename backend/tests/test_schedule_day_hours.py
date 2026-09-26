@@ -1,4 +1,4 @@
-"""Per-weekday schedule hours (rules.day_hours) — rule evaluation + input validation."""
+"""Per-weekday schedule rules (day_hours / day_sessions) — evaluation + validation."""
 
 from __future__ import annotations
 
@@ -115,3 +115,72 @@ def test_invalid_day_hours_rejected(day_hours):
 def test_valid_day_hours_accepted():
     assert ScheduleCreate(name="x", rules=RULES).rules == RULES
     assert ScheduleUpdate(name="x").rules is None
+
+
+SESSION_RULES = {
+    "type": "session",
+    "day_sessions": {
+        "1": [{"name": "Sesi 1", "start": "07:30", "end": "09:00"},
+              {"name": "Sesi 2", "start": "09:15", "end": "12:00"}],
+        "5": [{"name": "Sesi Jumat", "start": "07:00", "end": "10:00"}],
+    },
+}
+
+
+def test_session_check_in_uses_that_days_first_session():
+    s = _schedule(SESSION_RULES)
+    assert compute_status(s, IN, _at(MON, "07:20")) == ON_TIME
+    # 07:20 is late on Friday (first session 07:00) but on time on Monday (07:30).
+    assert compute_status(s, IN, _at(FRI, "07:20")) == LATE
+    assert _compute_late_minutes(s, _at(FRI, "07:20")) == 20
+
+
+def test_session_check_out_uses_that_days_last_session():
+    s = _schedule(SESSION_RULES)
+    assert compute_status(s, OUT, _at(FRI, "10:30")) == ON_TIME
+    assert compute_status(s, OUT, _at(MON, "10:30")) == EARLY
+
+
+def test_session_day_off_is_never_penalised():
+    s = _schedule(SESSION_RULES)
+    assert compute_status(s, IN, _at(SAT, "11:00")) == ON_TIME
+    assert compute_status(s, OUT, _at(SAT, "11:05")) == ON_TIME
+    assert _compute_late_minutes(s, _at(SAT, "11:00")) == 0
+    kwargs = {"has_checkin": True, "has_checkout": False, "last_record_at": None}
+    assert evaluate_scan(s, now=_at(SAT, "08:00"), **kwargs) == OUT
+
+
+def test_session_scan_window_follows_day_sessions():
+    s = _schedule(SESSION_RULES)
+    kwargs = {"has_checkin": True, "has_checkout": False, "last_record_at": None}
+    assert evaluate_scan(s, now=_at(FRI, "10:05"), **kwargs) == OUT
+    with pytest.raises(AttendanceRuleError):
+        evaluate_scan(s, now=_at(MON, "10:05"), **kwargs)
+
+
+def test_legacy_flat_sessions_still_apply_every_day():
+    sessions = [{"name": "S", "start": "07:30", "end": "09:00"}]
+    s = _schedule({"type": "session", "sessions": sessions})
+    assert compute_status(s, IN, _at(SAT, "07:45")) == LATE
+
+
+@pytest.mark.parametrize(
+    "day_sessions",
+    [
+        {},
+        {"8": [{"name": "S", "start": "07:00", "end": "08:00"}]},
+        {"1": []},
+        {"1": {"name": "S", "start": "07:00", "end": "08:00"}},
+        {"1": [{"name": "S", "start": "7:00", "end": "08:00"}]},
+        {"1": [{"name": "S", "start": "07:00"}]},
+    ],
+)
+def test_invalid_day_sessions_rejected(day_sessions):
+    with pytest.raises(ValidationError):
+        ScheduleCreate(name="x", rules={"type": "session", "day_sessions": day_sessions})
+    with pytest.raises(ValidationError):
+        ScheduleUpdate(rules={"type": "session", "day_sessions": day_sessions})
+
+
+def test_valid_day_sessions_accepted():
+    assert ScheduleCreate(name="x", rules=SESSION_RULES).rules == SESSION_RULES

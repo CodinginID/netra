@@ -416,6 +416,7 @@ class IntegrationUserUpsertOut(IntegrationUserOut):
 # Schedules (attendance rules)
 # --------------------------------------------------------------------------- #
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_WEEKDAYS = {"1", "2", "3", "4", "5", "6", "7"}
 
 
 def _check_day_hours(rules: dict | None) -> None:
@@ -426,12 +427,36 @@ def _check_day_hours(rules: dict | None) -> None:
     if not isinstance(day_hours, dict) or not day_hours:
         raise ValueError("rules.day_hours must be a non-empty object")
     for day, hours in day_hours.items():
-        if day not in {"1", "2", "3", "4", "5", "6", "7"}:
+        if day not in _WEEKDAYS:
             raise ValueError(f"rules.day_hours: invalid weekday {day!r} (use 1=Mon … 7=Sun)")
         if not isinstance(hours, dict) or not all(
             isinstance(hours.get(k), str) and _HHMM.match(hours[k]) for k in ("start", "end")
         ):
             raise ValueError(f"rules.day_hours[{day}] needs start and end as HH:MM")
+
+
+def _check_day_sessions(rules: dict | None) -> None:
+    """Validate optional per-weekday sessions: {"1".."7": [{"name", "start", "end"}, …]}."""
+    day_sessions = (rules or {}).get("day_sessions")
+    if day_sessions is None:
+        return
+    if not isinstance(day_sessions, dict) or not day_sessions:
+        raise ValueError("rules.day_sessions must be a non-empty object")
+    for day, sessions in day_sessions.items():
+        if day not in _WEEKDAYS:
+            raise ValueError(f"rules.day_sessions: invalid weekday {day!r} (use 1=Mon … 7=Sun)")
+        if not isinstance(sessions, list) or not sessions:
+            raise ValueError(f"rules.day_sessions[{day}] must be a non-empty list")
+        for sess in sessions:
+            if not isinstance(sess, dict) or not all(
+                isinstance(sess.get(k), str) and _HHMM.match(sess[k]) for k in ("start", "end")
+            ):
+                raise ValueError(f"rules.day_sessions[{day}] sessions need start and end as HH:MM")
+
+
+def _check_rules(rules: dict | None) -> None:
+    _check_day_hours(rules)
+    _check_day_sessions(rules)
 
 
 class ScheduleCreate(BaseModel):
@@ -443,7 +468,7 @@ class ScheduleCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_rules(self) -> ScheduleCreate:
-        _check_day_hours(self.rules)
+        _check_rules(self.rules)
         return self
 
 
@@ -456,7 +481,7 @@ class ScheduleUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_rules(self) -> ScheduleUpdate:
-        _check_day_hours(self.rules)
+        _check_rules(self.rules)
         return self
 
 

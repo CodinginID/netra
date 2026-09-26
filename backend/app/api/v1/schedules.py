@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_db, require_staff, require_tenant_admin
 from app.models import Schedule
 from app.schemas import Envelope, ScheduleCreate, ScheduleOut, ScheduleUpdate
 from app.services import audit_service, schedule_service
-from app.services.soft_delete import restore as soft_restore, soft_delete
+from app.services.soft_delete import restore as soft_restore
+from app.services.soft_delete import soft_delete
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
@@ -48,25 +51,50 @@ async def create_schedule(
 async def list_schedules(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
+    schedule_type: Literal["shift", "session"] | None = Query(
+        None, alias="type", description="Only this schedule type"
+    ),
     principal: Principal = Depends(require_staff),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(Schedule).where(
+    """List schedules, optionally of one type.
+
+    ``counts`` holds the per-type totals across ALL pages (ignoring the filter) so
+    a client can label its filter tabs without fetching everything.
+    """
+    live = (
         Schedule.deleted_at.is_(None),
         Schedule.tenant_id == principal.tenant_id,
     )
-    count_stmt = select(func.count(Schedule.id)).select_from(Schedule).where(
-        Schedule.deleted_at.is_(None),
-        Schedule.tenant_id == principal.tenant_id,
-    )
-    total = (await session.execute(count_stmt)).scalar() or 0
+    # Rules without a "type" are shift schedules (the default).
+    rule_type = Schedule.rules["type"].as_string()
+    is_session = rule_type == "session"
+    is_shift = or_(rule_type.is_(None), rule_type != "session")
+
+    counts_row = (
+        await session.execute(
+            select(func.count(Schedule.id), func.count(Schedule.id).filter(is_session)).where(*live)
+        )
+    ).one()
+    all_count, session_count = counts_row[0] or 0, counts_row[1] or 0
+    counts = {"all": all_count, "shift": all_count - session_count, "session": session_count}
+
+    filters = [*live]
+    if schedule_type == "session":
+        filters.append(is_session)
+    elif schedule_type == "shift":
+        filters.append(is_shift)
+    total = counts[schedule_type] if schedule_type else all_count
     offset = (page - 1) * limit
     items_result = await session.execute(
-        base.order_by(Schedule.created_at.desc()).offset(offset).limit(limit)
+        select(Schedule).where(*filters).order_by(Schedule.created_at.desc()).offset(offset).limit(limit)
     )
     items = [ScheduleOut.model_validate(s) for s in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
-    return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})
+    return Envelope(data={
+        "items": items, "total": total, "page": page, "limit": limit, "pages": pages,
+        "counts": counts,
+    })
 
 
 @router.patch("/{schedule_id}", response_model=Envelope[ScheduleOut])

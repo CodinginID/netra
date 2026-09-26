@@ -19,8 +19,6 @@ import '@/styles/schedules.css'
 
 type Filter = 'all' | 'shift' | 'session'
 
-const typeOf = (s: ScheduleOut): Exclude<Filter, 'all'> => (s.rules.type === 'session' ? 'session' : 'shift')
-
 function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
   schedule: ScheduleOut
   onConfirm: () => void
@@ -58,17 +56,20 @@ export function SchedulesPage() {
   const [editTarget, setEditTarget] = useState<ScheduleOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduleOut | null>(null)
 
-  const { data: paginatedSchedules, isLoading, error, refetch } = useSchedules({ page, limit })
+  // Filtering and counts are server-side, so they cover every page.
+  const { data: paginatedSchedules, isLoading, isFetching, error, refetch } = useSchedules({
+    page, limit, type: filter === 'all' ? undefined : filter,
+  })
   const schedules = paginatedSchedules?.items ?? []
   const total = paginatedSchedules?.total ?? 0
   const pages = paginatedSchedules?.pages ?? 0
-  // The filter works on the loaded page; counts are for that page too.
-  const counts = {
-    all: schedules.length,
-    shift: schedules.filter((s) => typeOf(s) === 'shift').length,
-    session: schedules.filter((s) => typeOf(s) === 'session').length,
+  const counts = paginatedSchedules?.counts ?? { all: total, shift: 0, session: 0 }
+  const hasAny = counts.all > 0
+
+  function changeFilter(f: Filter) {
+    setFilter(f)
+    setPage(1)
   }
-  const visible = filter === 'all' ? schedules : schedules.filter((s) => typeOf(s) === filter)
 
   const createMutation = useCreateSchedule(() => {
     setShowCreate(false)
@@ -127,12 +128,12 @@ export function SchedulesPage() {
 
       {error && <div className="error-banner">{error.message}</div>}
 
-      {!isLoading && schedules.length > 0 && (
+      {!isLoading && hasAny && (
         <div className="sp-toolbar">
           <div className="seg seg--inline" role="group" aria-label={t('schedules.filter_label')}>
             {(['all', 'shift', 'session'] as const).map((f) => (
               <button key={f} type="button" className={`seg-btn${filter === f ? ' seg-btn--active' : ''}`}
-                aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                aria-pressed={filter === f} onClick={() => changeFilter(f)}>
                 {t(`schedules.filter_${f}`)} · {counts[f]}
               </button>
             ))}
@@ -156,7 +157,7 @@ export function SchedulesPage() {
         </div>
       )}
 
-      {!isLoading && schedules.length === 0 && (
+      {!isLoading && !hasAny && (
         <div className="data-card">
           <EmptyState
             icon="calendar"
@@ -167,13 +168,13 @@ export function SchedulesPage() {
         </div>
       )}
 
-      {!isLoading && schedules.length > 0 && (
+      {!isLoading && hasAny && (
         <PullToRefresh onRefresh={() => refetch()}>
-          {visible.length === 0 ? (
+          {schedules.length === 0 ? (
             <p className="sp-empty-filter">{t('schedules.filter_empty')}</p>
           ) : (
-            <div className="sp-grid">
-              {visible.map((s) => (
+            <div className="sp-grid" aria-busy={isFetching}>
+              {schedules.map((s) => (
                 <SwipeCard
                   key={s.id}
                   left={{ icon: <Edit2 size={20} />, label: t('common.edit'), variant: 'primary', onAction: () => setEditTarget(s) }}

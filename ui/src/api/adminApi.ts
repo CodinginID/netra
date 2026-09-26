@@ -358,6 +358,8 @@ export interface ScheduleRules {
   /** Per-weekday hours keyed by ISO weekday "1" (Mon) … "7" (Sun); missing = day off. */
   day_hours?: Record<string, DayHours>
   sessions?: SessionRule[]
+  /** Per-weekday sessions keyed by ISO weekday "1" (Mon) … "7" (Sun); missing = day off. */
+  day_sessions?: Record<string, SessionRule[]>
   holidays?: string[]
 }
 
@@ -379,12 +381,26 @@ export interface ScheduleCreate {
   is_default?: boolean
 }
 
-export async function listSchedules(token: string, params?: { page?: number; limit?: number }): Promise<PaginatedResponse<ScheduleOut>> {
+export type ScheduleType = 'shift' | 'session'
+
+export interface ScheduleCounts {
+  all: number
+  shift: number
+  session: number
+}
+
+/** Schedules list; `counts` are per-type totals across all pages, ignoring `type`. */
+export async function listSchedules(
+  token: string,
+  params?: { page?: number; limit?: number; type?: ScheduleType },
+): Promise<PaginatedResponse<ScheduleOut> & { counts?: ScheduleCounts }> {
   const qs = new URLSearchParams()
   if (params?.page) qs.set('page', String(params.page))
   if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.type) qs.set('type', params.type)
   const raw = await apiFetch<unknown>(`${API_BASE}/schedules${qs.toString() ? `?${qs}` : ''}`, token)
-  return normalizePaginated<ScheduleOut>(raw)
+  const counts = (raw as { counts?: ScheduleCounts } | null)?.counts
+  return { ...normalizePaginated<ScheduleOut>(raw), counts }
 }
 
 export async function createSchedule(

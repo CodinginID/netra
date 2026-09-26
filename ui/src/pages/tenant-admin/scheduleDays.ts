@@ -1,5 +1,5 @@
 import { useI18n } from '@/store/i18nStore'
-import type { DayHours, ScheduleRules } from '@/api/adminApi'
+import type { DayHours, ScheduleRules, SessionRule } from '@/api/adminApi'
 
 /** One editable weekday. Index 0 = Monday (ISO weekday 1) … 6 = Sunday (7). */
 export interface DayRow {
@@ -29,16 +29,25 @@ export function initDayRows(rules?: ScheduleRules): DayRow[] {
   })
 }
 
+export const PRESETS: DayPreset[] = ['weekdays', 'mon_sat', 'daily']
+
+/** Which weekdays (Mon first) a preset turns on. */
+export function presetDays(preset: DayPreset): boolean[] {
+  return ISO_DAYS.map((_, i) => i < PRESET_DAYS[preset])
+}
+
+export function matchingPresetDays(days: boolean[]): DayPreset | null {
+  return PRESETS.find((p) => presetDays(p).every((on, i) => on === days[i])) ?? null
+}
+
 /** Turn on exactly the preset's days, keeping each row's hours. */
 export function applyPreset(rows: DayRow[], preset: DayPreset): DayRow[] {
-  return rows.map((r, i) => ({ ...r, enabled: i < PRESET_DAYS[preset] }))
+  const days = presetDays(preset)
+  return rows.map((r, i) => ({ ...r, enabled: days[i] }))
 }
 
 export function matchingPreset(rows: DayRow[]): DayPreset | null {
-  const n = rows.findIndex((r) => !r.enabled)
-  const count = n === -1 ? 7 : n
-  if (rows.slice(count).some((r) => r.enabled)) return null
-  return (Object.keys(PRESET_DAYS) as DayPreset[]).find((p) => PRESET_DAYS[p] === count) ?? null
+  return matchingPresetDays(rows.map((r) => r.enabled))
 }
 
 export function copyFirstToAll(rows: DayRow[]): DayRow[] {
@@ -81,6 +90,75 @@ export function dayRowsToRules(rows: DayRow[]): ScheduleRules {
   return { type: 'shift', day_hours, workday_start: first?.start, workday_end: first?.end }
 }
 
+// ── Session schedules ──────────────────────────────────────────────────────
+
+/** Editor state for a session schedule. `perDay[i]` is used only when `sameEveryDay` is off. */
+export interface SessionPlan {
+  days: boolean[]
+  sameEveryDay: boolean
+  common: SessionRule[]
+  perDay: SessionRule[][]
+}
+
+const DEFAULT_SESSIONS: SessionRule[] = [{ name: 'Sesi 1', start: '07:30', end: '09:00' }]
+const cloneSessions = (s: SessionRule[]) => s.map((x) => ({ ...x }))
+const sameSessions = (a: SessionRule[], b: SessionRule[]) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * Plan for the editor. Legacy session rules (flat `sessions`, no day_sessions)
+ * apply every day in the backend, so they open with all seven days on.
+ */
+export function initSessionPlan(rules?: ScheduleRules): SessionPlan {
+  const flat = rules?.sessions?.length ? rules.sessions : DEFAULT_SESSIONS
+  const ds = rules?.day_sessions
+  if (!ds) {
+    return {
+      days: ISO_DAYS.map((_, i) => (rules?.type === 'session' ? true : i < 5)),
+      sameEveryDay: true,
+      common: cloneSessions(flat),
+      perDay: ISO_DAYS.map(() => cloneSessions(flat)),
+    }
+  }
+  const days = ISO_DAYS.map((d) => !!ds[d]?.length)
+  const firstList = ISO_DAYS.map((d) => ds[d]).find((l) => l?.length) ?? flat
+  const perDay = ISO_DAYS.map((d) => cloneSessions(ds[d]?.length ? ds[d] : firstList))
+  const lists = ISO_DAYS.filter((_, i) => days[i]).map((d) => ds[d])
+  return {
+    days,
+    sameEveryDay: lists.every((l) => sameSessions(l, lists[0])),
+    common: cloneSessions(firstList),
+    perDay,
+  }
+}
+
+export function sessionsOn(plan: SessionPlan, dayIndex: number): SessionRule[] {
+  return plan.sameEveryDay ? plan.common : plan.perDay[dayIndex]
+}
+
+export function sessionPlanValid(plan: SessionPlan): boolean {
+  const lists = plan.days.map((on, i) => (on ? sessionsOn(plan, i) : null)).filter((l): l is SessionRule[] => !!l)
+  return lists.length > 0 && lists.every((l) =>
+    l.length > 0 && l.every((s) => s.name.trim() && dayMinutes(s.start, s.end) !== null))
+}
+
+/** Session rules: day_sessions per working day, plus flat `sessions` (first day) for old readers. */
+export function sessionPlanToRules(plan: SessionPlan): ScheduleRules {
+  const day_sessions: Record<string, SessionRule[]> = {}
+  plan.days.forEach((on, i) => {
+    if (on) day_sessions[ISO_DAYS[i]] = cloneSessions(sessionsOn(plan, i))
+  })
+  const first = Object.values(day_sessions)[0] ?? []
+  return { type: 'session', day_sessions, sessions: first }
+}
+
+/** Sessions per weekday as the backend evaluates them; null = day off. */
+export function sessionDayLists(rules: ScheduleRules): (SessionRule[] | null)[] {
+  return ISO_DAYS.map((d) => {
+    if (!rules.day_sessions) return rules.sessions ?? []
+    return rules.day_sessions[d]?.length ? rules.day_sessions[d] : null
+  })
+}
+
 /** What a shift schedule does on each weekday, as the backend evaluates it. */
 export interface WeekCell {
   iso: string
@@ -90,6 +168,12 @@ export interface WeekCell {
 }
 
 export function weekCells(rules: ScheduleRules): WeekCell[] {
+  if (rules.type === 'session') {
+    // A session day spans its first start to its last end.
+    return sessionDayLists(rules).map((list, i) => (list === null
+      ? { iso: ISO_DAYS[i], on: false }
+      : { iso: ISO_DAYS[i], on: true, start: list[0]?.start, end: list[list.length - 1]?.end }))
+  }
   return ISO_DAYS.map((iso) => {
     if (!rules.day_hours) return { iso, on: true, start: rules.workday_start, end: rules.workday_end }
     const h = rules.day_hours[iso]
