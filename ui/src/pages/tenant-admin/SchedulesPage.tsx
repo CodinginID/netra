@@ -17,6 +17,8 @@ import { MobileFab } from '@/components/MobileFab'
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
 import { useSchedules } from '@/hooks/useApiQueries'
 import { useCreateSchedule, useUpdateSchedule, useDeleteSchedule, useRestoreSchedule } from '@/hooks/useApiMutations'
+import { DayHoursEditor } from './ScheduleDayHours'
+import { dayRowsToRules, initDayRows, useDaySummary, type DayRow } from './scheduleDays'
 import '@/styles/layout.css'
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -38,15 +40,13 @@ const DEFAULT_SESSION: SessionRule = { name: 'Sesi 1', start: '07:30', end: '09:
 
 function ScheduleFormFields({
   scheduleType, setScheduleType,
-  workdayStart, setWorkdayStart,
-  workdayEnd, setWorkdayEnd,
+  dayRows, setDayRows,
   graceMinutes, setGraceMinutes,
   sessions, setSessions,
 }: {
   scheduleType: 'shift' | 'session'
   setScheduleType: (t: 'shift' | 'session') => void
-  workdayStart: string; setWorkdayStart: (v: string) => void
-  workdayEnd: string; setWorkdayEnd: (v: string) => void
+  dayRows: DayRow[]; setDayRows: (rows: DayRow[]) => void
   graceMinutes: number; setGraceMinutes: (v: number) => void
   sessions: SessionRule[]; setSessions: (s: SessionRule[]) => void
 }) {
@@ -68,14 +68,7 @@ function ScheduleFormFields({
       </div>
 
       {scheduleType === 'shift' ? (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <label className="schedule-form-field">{t('schedules.time_in')}
-            <input className="field-input" type="time" value={workdayStart} onChange={(e) => setWorkdayStart(e.target.value)} required />
-          </label>
-          <label className="schedule-form-field">{t('schedules.time_out')}
-            <input className="field-input" type="time" value={workdayEnd} onChange={(e) => setWorkdayEnd(e.target.value)} required />
-          </label>
-        </div>
+        <DayHoursEditor rows={dayRows} onChange={setDayRows} />
       ) : (
         <div className="session-list">
           {sessions.map((s, i) => (
@@ -109,15 +102,14 @@ function ScheduleForm({ onSubmit, onCancel, submitting }: ScheduleFormProps) {
   const { t } = useI18n()
   const [name, setName] = useState('')
   const [scheduleType, setScheduleType] = useState<'shift' | 'session'>('shift')
-  const [workdayStart, setWorkdayStart] = useState('08:00')
-  const [workdayEnd, setWorkdayEnd] = useState('17:00')
+  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows())
   const [graceMinutes, setGraceMinutes] = useState(15)
   const [sessions, setSessions] = useState<SessionRule[]>([DEFAULT_SESSION])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const rules: ScheduleRules = scheduleType === 'shift'
-      ? { type: 'shift', workday_start: workdayStart, workday_end: workdayEnd }
+      ? dayRowsToRules(dayRows)
       : { type: 'session', sessions }
     onSubmit({ name: name.trim(), rules, grace_minutes: graceMinutes })
   }
@@ -127,9 +119,9 @@ function ScheduleForm({ onSubmit, onCancel, submitting }: ScheduleFormProps) {
       <label className="schedule-form-field">{t('schedules.form_name')}
         <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('schedules.form_name_placeholder')} required />
       </label>
-      <ScheduleFormFields {...{ scheduleType, setScheduleType, workdayStart, setWorkdayStart, workdayEnd, setWorkdayEnd, graceMinutes, setGraceMinutes, sessions, setSessions }} />
+      <ScheduleFormFields {...{ scheduleType, setScheduleType, dayRows, setDayRows, graceMinutes, setGraceMinutes, sessions, setSessions }} />
       <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? t('common.saving') : t('common.save')}</button>
+        <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim() || (scheduleType === 'shift' && !dayRows.some((r) => r.enabled))}>{submitting ? t('common.saving') : t('common.save')}</button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </form>
@@ -145,8 +137,7 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   const { t } = useI18n()
   const [name, setName] = useState(schedule.name)
   const [scheduleType, setScheduleType] = useState<'shift' | 'session'>(schedule.rules.type === 'session' ? 'session' : 'shift')
-  const [workdayStart, setWorkdayStart] = useState(schedule.rules.workday_start ?? '08:00')
-  const [workdayEnd, setWorkdayEnd] = useState(schedule.rules.workday_end ?? '17:00')
+  const [dayRows, setDayRows] = useState<DayRow[]>(() => initDayRows(schedule.rules))
   const [graceMinutes, setGraceMinutes] = useState(schedule.grace_minutes)
   const [sessions, setSessions] = useState<SessionRule[]>(schedule.rules.sessions ?? [DEFAULT_SESSION])
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
@@ -154,7 +145,7 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const rules: ScheduleRules = scheduleType === 'shift'
-      ? { type: 'shift', workday_start: workdayStart, workday_end: workdayEnd }
+      ? dayRowsToRules(dayRows)
       : { type: 'session', sessions }
     onSubmit({ name: name.trim(), rules, grace_minutes: graceMinutes })
   }
@@ -167,10 +158,10 @@ function EditScheduleModal({ schedule, onSubmit, onClose, submitting }: {
           <div className="field"><label htmlFor="edit-schedule-name">{t('schedules.form_name')}</label>
             <input id="edit-schedule-name" className="field-input" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
-          <ScheduleFormFields {...{ scheduleType, setScheduleType, workdayStart, setWorkdayStart, workdayEnd, setWorkdayEnd, graceMinutes, setGraceMinutes, sessions, setSessions }} />
+          <ScheduleFormFields {...{ scheduleType, setScheduleType, dayRows, setDayRows, graceMinutes, setGraceMinutes, sessions, setSessions }} />
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim()}>{submitting ? t('common.saving') : t('common.save_changes')}</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting || !name.trim() || (scheduleType === 'shift' && !dayRows.some((r) => r.enabled))}>{submitting ? t('common.saving') : t('common.save_changes')}</button>
           </div>
         </form>
       </div>
@@ -209,6 +200,7 @@ function DeleteScheduleModal({ schedule, onConfirm, onClose, loading }: {
 export function SchedulesPage() {
   const { t } = useI18n()
   const { show } = useToast()
+  const daySummary = useDaySummary()
   useEdgeSwipeBack() // 3.5 — swipe from the left edge to go back (mobile)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -344,7 +336,7 @@ export function SchedulesPage() {
                   </span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {s.rules.type === 'session' ? `${s.rules.sessions?.length ?? 0} sesi` : (s.rules.work_days ?? 'Sen - Jum')}
+                  {s.rules.type === 'session' ? `${s.rules.sessions?.length ?? 0} sesi` : daySummary(s.rules).days}
                 </div>
               </div>
 
@@ -352,7 +344,7 @@ export function SchedulesPage() {
                 <Clock size={15} />
                 {s.rules.type === 'session' && s.rules.sessions?.length
                   ? `${s.rules.sessions[0].start} – ${s.rules.sessions[s.rules.sessions.length - 1].end}`
-                  : `${s.rules.workday_start ?? '--:--'} – ${s.rules.workday_end ?? '--:--'}`}
+                  : daySummary(s.rules).hours}
               </div>
 
               <div className="schedule-row-grace">

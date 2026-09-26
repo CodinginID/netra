@@ -1076,6 +1076,18 @@ a:focus-visible {
 
 .session-row .field-input { flex: 1; min-width: 80px; }
 
+/* ── Per-day schedule hours ── */
+.day-hours { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.day-hours-legend { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; padding: 0; }
+.day-hours-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 38px; }
+.day-hours-row .field-input { flex: 1; min-width: 96px; max-width: 160px; }
+.day-hours-day { display: inline-flex; align-items: center; gap: 8px; width: 72px; font-size: 14px; color: var(--color-text); cursor: pointer; }
+.day-hours-row--off .day-hours-day { color: var(--color-text-muted); }
+.day-hours-sep { color: var(--color-text-muted); font-size: 13px; }
+.day-hours-off { font-size: 13px; color: var(--color-text-muted); }
+.day-hours-apply { align-self: flex-start; }
+.day-hours-error { font-size: 13px; color: var(--color-danger, #dc2626); }
+
 /* ── Live badge ── */
 .live-badge {
   display: inline-flex;

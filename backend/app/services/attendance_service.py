@@ -42,8 +42,24 @@ def _fmt_minutes(total: int) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
-def _window_bounds(schedule: "Schedule | None") -> tuple[time | None, time | None]:
-    """(start, end) time-of-day for the schedule, for shift or session rules."""
+def _shift_bounds(rules: dict, when: datetime) -> tuple[time | None, time | None] | None:
+    """(start, end) of a shift schedule on ``when``'s weekday; None = day off.
+
+    ``day_hours`` maps ISO weekday ("1" = Mon … "7" = Sun) to ``{"start", "end"}``;
+    a weekday missing from it is a non-working day. Without ``day_hours`` the flat
+    ``workday_start`` / ``workday_end`` apply every day (legacy schedules).
+    """
+    day_hours = rules.get("day_hours")
+    if not isinstance(day_hours, dict):
+        return _parse_hhmm(rules.get("workday_start")), _parse_hhmm(rules.get("workday_end"))
+    hours = day_hours.get(str(when.isoweekday()))
+    if not hours:
+        return None
+    return _parse_hhmm(hours.get("start")), _parse_hhmm(hours.get("end"))
+
+
+def _window_bounds(schedule: Schedule | None, when: datetime) -> tuple[time | None, time | None]:
+    """(start, end) time-of-day for the schedule on ``when``, for shift or session rules."""
     if schedule is None:
         return None, None
     rules = schedule.rules or {}
@@ -52,7 +68,8 @@ def _window_bounds(schedule: "Schedule | None") -> tuple[time | None, time | Non
         if not sessions:
             return None, None
         return _parse_hhmm(sessions[0].get("start")), _parse_hhmm(sessions[-1].get("end"))
-    return _parse_hhmm(rules.get("workday_start")), _parse_hhmm(rules.get("workday_end"))
+    # Day off: no window restriction on when scans may happen.
+    return _shift_bounds(rules, when) or (None, None)
 
 
 def evaluate_scan(
@@ -80,7 +97,7 @@ def evaluate_scan(
     if has_checkin and has_checkout:
         raise AttendanceRuleError("Absensi hari ini sudah lengkap (masuk & pulang).")
 
-    start_t, end_t = _window_bounds(schedule)
+    start_t, end_t = _window_bounds(schedule, now)
     now_m = now.hour * 60 + now.minute
 
     if not has_checkin:
@@ -205,9 +222,12 @@ def compute_status(
     if rules.get("type") == "session":
         return _compute_session_status(rules, schedule.grace_minutes or 0, att_type, now_t)
 
-    # Shift-based (default)
+    # Shift-based (default). Non-working weekday: no penalty, like a holiday.
+    bounds = _shift_bounds(rules, occurred_at)
+    if bounds is None:
+        return AttendanceStatus.on_time
+    start, end = bounds
     if att_type == AttendanceType.check_in:
-        start = _parse_hhmm(rules.get("workday_start"))
         if start is None:
             return AttendanceStatus.on_time
         grace_minutes = schedule.grace_minutes or 0
@@ -218,7 +238,6 @@ def compute_status(
         )
 
     # check_out
-    end = _parse_hhmm(rules.get("workday_end"))
     if end is None:
         return AttendanceStatus.on_time
     end_minutes = end.hour * 60 + end.minute
@@ -245,7 +264,8 @@ def _compute_late_minutes(
             return 0
         cutoff = first_start.hour * 60 + first_start.minute
     else:
-        start = _parse_hhmm(rules.get("workday_start"))
+        bounds = _shift_bounds(rules, occurred_at)
+        start = bounds[0] if bounds else None
         if start is None:
             return 0
         cutoff = start.hour * 60 + start.minute

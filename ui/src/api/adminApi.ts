@@ -344,8 +344,14 @@ export interface ScheduleRules {
   type?: 'shift' | 'session'
   workday_start?: string
   workday_end?: string
-  work_days?: string
+  /** Per-weekday hours keyed by ISO weekday "1" (Mon) … "7" (Sun); missing = day off. */
+  day_hours?: Record<string, DayHours>
   sessions?: SessionRule[]
+export interface DayHours {
+  start: string // "HH:MM"
+  end: string   // "HH:MM"
+}
+
   holidays?: string[]
 }
 

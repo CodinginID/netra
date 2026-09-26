@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 from urllib.parse import urlsplit
@@ -414,6 +415,25 @@ class IntegrationUserUpsertOut(IntegrationUserOut):
 # --------------------------------------------------------------------------- #
 class ScheduleCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _check_day_hours(rules: dict | None) -> None:
+    """Validate optional per-weekday hours: {"1".."7": {"start": "HH:MM", "end": "HH:MM"}}."""
+    day_hours = (rules or {}).get("day_hours")
+    if day_hours is None:
+        return
+    if not isinstance(day_hours, dict) or not day_hours:
+        raise ValueError("rules.day_hours must be a non-empty object")
+    for day, hours in day_hours.items():
+        if day not in {"1", "2", "3", "4", "5", "6", "7"}:
+            raise ValueError(f"rules.day_hours: invalid weekday {day!r} (use 1=Mon … 7=Sun)")
+        if not isinstance(hours, dict) or not all(
+            isinstance(hours.get(k), str) and _HHMM.match(hours[k]) for k in ("start", "end")
+        ):
+            raise ValueError(f"rules.day_hours[{day}] needs start and end as HH:MM")
+
+
     rules: dict = Field(default_factory=dict)  # e.g. {"workday_start": "08:00", ...}
     grace_minutes: int = Field(default=0, ge=0, le=240)
     geofence: dict | None = None
@@ -421,6 +441,11 @@ class ScheduleCreate(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
+    @model_validator(mode="after")
+    def _validate_rules(self) -> ScheduleCreate:
+        _check_day_hours(self.rules)
+        return self
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     rules: dict | None = None
     grace_minutes: int | None = Field(default=None, ge=0, le=240)
@@ -429,6 +454,11 @@ class ScheduleUpdate(BaseModel):
 
 
 class ScheduleOut(BaseModel):
+    @model_validator(mode="after")
+    def _validate_rules(self) -> ScheduleUpdate:
+        _check_day_hours(self.rules)
+        return self
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
