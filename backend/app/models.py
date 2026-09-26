@@ -263,11 +263,19 @@ class Device(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Fernet-encrypted copy of the token so an admin can view it again. Lookup
+    # still goes through token_hash. NULL for devices registered before this
+    # column existed — they must reset their token once to become viewable.
+    token_encrypted: Mapped[str | None] = mapped_column(EncryptedStr(), nullable=True)
     status: Mapped[DeviceStatus] = mapped_column(
         Enum(DeviceStatus, name="device_status"), default=DeviceStatus.active, nullable=False
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def token_available(self) -> bool:
+        return self.token_encrypted is not None
 
 
 class ApiKey(Base, TimestampMixin):

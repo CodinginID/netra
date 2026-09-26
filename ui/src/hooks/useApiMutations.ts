@@ -110,6 +110,14 @@ export function useRegenerateDeviceToken(onSuccess?: () => void) {
   })
 }
 
+/** On-demand fetch of a device's current token. A mutation, so the secret is never cached. */
+export function useViewDeviceToken() {
+  const call = useScopedCall()
+  return useMutation({
+    mutationFn: (deviceId: string) => call((t) => api.viewDeviceToken(t, deviceId)),
+  })
+}
+
 // ---- API keys (integration) ----
 export function useCreateApiKey(onSuccess?: () => void) {
   const call = useScopedCall()

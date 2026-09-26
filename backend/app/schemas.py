@@ -260,13 +260,15 @@ class DeviceOut(BaseModel):
     status: DeviceStatus
     last_seen_at: datetime | None
     created_at: datetime
+    # False for legacy devices whose token was only ever stored as a hash.
+    token_available: bool = False
 
 
 class DeviceRegistered(DeviceOut):
-    """Returned ONCE on registration — carries the plaintext token.
+    """Carries the plaintext token (on register / regenerate / view).
 
-    The token is never persisted in plaintext (only its hash is stored), so it
-    can never be retrieved again. The kiosk must capture it now.
+    The token is never persisted in plaintext: a hash is used for lookup and a
+    Fernet-encrypted copy lets a tenant admin view it again (GET /devices/{id}/token).
     """
 
     token: str
@@ -413,8 +415,6 @@ class IntegrationUserUpsertOut(IntegrationUserOut):
 # --------------------------------------------------------------------------- #
 # Schedules (attendance rules)
 # --------------------------------------------------------------------------- #
-class ScheduleCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
@@ -434,31 +434,33 @@ def _check_day_hours(rules: dict | None) -> None:
             raise ValueError(f"rules.day_hours[{day}] needs start and end as HH:MM")
 
 
+class ScheduleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
     rules: dict = Field(default_factory=dict)  # e.g. {"workday_start": "08:00", ...}
     grace_minutes: int = Field(default=0, ge=0, le=240)
     geofence: dict | None = None
     is_default: bool = False
 
-
-class ScheduleUpdate(BaseModel):
     @model_validator(mode="after")
     def _validate_rules(self) -> ScheduleCreate:
         _check_day_hours(self.rules)
         return self
 
+
+class ScheduleUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     rules: dict | None = None
     grace_minutes: int | None = Field(default=None, ge=0, le=240)
     geofence: dict | None = None
     is_default: bool | None = None
 
-
-class ScheduleOut(BaseModel):
     @model_validator(mode="after")
     def _validate_rules(self) -> ScheduleUpdate:
         _check_day_hours(self.rules)
         return self
 
+
+class ScheduleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str

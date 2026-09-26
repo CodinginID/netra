@@ -237,6 +237,8 @@ export interface DeviceOut {
   last_seen_at: string | null
   created_at: string
   deleted_at?: string
+  /** False for legacy devices whose token was only stored as a hash (reset once to view). */
+  token_available?: boolean
 }
 
 export interface DeviceRegistered extends DeviceOut {
@@ -265,6 +267,10 @@ export async function revokeDevice(token: string, deviceId: string): Promise<Dev
 /** Re-issue a fresh one-time token for an existing device (old token invalidated). */
 export async function regenerateDeviceToken(token: string, deviceId: string): Promise<DeviceRegistered> {
   return apiFetch<DeviceRegistered>(`${API_BASE}/devices/${deviceId}/regenerate-token`, token, { method: 'POST' })
+}
+
+export async function viewDeviceToken(token: string, deviceId: string): Promise<DeviceRegistered> {
+  return apiFetch<DeviceRegistered>(`${API_BASE}/devices/${deviceId}/token`, token)
 }
 
 export async function deleteDevice(token: string, deviceId: string): Promise<void> {
@@ -340,6 +346,11 @@ export interface SessionRule {
   end: string   // "HH:MM"
 }
 
+export interface DayHours {
+  start: string // "HH:MM"
+  end: string   // "HH:MM"
+}
+
 export interface ScheduleRules {
   type?: 'shift' | 'session'
   workday_start?: string
@@ -347,11 +358,6 @@ export interface ScheduleRules {
   /** Per-weekday hours keyed by ISO weekday "1" (Mon) … "7" (Sun); missing = day off. */
   day_hours?: Record<string, DayHours>
   sessions?: SessionRule[]
-export interface DayHours {
-  start: string // "HH:MM"
-  end: string   // "HH:MM"
-}
-
   holidays?: string[]
 }
 

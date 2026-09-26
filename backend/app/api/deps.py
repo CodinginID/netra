@@ -287,7 +287,12 @@ async def get_device_principal(
         device = (
             await session.execute(select(Device).where(Device.token_hash == token_hash))
         ).scalar_one_or_none()
-        if device is None or device.status != DeviceStatus.active:
+        # A soft-deleted device must not authenticate even if it was still active.
+        if (
+            device is None
+            or device.deleted_at is not None
+            or device.status != DeviceStatus.active
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked device token"
             )

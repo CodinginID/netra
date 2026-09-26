@@ -1,7 +1,8 @@
 """Device (kiosk) management router — AUTH-5.
 
-Tenant admins register kiosk devices. Registration returns a one-time plaintext
-token (only its hash is stored); list and revoke manage the device lifecycle.
+Tenant admins register kiosk devices. Registration returns the plaintext token;
+it is stored as a hash (for lookup) plus a Fernet-encrypted copy so a tenant
+admin can view it again. List, revoke and delete manage the device lifecycle.
 Kiosks then authenticate via the ``X-Device-Token`` header (get_device_principal).
 """
 
@@ -33,7 +34,7 @@ async def register_device(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[DeviceRegistered]:
-    """Register a kiosk device. Returns the plaintext token ONCE; only its hash is stored."""
+    """Register a kiosk device and return its plaintext token."""
     if principal.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
@@ -43,6 +44,7 @@ async def register_device(
         tenant_id=principal.tenant_id,
         name=payload.name,
         token_hash=hash_device_token(token),
+        token_encrypted=token,
         status=DeviceStatus.active,
     )
     session.add(device)
@@ -139,7 +141,7 @@ async def regenerate_device_token(
     Use when the kiosk lost its token (e.g. browser storage cleared) — the
     device keeps its identity/history. The previous token is invalidated
     immediately (the hash is overwritten) and the device is (re)activated.
-    The new plaintext token is returned ONCE.
+    Returns the new plaintext token.
     """
     device = (
         await session.execute(select(Device).where(
@@ -152,6 +154,7 @@ async def regenerate_device_token(
 
     token = generate_device_token()
     device.token_hash = hash_device_token(token)
+    device.token_encrypted = token
     device.status = DeviceStatus.active
     await session.flush()
     await audit_service.record(
@@ -163,6 +166,49 @@ async def regenerate_device_token(
     )
     out = DeviceRegistered.model_validate(
         {**DeviceOut.model_validate(device).model_dump(), "token": token}
+    )
+    return Envelope(data=out)
+
+
+@router.get("/{device_id}/token", response_model=Envelope[DeviceRegistered])
+async def view_device_token(
+    device_id: str,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[DeviceRegistered]:
+    """Show the current token of an active device, so a lost token needs no reset.
+
+    Every view is audited. Devices registered before tokens were kept encrypted
+    have no retrievable token (409) and must regenerate once.
+    """
+    device = (
+        await session.execute(select(Device).where(
+            Device.id == device_id,
+            Device.tenant_id == principal.tenant_id,
+            Device.deleted_at.is_(None),
+        ))
+    ).scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if device.status != DeviceStatus.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Perangkat sudah dicabut — buat token baru untuk mengaktifkannya lagi.",
+        )
+    if device.token_encrypted is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Token perangkat lama tidak tersimpan — reset token sekali agar bisa dilihat.",
+        )
+    await audit_service.record(
+        session,
+        action="device.token_viewed",
+        actor=principal.subject,
+        tenant_id=device.tenant_id,
+        detail={"device_id": device.id},
+    )
+    out = DeviceRegistered.model_validate(
+        {**DeviceOut.model_validate(device).model_dump(), "token": device.token_encrypted}
     )
     return Envelope(data=out)
 

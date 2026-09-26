@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { WifiOff, Plus, Copy, Clock, Trash2, KeyRound, Search, Monitor, Wifi } from 'lucide-react'
+import { WifiOff, Plus, Copy, Clock, Trash2, Search, Monitor, Wifi } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
@@ -13,7 +13,8 @@ import { SwipeCard } from '@/components/SwipeCard'
 import { PullToRefresh } from '@/components/PullToRefresh'
 import { MobileFab } from '@/components/MobileFab'
 import { useDevices } from '@/hooks/useApiQueries'
-import { useRegisterDevice, useRevokeDevice, useDeleteDevice, useRestoreDevice, useRegenerateDeviceToken } from '@/hooks/useApiMutations'
+import { useRegisterDevice, useRevokeDevice, useDeleteDevice, useRestoreDevice, useRegenerateDeviceToken, useViewDeviceToken } from '@/hooks/useApiMutations'
+import { DeviceActionsMenu } from './DeviceActionsMenu'
 import '@/styles/layout.css'
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -87,16 +88,21 @@ function AddDeviceModal({
   )
 }
 
-function NewTokenBanner({ device, regenerated, onDismiss }: { device: DeviceRegistered; regenerated?: boolean; onDismiss: () => void }) {
+type TokenBannerMode = 'created' | 'regenerated' | 'viewed'
+
+function NewTokenBanner({ device, mode, onDismiss }: { device: DeviceRegistered; mode: TokenBannerMode; onDismiss: () => void }) {
   const { t } = useI18n()
+  const { show } = useToast()
   return (
     <div className="data-card" style={{ border: '1px solid var(--color-success)', padding: 16, marginBottom: 24 }}>
       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text)', marginBottom: 6 }}>
-        {regenerated
-          ? t('devices.token_created_new', { name: device.name })
-          : t('devices.device_created', { name: device.name })}
+        {mode === 'viewed'
+          ? t('devices.token_viewed', { name: device.name })
+          : mode === 'regenerated'
+            ? t('devices.token_created_new', { name: device.name })
+            : t('devices.device_created', { name: device.name })}
       </div>
-      <div style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 10 }}>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
         {t('devices.token_warning')}
       </div>
       <div
@@ -117,13 +123,13 @@ function NewTokenBanner({ device, regenerated, onDismiss }: { device: DeviceRegi
           className="btn btn-ghost btn-sm"
           title={t('devices.copy_token')}
           aria-label={t('devices.copy_token')}
-          onClick={() => navigator.clipboard?.writeText(device.token)}
+          onClick={() => navigator.clipboard?.writeText(device.token).then(() => show(t('devices.toast_copied'), 'success'))}
         >
           <Copy size={15} />
         </button>
       </div>
       <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss} style={{ marginTop: 10 }}>
-        {t('devices.token_saved')}
+        {mode === 'viewed' ? t('devices.token_close') : t('devices.token_saved')}
       </button>
     </div>
   )
@@ -167,7 +173,7 @@ export function DevicesPage() {
   const [limit, setLimit] = useState(10)
   const [showForm, setShowForm] = useState(false)
   const [newDevice, setNewDevice] = useState<DeviceRegistered | null>(null)
-  const [tokenRegenerated, setTokenRegenerated] = useState(false)
+  const [tokenMode, setTokenMode] = useState<TokenBannerMode>('created')
   const [deleteTarget, setDeleteTarget] = useState<DeviceOut | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -192,11 +198,12 @@ export function DevicesPage() {
   const deleteMutation = useDeleteDevice()
   const restoreMutation = useRestoreDevice()
   const regenerateMutation = useRegenerateDeviceToken()
+  const viewTokenMutation = useViewDeviceToken()
 
   const handleAdd = (name: string) => {
     registerMutation.mutate(name, {
       onSuccess: (device) => {
-        setTokenRegenerated(false)
+        setTokenMode('created')
         setNewDevice(device)
       },
     })
@@ -205,12 +212,25 @@ export function DevicesPage() {
   const handleRegenerate = (deviceId: string) => {
     regenerateMutation.mutate(deviceId, {
       onSuccess: (device) => {
-        setTokenRegenerated(true)
+        setTokenMode('regenerated')
         setNewDevice(device)
         show(t('devices.toast_token_regenerated'), 'success')
       },
       onError: (err) => {
         show(err instanceof Error ? err.message : t('devices.toast_revoke_failed'), 'error')
+      },
+    })
+  }
+
+  const handleViewToken = (deviceId: string) => {
+    viewTokenMutation.mutate(deviceId, {
+      onSuccess: (device) => {
+        setTokenMode('viewed')
+        setNewDevice(device)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      },
+      onError: (err) => {
+        show(err instanceof Error ? err.message : t('devices.toast_view_failed'), 'error')
       },
     })
   }
@@ -295,11 +315,15 @@ export function DevicesPage() {
               {offlineCount}
             </span>
           </div>
+
+          <button className="btn btn-primary add-fab-twin" onClick={() => setShowForm(true)}>
+            <Plus size={16} /> {t('devices.add')}
+          </button>
         </div>
       </div>
 
       {newDevice && (
-        <NewTokenBanner device={newDevice} regenerated={tokenRegenerated} onDismiss={() => setNewDevice(null)} />
+        <NewTokenBanner device={newDevice} mode={tokenMode} onDismiss={() => setNewDevice(null)} />
       )}
 
       {showForm && (
@@ -360,38 +384,23 @@ export function DevicesPage() {
                       : '3px solid var(--color-border)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{device.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--color-text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={device.name}>
+                      {device.name}
+                    </div>
                     <StatusBadge active={device.status === 'active'} />
+                    <DeviceActionsMenu
+                      device={device}
+                      busy={[regenerateMutation, revokeMutation, viewTokenMutation].some((m) => m.isPending && m.variables === device.id)}
+                      onViewToken={() => handleViewToken(device.id)}
+                      onRegenerate={() => handleRegenerate(device.id)}
+                      onRevoke={() => handleRevoke(device.id)}
+                      onDelete={() => setDeleteTarget(device)}
+                    />
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
                     <Clock size={13} /> {t('devices.last_active')}: {formatLastSeen(device.last_seen_at, t)}
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      title={device.status === 'active'
-                        ? t('devices.reset_title_active')
-                        : t('devices.reset_title_inactive')}
-                      onClick={() => handleRegenerate(device.id)}
-                      disabled={regenerateMutation.isPending && regenerateMutation.variables === device.id}
-                    >
-                      <KeyRound size={15} />
-                      {regenerateMutation.isPending && regenerateMutation.variables === device.id
-                        ? t('devices.creating')
-                        : device.status === 'active' ? t('devices.reset_token') : t('devices.restore_token')}
-                    </button>
-                    {device.status === 'active' && (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleRevoke(device.id)}
-                        disabled={revokeMutation.isPending && revokeMutation.variables === device.id}
-                      >
-                        {revokeMutation.isPending && revokeMutation.variables === device.id ? t('devices.revoking') : t('devices.revoke')}
-                      </button>
-                    )}
                   </div>
                 </div>
               </SwipeCard>
