@@ -9,7 +9,8 @@ jadwal lain tersimpan tetapi tidak dipakai sampai dijadikan default.
 1. Buka **Jadwal** di sidebar dan klik **Tambah Jadwal**.
 2. Isi nama dan pilih tipe: **Shift harian** atau **Sesi / periode**.
 3. Atur hari dan jam (lihat di bawah), lalu toleransi terlambat.
-4. Nyalakan **Jadikan default** bila jadwal ini yang harus dipakai.
+4. Nyalakan **Jadikan default** bila jadwal ini yang harus dipakai. Jadwal
+   pertama yang dibuat selalu menjadi default.
 5. Klik **Simpan jadwal**.
 
 ## Shift harian
@@ -58,4 +59,5 @@ Gunakan filter **Semua / Shift / Sesi** di atas daftar. Menu **⋮** di setiap
 kartu berisi **Edit**, **Jadikan default**, dan **Hapus**. Jadwal yang dihapus
 bisa dipulihkan dari **Tempat Sampah** dalam 30 hari. Jadwal default tidak
 bisa dimatikan dari form — jadikan jadwal lain sebagai default untuk
-menggantinya.
+menggantinya. Bila jadwal default dihapus, jadwal terbaru yang tersisa
+otomatis menjadi default.

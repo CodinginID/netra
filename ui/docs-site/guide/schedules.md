@@ -9,7 +9,8 @@ other schedules are kept but have no effect until one is made the default.
 1. Open **Schedules** in the sidebar and click **Add Schedule**.
 2. Enter a name and pick a type: **Daily shift** or **Session / period**.
 3. Set the days and hours (see below), then the late tolerance.
-4. Turn on **Make default** if this schedule should be the one in use.
+4. Turn on **Make default** if this schedule should be the one in use. The
+   first schedule you create is always the default.
 5. Click **Save schedule**.
 
 ## Daily shift
@@ -57,4 +58,5 @@ and the check-in window does not apply.
 Use the **All / Shift / Session** filter above the list. The **⋮** menu on each
 card has **Edit**, **Make default** and **Delete**. Deleted schedules can be
 restored from **Trash** within 30 days. The default can't be switched off in
-the form — make another schedule the default to replace it.
+the form — make another schedule the default to replace it. Deleting the
+default makes the newest remaining schedule the default.

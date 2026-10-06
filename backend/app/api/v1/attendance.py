@@ -40,6 +40,17 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 log = get_logger("netra.attendance")
 
 
+def _to_tenant_local(when: datetime, tz_name: str) -> datetime:
+    """Schedule windows and late/early status are evaluated in the tenant's local
+    time; occurred_at is stored as this (timezone-aware) local instant. A naive
+    timestamp is taken as already tenant-local."""
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:  # unknown tz string → fall back to UTC
+        tz = UTC
+    return when.replace(tzinfo=tz) if when.tzinfo is None else when.astimezone(tz)
+
+
 async def _today_attendance_summary(
     session: AsyncSession,
     user_id: str,
@@ -73,8 +84,11 @@ async def _get_open_checkin(
     user_id: str,
     now: datetime,
 ) -> AttendanceRecord | None:
-    """Return the user's last check-in today if no subsequent check-out exists, else None."""
-    today_start = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    """Return the user's last check-in today if no subsequent check-out exists, else None.
+
+    ``now`` is tenant-local, so "today" is the tenant's calendar day.
+    """
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
     last_checkin = (
@@ -120,12 +134,12 @@ async def _capture(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
         )
-    now = occurred_at or datetime.now(UTC)
     image_bytes = await image.read()
 
     # Load tenant config first — liveness is only scored when the tenant requires it.
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
+    now = _to_tenant_local(occurred_at or datetime.now(UTC), cfg.attendance.timezone)
 
     # 1. Liveness — scored server-side; gated by the tenant's kiosk prefs.
     liveness = 0.0
@@ -280,12 +294,7 @@ async def auto_attend(
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
 
-    # Schedule windows and late/early status are evaluated in the tenant's local
-    # time. occurred_at is stored as this (timezone-aware) local instant.
-    try:
-        now = now_utc.astimezone(ZoneInfo(cfg.attendance.timezone))
-    except Exception:  # unknown tz string → fall back to UTC
-        now = now_utc
+    now = _to_tenant_local(now_utc, cfg.attendance.timezone)
 
     log.info(
         "auto_attend_image_received",

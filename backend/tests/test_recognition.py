@@ -141,7 +141,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
     resp = await client.post(
         "/api/v1/attendance/checkin",
         headers=dhdr,
-        data={"occurred_at": "2026-06-13T09:00:00+00:00"},
+        data={"occurred_at": "2026-06-13T09:00:00+07:00"},
         files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text
@@ -163,7 +163,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
     out = await client.post(
         "/api/v1/attendance/checkout",
         headers=dhdr,
-        data={"occurred_at": "2026-06-13T12:00:00+00:00"},
+        data={"occurred_at": "2026-06-13T12:00:00+07:00"},
         files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
     )
     assert out.status_code == 200, out.text
@@ -320,7 +320,7 @@ async def test_holiday_has_no_late_penalty(client: AsyncClient, super_admin):
     resp = await client.post(
         "/api/v1/attendance/checkin",
         headers={"X-Device-Token": device},
-        data={"occurred_at": "2026-06-17T09:00:00+00:00"},
+        data={"occurred_at": "2026-06-17T09:00:00+07:00"},
         files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text

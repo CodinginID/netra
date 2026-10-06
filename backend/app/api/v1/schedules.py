@@ -155,6 +155,10 @@ async def delete_schedule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or already deleted"
         )
+    if schedule.is_default:
+        # A trashed schedule is never the default; hand the role to the newest live one.
+        schedule.is_default = False
+        await schedule_service.ensure_default(session)
     await audit_service.record(
         session,
         action="schedule.deleted",
@@ -197,6 +201,18 @@ async def restore_schedule(
             Schedule.tenant_id == principal.tenant_id,
         )
     )).scalar_one()
+    if schedule.is_default:
+        # Another schedule became the default while this one was in the trash.
+        other = (await session.execute(
+            select(Schedule.id).where(
+                Schedule.is_default.is_(True),
+                Schedule.deleted_at.is_(None),
+                Schedule.id != schedule.id,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if other is not None:
+            schedule.is_default = False
+    await schedule_service.ensure_default(session)
     await audit_service.record(
         session,
         action="schedule.restored",
