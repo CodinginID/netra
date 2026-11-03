@@ -28,6 +28,48 @@ export const RELEASES: Release[] = [
     },
   },
   {
+    date: '2026-10-06',
+    notes: {
+      id: ['Setiap absensi dinilai terhadap jadwal default bila tidak ada jadwal khusus'],
+      en: ['Every punch is judged against a default schedule when no specific one applies'],
+    },
+  },
+  {
+    date: '2026-09-26',
+    notes: {
+      id: [
+        'Jam kerja dan sesi bisa diatur per hari dalam seminggu',
+        'Halaman Jadwal Kerja ditata ulang per minggu',
+        'Token perangkat bisa dilihat lagi; aksi perangkat dipindah ke menu',
+      ],
+      en: [
+        'Working hours and sessions can be set per day of the week',
+        'Work Schedule page redesigned around the week',
+        'Device tokens can be viewed again; device actions moved into a menu',
+      ],
+    },
+  },
+  {
+    date: '2026-08-19',
+    notes: {
+      id: [
+        'Billing berdasarkan pemakaian terukur, dengan ringkasan dan pemakaian per tenant',
+        'Permintaan demo dari halaman depan',
+      ],
+      en: [
+        'Billing from measured usage, with a summary and per-tenant usage',
+        'Demo requests from the landing page',
+      ],
+    },
+  },
+  {
+    date: '2026-08-11',
+    notes: {
+      id: ['Hapus permanen per item dari tong sampah'],
+      en: ['Permanent delete per item from the trash'],
+    },
+  },
+  {
     date: '2026-08-06',
     notes: {
       id: [
