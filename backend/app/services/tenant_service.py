@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_password
 from app.models import Role, Tenant, TenantStatus, User
@@ -57,11 +56,11 @@ async def list_tenants(
     base = select(Tenant).where(Tenant.deleted_at.is_(None))
     if search:
         search_pattern = f"%{search}%"
-        base = base.where(
-            or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern))
-        )
+        base = base.where(or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern)))
 
-    count_stmt = select(func.count(Tenant.id)).select_from(Tenant).where(Tenant.deleted_at.is_(None))
+    count_stmt = (
+        select(func.count(Tenant.id)).select_from(Tenant).where(Tenant.deleted_at.is_(None))
+    )
     if search:
         search_pattern = f"%{search}%"
         count_stmt = count_stmt.where(
@@ -104,33 +103,15 @@ async def update_config(session: AsyncSession, tenant_id: str, config: dict) -> 
 
 
 async def delete_tenant(session: AsyncSession, tenant_id: str) -> bool:
-    """Hard-delete a tenant and ALL its child records via SQLAlchemy cascade.
+    """Permanently delete a tenant and every record that belongs to it.
 
-    Loads the tenant with all relationships (users, schedules, devices,
-    attendance_records, face_embeddings, api_keys, webhook_endpoints,
-    embed_sessions, sso_connections, consents). When the tenant is removed
-    from the session, SQLAlchemy cascade='all, delete-orphan' handles the
-    rest — every child is deleted automatically.
+    Every tenant-owned table references ``tenants.id`` with ``ON DELETE
+    CASCADE`` (users, face embeddings, schedules, devices, attendance, API
+    keys, webhooks, embed sessions, SSO connections, consents), so a single
+    DELETE removes them all in the database. Soft-deleted users go too.
+    Irreversible. Audit logs have no FK and are kept.
 
-    Returns True if tenant was deleted, False if not found.
+    Returns True if the tenant was deleted, False if it did not exist.
     """
-    # Eager-load all relationships so cascade fires on remove()
-    stmt = select(Tenant).options(
-        selectinload(Tenant.users),
-    )
-    result = await session.execute(stmt.where(Tenant.id == tenant_id))
-    tenant = result.scalar_one_or_none()
-
-    if tenant is None:
-        return False
-
-    # Verify no children (should never fail since we loaded everything)
-    if tenant.users:
-        raise TenantError(
-            f"Cannot delete tenant '{tenant.name}': it still has "
-            f"{len(tenant.users)} user(s). Please delete all users first."
-        )
-
-    await session.delete(tenant)
-    await session.flush()
-    return True
+    result = await session.execute(delete(Tenant).where(Tenant.id == tenant_id))
+    return bool(result.rowcount)

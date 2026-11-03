@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.db.session import SessionFactory, _set_tenant
-from app.models import AuditLog, Tenant, TenantStatus
+from app.models import AuditLog, Tenant, TenantStatus, User
 
 
 async def _token(client: AsyncClient, **payload) -> str:
@@ -98,9 +98,7 @@ async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin)
     )
     assert reg.status_code == 201, reg.text
 
-    admin = await _token(
-        client, email="cfgadmin@sekolah-cfg.app", password="adminpass123"
-    )
+    admin = await _token(client, email="cfgadmin@sekolah-cfg.app", password="adminpass123")
     aheaders = {"Authorization": f"Bearer {admin}"}
 
     # Defaults on a fresh tenant.
@@ -193,9 +191,7 @@ async def _make_tenant(client: AsyncClient, headers: dict, slug: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_delete_tenant_soft_deletes_and_hides_from_list(
-    client: AsyncClient, super_admin
-):
+async def test_delete_tenant_removes_tenant_and_its_data(client: AsyncClient, super_admin):
     owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     oheaders = {"Authorization": f"Bearer {owner}"}
     tenant_id = await _make_tenant(client, oheaders, "sekolah-del")
@@ -203,18 +199,25 @@ async def test_delete_tenant_soft_deletes_and_hides_from_list(
     resp = await client.delete(f"/api/v1/tenants/{tenant_id}", headers=oheaders)
     assert resp.status_code == 204, resp.text
 
-    # deleted_at stamped rather than the row removed.
+    # Hard delete: the tenant row and its users are gone; the audit entry stays.
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
-        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
-        assert tenant.deleted_at is not None
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar()
+        assert tenant is None
+        users = (await s.execute(select(User).where(User.tenant_id == tenant_id))).all()
+        assert users == []
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "tenant.deleted" in actions
 
-    # ...and it disappears from the tenant listing.
     listing = await client.get("/api/v1/tenants", headers=oheaders)
     assert listing.status_code == 200, listing.text
     assert tenant_id not in {t["id"] for t in listing.json()["data"]["items"]}
+
+    # Its admin can no longer log in.
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": "admin@sekolah-del.app", "password": "adminpass123"}
+    )
+    assert login.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -229,7 +232,7 @@ async def test_delete_unknown_tenant_returns_404(client: AsyncClient, super_admi
 
 @pytest.mark.asyncio
 async def test_delete_tenant_twice_returns_404(client: AsyncClient, super_admin):
-    """Re-deleting an already-deleted tenant is a 404, not a silent 204."""
+    """Deleting a tenant that is already gone is a 404, not a silent 204."""
     owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     oheaders = {"Authorization": f"Bearer {owner}"}
     tenant_id = await _make_tenant(client, oheaders, "sekolah-twice")
