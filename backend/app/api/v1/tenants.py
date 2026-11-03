@@ -11,7 +11,7 @@ from app.api.deps import (
     require_super_admin,
     require_tenant_admin,
 )
-from app.models import Tenant, TenantStatus
+from app.models import TenantStatus
 from app.schemas import Envelope, TenantConfig, TenantCreate, TenantOut
 from app.services import audit_service, tenant_service
 

@@ -151,6 +151,7 @@ function AppRoutes() {
           <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
           <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
           <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
         </Route>
 
         {/* Super Admin routes — tenant pages also rendered inside SuperAdminDashboard layout */}

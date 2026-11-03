@@ -1,16 +1,22 @@
-# Standalone PostgreSQL + pgvector — for a dedicated DATABASE server.
+# PostgreSQL + pgvector for the netra backend, joined to the Dokploy network.
 #
-# The netra backend (which may live on a different server) connects to this over
-# the network. Frontend never touches the DB.
+# The backend (deployed in Dokploy on the same server) reaches this DB by
+# container name over `dokploy-network` — no server IP in the connection string:
+#   DATABASE_URL=postgresql+asyncpg://netra_app:<app_password>@netra-postgres:5432/netra
+#   DATABASE_ADMIN_URL=postgresql+asyncpg://<POSTGRES_USER>:<POSTGRES_PASSWORD>@netra-postgres:5432/netra
+# Inside the network the port is always 5432 (the container port).
 #
-# Usage on the DB server:
-#   cp .env.db.example .env        # then edit the passwords
-#   docker compose -f docker-compose.db.yml up -d
+# Usage on the server:
+#   cp .env.db.example .env        # then set strong passwords
+#   docker compose -f docker-compose.db.yml -p netra up -d
 #
-# Then, from the BACKEND server, point DATABASE_URL / DATABASE_ADMIN_URL at
-#   <this-server-ip>:5436  and run:  alembic upgrade head
-# (migrations create the `vector` extension, the netra_app role, and all tables —
-#  so no init-db.sql bind mount is needed here.)
+# Then run `alembic upgrade head` from inside the backend container. Migrations
+# create the `vector` extension, the netra_app role, and all tables, so no
+# init-db.sql bind mount is needed. Afterwards set a real password for the app
+# role: ALTER ROLE netra_app PASSWORD '...';
+#
+# The backend must connect as netra_app, not as POSTGRES_USER: the owner role
+# bypasses Row-Level Security, which disables tenant isolation.
 
 services:
   postgres:
@@ -22,19 +28,28 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong password in .env}
       POSTGRES_DB: ${POSTGRES_DB:-netra}
     ports:
-      # host:container — remote backend connects to <db-server-ip>:5430.
-      # SECURITY: firewall this port to the backend server's IP only, e.g.
-      #   ufw allow from <BACKEND_IP> to any port 5430
-      - "${DB_HOST_PORT:-5430}:5432"
+      # Bound to localhost only: for psql / migrations / pg_dump from the host.
+      # Not reachable from the internet. (Docker-published ports bypass ufw, so
+      # binding to 127.0.0.1 is what actually keeps the DB private.)
+      - "127.0.0.1:${DB_HOST_PORT:-5436}:5432"
     volumes:
       - netra_pgdata:/var/lib/postgresql/data
+    networks:
+      dokploy:
+        aliases: [netra-postgres]
     healthcheck:
       # -d avoids "database <user> does not exist" FATAL noise (pg_isready
       # otherwise defaults dbname to the username).
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-netra}"]
       interval: 5s
       timeout: 3s
       retries: 10
 
 volumes:
   netra_pgdata:
+
+networks:
+  dokploy:
+    # Created by Dokploy (overlay, attachable). Override via DOCKER_NETWORK.
+    name: ${DOCKER_NETWORK:-dokploy-network}
+    external: true

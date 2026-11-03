@@ -82,7 +82,7 @@ async function tryRefresh(): Promise<string | null> {
   return refreshPromise
 }
 
-async function apiFetch<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(url: string, token: string, init?: RequestInit): Promise<T> {
   // Snapshot the scope synchronously, before any await. The retry path below
   // resumes after a token refresh, by which point the ambient scope may already
   // belong to a different tenant's view — the retry must reuse this one.

@@ -82,6 +82,12 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class AdminResetPasswordRequest(BaseModel):
+    """An admin sets a new password for another staff account (forgotten password)."""
+
+    new_password: str = Field(min_length=8)
+
+
 # --------------------------------------------------------------------------- #
 # Tenant
 # --------------------------------------------------------------------------- #

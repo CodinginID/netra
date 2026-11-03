@@ -10,9 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import Principal, get_db, require_tenant_admin
 from app.core.security import hash_password
 from app.models import User
-from app.schemas import Envelope, UserCreate, UserCreateOut, UserOut, UserUpdate
-from app.services import audit_service, user_service
-from app.services.soft_delete import restore as soft_restore, soft_delete
+from app.schemas import (
+    AdminResetPasswordRequest,
+    Envelope,
+    UserCreate,
+    UserCreateOut,
+    UserOut,
+    UserUpdate,
+)
+from app.services import audit_service, password_reset_service, user_service
+from app.services.soft_delete import restore as soft_restore
+from app.services.soft_delete import soft_delete
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -105,9 +113,13 @@ async def list_users(
         )
 
     # Count total
-    count_stmt = select(func.count(User.id)).select_from(User).where(
-        User.deleted_at.is_(None),
-        User.tenant_id == principal.tenant_id,
+    count_stmt = (
+        select(func.count(User.id))
+        .select_from(User)
+        .where(
+            User.deleted_at.is_(None),
+            User.tenant_id == principal.tenant_id,
+        )
     )
     if search:
         search_pattern = f"%{search}%"
@@ -124,13 +136,15 @@ async def list_users(
 
     pages = (total + limit - 1) // limit if total > 0 else 0
 
-    return Envelope(data={
-        "items": items,
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "pages": pages,
-    })
+    return Envelope(
+        data={
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": pages,
+        }
+    )
 
 
 @router.patch("/{user_id}", response_model=Envelope[UserOut])
@@ -197,10 +211,12 @@ async def list_deleted_users(
 ) -> Envelope[list[UserOut]]:
     """List soft-deleted users (recycle bin)."""
     result = await session.execute(
-        select(User).where(
+        select(User)
+        .where(
             User.deleted_at.isnot(None),
             User.tenant_id == principal.tenant_id,
-        ).order_by(User.deleted_at.desc())
+        )
+        .order_by(User.deleted_at.desc())
     )
     return Envelope(data=[UserOut.model_validate(u) for u in result.scalars()])
 
@@ -217,12 +233,14 @@ async def restore_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not deleted"
         )
-    user = (await session.execute(
-        select(User).where(
-            User.id == user_id,
-            User.tenant_id == principal.tenant_id,
+    user = (
+        await session.execute(
+            select(User).where(
+                User.id == user_id,
+                User.tenant_id == principal.tenant_id,
+            )
         )
-    )).scalar_one()
+    ).scalar_one()
     await audit_service.record(
         session,
         action="user.restored",
@@ -231,3 +249,32 @@ async def restore_user(
         detail={"user_id": user_id},
     )
     return Envelope(data=UserOut.model_validate(user))
+
+
+@router.post("/{user_id}/reset-password", response_model=Envelope[dict])
+async def reset_user_password(
+    user_id: str,
+    payload: AdminResetPasswordRequest,
+    principal: Principal = Depends(require_tenant_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Envelope[dict]:
+    """Admin sets a new password for a staff account that forgot theirs."""
+    try:
+        await password_reset_service.reset_password(
+            session,
+            user_id=user_id,
+            actor_id=principal.subject,
+            new_password=payload.new_password,
+        )
+    except password_reset_service.ResetNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except password_reset_service.ResetNotAllowed as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await audit_service.record(
+        session,
+        action="password.reset",
+        actor=principal.subject,
+        tenant_id=principal.tenant_id,
+        detail={"user_id": user_id},
+    )
+    return Envelope(data={"reset": True})

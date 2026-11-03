@@ -100,7 +100,14 @@ function docsStatic(): Plugin {
   }
 }
 
+const APP_VERSION: string = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'),
+).version
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [
     react(),
     docsStatic(),
