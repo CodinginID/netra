@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import * as api from '@/api/adminApi'
 import { withTenantScope } from '@/api/adminApi'
+import { resetUserPassword } from '@/api/accountApi'
 import { queryKeys, useTenantScope } from './useApiQueries'
 
 /**
@@ -69,6 +70,15 @@ export function useRestoreUser(onSuccess?: () => void) {
       qc.invalidateQueries({ queryKey: queryKeys.users() })
       onSuccess?.()
     },
+  })
+}
+
+export function useResetUserPassword(onSuccess?: () => void) {
+  const call = useScopedCall()
+  return useMutation({
+    mutationFn: ({ userId, newPassword }: { userId: string; newPassword: string }) =>
+      call((t) => resetUserPassword(t, userId, newPassword)),
+    onSuccess: () => onSuccess?.(),
   })
 }
 

@@ -12,6 +12,7 @@ import {
   UserCheck,
   KeyRound,
   Trash2,
+  Settings,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { dailyReport } from '@/api/adminApi'
@@ -35,6 +36,7 @@ export function TenantAdminDashboard() {
     { label: t('daily_status.title'), to: '/tenant/status', icon: UserCheck },
     { label: t('integration.title'), to: '/tenant/integration', icon: KeyRound },
     { label: t('trash.title'), to: '/tenant/trash', icon: Trash2 },
+    { label: t('nav.settings'), to: '/tenant/settings', icon: Settings },
   ]
   return (
     <DashboardLayout title={t('tenant_admin.title')} navItems={navItems}>
