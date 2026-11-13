@@ -19,6 +19,12 @@ type KioskStatus = 'idle' | 'processing' | 'success' | 'error'
 
 const RESET_DELAY_MS = 5500
 const SCAN_INTERVAL_MS = 2500
+const UNKNOWN_VOICE_GAP_MS = 10_000
+// Spoken feedback for failed punches, keyed by KioskError code.
+const FAIL_VOICE_KEYS: Record<string, string> = {
+  liveness_failed: 'kiosk.liveness_failed_voice',
+  duplicate: 'kiosk.duplicate_voice',
+}
 
 interface ResultState {
   status: KioskStatus
@@ -103,6 +109,7 @@ export function KioskPage() {
   // Auto-scan (touchless mode)
   const autoScanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cooldownUntilRef = useRef<number>(0)
+  const lastUnknownVoiceRef = useRef<number>(0)
   const resultStateRef = useRef(resultState)
   const cameraStateRef = useRef(cameraState)
   const savedTokenRef = useRef(savedToken)
@@ -267,14 +274,20 @@ export function KioskPage() {
         return
       }
       if (err instanceof KioskError && err.code === 'not_recognized') {
-        // No face matched — silently reset and keep scanning
+        // No face matched — keep scanning; voice is throttled so a person
+        // standing in front of the camera doesn't hear it every scan.
         setIsOffline(false)
+        if (Date.now() - lastUnknownVoiceRef.current > UNKNOWN_VOICE_GAP_MS) {
+          lastUnknownVoiceRef.current = Date.now()
+          speak(t('kiosk.not_recognized_voice'))
+        }
         setResultState({ status: 'idle' })
       } else {
         setIsOffline(false)
         const code = err instanceof KioskError ? err.code : 'server_error'
         const msg = err instanceof KioskError ? err.message : (err instanceof Error ? err.message : t('kiosk.server_error'))
         if (code !== 'not_recognized') show(msg, 'error')
+        speak(t(FAIL_VOICE_KEYS[code] ?? 'kiosk.fail_voice'))
         setResultState({ status: 'error', errorCode: code, errorMsg: msg })
         cooldownUntilRef.current = Date.now() + 3000
         scheduleReset()
