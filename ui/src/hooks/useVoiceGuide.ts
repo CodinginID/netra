@@ -1,12 +1,8 @@
 import { useCallback, useRef } from 'react'
+import { t, useI18nStore, type Locale } from '@/store/i18nStore'
 
-const VOICE_PHRASES: Record<string, string> = {
-  front:   'Lihat lurus ke kamera',
-  left:    'Putar kepala ke kiri',
-  right:   'Putar kepala ke kanan',
-  done:    'Rekaman wajah selesai. Bagus sekali.',
-  ready:   'Bersiap',
-}
+// Speech-synthesis voice per UI language, so text is read with a matching accent.
+const SPEECH_LANG: Record<Locale, string> = { id: 'id-ID', en: 'en-US' }
 
 export function useVoiceGuide() {
   const enabledRef = useRef(true)
@@ -18,7 +14,7 @@ export function useVoiceGuide() {
     const go = () => {
       synth.cancel()
       const u = new SpeechSynthesisUtterance(text)
-      u.lang   = 'id-ID'
+      u.lang   = SPEECH_LANG[useI18nStore.getState().locale] ?? 'id-ID'
       u.rate   = 0.9
       u.pitch  = 1.05
       u.volume = 1
@@ -29,7 +25,7 @@ export function useVoiceGuide() {
   }, [])
 
   const announcePhase = useCallback((phase: 'front' | 'left' | 'right') => {
-    speak(VOICE_PHRASES[phase])
+    speak(t(`voice.${phase}`))
   }, [speak])
 
   const announceCountdown = useCallback((n: number) => {
@@ -37,7 +33,7 @@ export function useVoiceGuide() {
   }, [speak])
 
   const announceDone = useCallback(() => {
-    speak(VOICE_PHRASES.done)
+    speak(t('voice.done'))
   }, [speak])
 
   const setEnabled = useCallback((v: boolean) => { enabledRef.current = v }, [])

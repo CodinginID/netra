@@ -49,7 +49,7 @@ function useClock() {
 }
 
 export function KioskPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { show } = useToast()
   const { time, date } = useClock()
 
@@ -293,7 +293,8 @@ export function KioskPage() {
         scheduleReset()
       }
     }
-  }, [show, speak]) // show and speak are stable from useCallback
+  // show and speak are stable; locale re-creates t so messages follow the language setting
+  }, [show, speak, locale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start/stop auto-scan interval when camera or token becomes available
   useEffect(() => {
