@@ -11,10 +11,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_db, get_principal, require_staff
+from app.api.v1.enrollment_errors import enrollment_errors
 from app.core.logging import get_logger
 from app.schemas import EnrollmentResult, Envelope
 from app.services import audit_service, recognition_service
-from app.services.face import NoFaceDetectedError
 from app.websocket import manager
 
 log = get_logger("netra.enrollment")
@@ -35,18 +35,10 @@ async def self_enroll_face(
         )
     user_id = principal.subject
     image_bytes = await image.read()
-    try:
+    async with enrollment_errors(session, reveal_owner=False):
         embedding = await recognition_service.enroll(
             session, principal.tenant_id, user_id, image_bytes
         )
-    except recognition_service.ConsentRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except recognition_service.RecognitionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NoFaceDetectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
 
     await audit_service.record(
         session,
@@ -104,18 +96,10 @@ async def self_enroll_multi_angle(
     user_id = principal.subject
     image_bytes = [await img.read() for img in images]
 
-    try:
+    async with enrollment_errors(session, reveal_owner=False):
         embeddings = await recognition_service.enroll_multi(
             session, principal.tenant_id, user_id, image_bytes
         )
-    except recognition_service.ConsentRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except recognition_service.RecognitionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NoFaceDetectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
 
     await audit_service.record(
         session,
@@ -170,18 +154,10 @@ async def enroll_face_multi(
         )
 
     image_bytes = [await img.read() for img in images]
-    try:
+    async with enrollment_errors(session, reveal_owner=True):
         embeddings = await recognition_service.enroll_multi(
             session, principal.tenant_id, user_id, image_bytes
         )
-    except recognition_service.ConsentRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except recognition_service.RecognitionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NoFaceDetectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
 
     await audit_service.record(
         session,
@@ -225,18 +201,10 @@ async def enroll_face(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
         )
     image_bytes = await image.read()
-    try:
+    async with enrollment_errors(session, reveal_owner=True):
         embedding = await recognition_service.enroll(
             session, principal.tenant_id, user_id, image_bytes
         )
-    except recognition_service.ConsentRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except recognition_service.RecognitionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NoFaceDetectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
 
     await audit_service.record(
         session,

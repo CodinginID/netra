@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models import Consent, FaceEmbedding, User
+from app.models import Consent, FaceEmbedding, Tenant, User
+from app.schemas import TenantConfig
 from app.services.face import FaceEngine, get_face_engine
 
 log = get_logger("netra.recognition")
@@ -29,6 +30,15 @@ class ConsentRequiredError(RecognitionError):
     """Enrollment attempted before the subject granted biometric consent (UU PDP)."""
 
 
+class DuplicateFaceError(RecognitionError):
+    """The face being enrolled already belongs to another user in this tenant."""
+
+    def __init__(self, existing_user_id: str, similarity: float) -> None:
+        super().__init__("this face is already enrolled for another user")
+        self.existing_user_id = existing_user_id
+        self.similarity = similarity
+
+
 @dataclass
 class Match:
     user_id: str
@@ -40,6 +50,54 @@ async def _has_consent(session: AsyncSession, user_id: str) -> bool:
         select(Consent.id).where(Consent.user_id == user_id, Consent.granted.is_(True)).limit(1)
     )
     return row.scalar_one_or_none() is not None
+
+
+async def _tenant_match_threshold(session: AsyncSession, tenant_id: str) -> float:
+    """The threshold identify() uses for this tenant (per-tenant override or global)."""
+    config = (
+        await session.execute(select(Tenant.config).where(Tenant.id == tenant_id))
+    ).scalar_one_or_none()
+    override = TenantConfig.model_validate(config or {}).recognition.match_threshold
+    return settings.match_threshold if override is None else override
+
+
+async def _nearest_other_user(
+    session: AsyncSession, user_id: str, vector: list[float]
+) -> Match | None:
+    """Closest enrolled face that belongs to someone other than ``user_id``."""
+    distance = FaceEmbedding.vector.cosine_distance(vector).label("distance")
+    row = (
+        await session.execute(
+            select(FaceEmbedding.user_id, distance)
+            .where(FaceEmbedding.user_id != user_id)
+            .order_by(distance)
+            .limit(1)
+        )
+    ).first()
+    return None if row is None else Match(user_id=row[0], similarity=1.0 - float(row[1]))
+
+
+async def _ensure_face_not_taken(
+    session: AsyncSession, tenant_id: str, user_id: str, vectors: list[list[float]]
+) -> None:
+    """Refuse a face that identify() would already resolve to a different user.
+
+    One face = one identity per tenant. Without this, enrolling an
+    already-enrolled face under a second name makes the kiosk punch whichever
+    of the two happens to be nearest. Uses the same threshold as identify().
+    """
+    threshold = await _tenant_match_threshold(session, tenant_id)
+    for vector in vectors:
+        match = await _nearest_other_user(session, user_id, vector)
+        if match is not None and match.similarity >= threshold:
+            log.warning(
+                "enroll_duplicate_face",
+                user_id=user_id,
+                existing_user_id=match.user_id,
+                similarity=round(match.similarity, 4),
+                threshold=threshold,
+            )
+            raise DuplicateFaceError(match.user_id, match.similarity)
 
 
 async def enroll(
@@ -60,6 +118,7 @@ async def enroll(
 
     eng = engine or get_face_engine()
     vector = await asyncio.to_thread(eng.embed, image)
+    await _ensure_face_not_taken(session, tenant_id, user_id, [vector])
     embedding = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
     session.add(embedding)
     user.enrolled = True
@@ -89,16 +148,16 @@ async def enroll_multi(
     if user is None:
         raise RecognitionError("user not found")
 
+    eng = engine or get_face_engine()
+    vectors = [await asyncio.to_thread(eng.embed, img) for img in images]
+    await _ensure_face_not_taken(session, tenant_id, user_id, vectors)
+
     # Replace all previous embeddings for this user (re-enroll = fresh start)
     await session.execute(delete(FaceEmbedding).where(FaceEmbedding.user_id == user_id))
-
-    eng = engine or get_face_engine()
-    embeddings: list[FaceEmbedding] = []
-    for img in images:
-        vector = await asyncio.to_thread(eng.embed, img)
-        emb = FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=vector, version=1)
-        session.add(emb)
-        embeddings.append(emb)
+    embeddings = [
+        FaceEmbedding(tenant_id=tenant_id, user_id=user_id, vector=v, version=1) for v in vectors
+    ]
+    session.add_all(embeddings)
 
     user.enrolled = True
     await session.flush()

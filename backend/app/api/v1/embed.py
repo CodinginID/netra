@@ -25,6 +25,7 @@ from app.api.deps import (
     get_embed_principal,
     get_embed_principal_from_query,
 )
+from app.api.v1.enrollment_errors import enrollment_errors
 from app.core.logging import get_logger
 from app.models import Consent, EmbedSession
 from app.schemas import EmbedSessionInfo, EnrollmentResult, Envelope
@@ -35,7 +36,6 @@ from app.services import (
     user_service,
     webhook_service,
 )
-from app.services.face import NoFaceDetectedError
 
 router = APIRouter(prefix="/embed", tags=["embed"])
 log = get_logger("netra.embed")
@@ -132,16 +132,10 @@ async def embed_enroll(
     await session.flush()
 
     image_bytes = [await img.read() for img in images]
-    try:
+    async with enrollment_errors(session, reveal_owner=False):
         embeddings = await recognition_service.enroll_multi(
             session, principal.tenant_id, user.id, image_bytes
         )
-    except recognition_service.ConsentRequiredError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except recognition_service.RecognitionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NoFaceDetectedError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     # Single-use: consume the embed session.
     embed = (
