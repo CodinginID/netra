@@ -297,11 +297,7 @@ async def test_every_tenant_table_policy_is_fail_closed():
     missing = [t for t in tables if t not in by_table]
     assert missing == [], f"tenant tables with no RLS policy at all: {missing}"
 
-    fail_open = [
-        t
-        for t in tables
-        if not any("app.platform_context" in q for q in by_table[t])
-    ]
+    fail_open = [t for t in tables if not any("app.platform_context" in q for q in by_table[t])]
     assert fail_open == [], (
         f"tenant tables still on a fail-open policy (no app.platform_context "
         f"grant in USING): {fail_open}"

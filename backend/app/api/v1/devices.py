@@ -20,7 +20,8 @@ from app.core.security import generate_device_token, hash_device_token
 from app.models import Device, DeviceStatus
 from app.schemas import DeviceCreate, DeviceOut, DeviceRegistered, DeviceUpdate, Envelope
 from app.services import audit_service
-from app.services.soft_delete import restore as soft_restore, soft_delete
+from app.services.soft_delete import restore as soft_restore
+from app.services.soft_delete import soft_delete
 from app.websocket import manager
 
 log = get_logger("netra.devices")
@@ -73,9 +74,13 @@ async def list_devices(
         Device.deleted_at.is_(None),
         Device.tenant_id == principal.tenant_id,
     )
-    count_stmt = select(func.count(Device.id)).select_from(Device).where(
-        Device.deleted_at.is_(None),
-        Device.tenant_id == principal.tenant_id,
+    count_stmt = (
+        select(func.count(Device.id))
+        .select_from(Device)
+        .where(
+            Device.deleted_at.is_(None),
+            Device.tenant_id == principal.tenant_id,
+        )
     )
     total = (await session.execute(count_stmt)).scalar() or 0
     offset = (page - 1) * limit
@@ -84,7 +89,9 @@ async def list_devices(
     )
     items = [DeviceOut.model_validate(d) for d in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
-    return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})
+    return Envelope(
+        data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
+    )
 
 
 @router.post("/{device_id}/revoke", response_model=Envelope[DeviceOut])
@@ -94,10 +101,12 @@ async def revoke_device(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[DeviceOut]:
     device = (
-        await session.execute(select(Device).where(
-            Device.id == device_id,
-            Device.tenant_id == principal.tenant_id,
-        ))
+        await session.execute(
+            select(Device).where(
+                Device.id == device_id,
+                Device.tenant_id == principal.tenant_id,
+            )
+        )
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -144,10 +153,12 @@ async def regenerate_device_token(
     Returns the new plaintext token.
     """
     device = (
-        await session.execute(select(Device).where(
-            Device.id == device_id,
-            Device.tenant_id == principal.tenant_id,
-        ))
+        await session.execute(
+            select(Device).where(
+                Device.id == device_id,
+                Device.tenant_id == principal.tenant_id,
+            )
+        )
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -182,11 +193,13 @@ async def view_device_token(
     have no retrievable token (409) and must regenerate once.
     """
     device = (
-        await session.execute(select(Device).where(
-            Device.id == device_id,
-            Device.tenant_id == principal.tenant_id,
-            Device.deleted_at.is_(None),
-        ))
+        await session.execute(
+            select(Device).where(
+                Device.id == device_id,
+                Device.tenant_id == principal.tenant_id,
+                Device.deleted_at.is_(None),
+            )
+        )
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -221,10 +234,12 @@ async def update_device(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[DeviceOut]:
     device = (
-        await session.execute(select(Device).where(
-            Device.id == device_id,
-            Device.tenant_id == principal.tenant_id,
-        ))
+        await session.execute(
+            select(Device).where(
+                Device.id == device_id,
+                Device.tenant_id == principal.tenant_id,
+            )
+        )
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -267,10 +282,12 @@ async def list_deleted_devices(
 ) -> Envelope[list[DeviceOut]]:
     """List soft-deleted devices (recycle bin)."""
     result = await session.execute(
-        select(Device).where(
+        select(Device)
+        .where(
             Device.deleted_at.isnot(None),
             Device.tenant_id == principal.tenant_id,
-        ).order_by(Device.deleted_at.desc())
+        )
+        .order_by(Device.deleted_at.desc())
     )
     return Envelope(data=[DeviceOut.model_validate(d) for d in result.scalars()])
 
@@ -287,12 +304,14 @@ async def restore_device(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or not deleted"
         )
-    device = (await session.execute(
-        select(Device).where(
-            Device.id == device_id,
-            Device.tenant_id == principal.tenant_id,
+    device = (
+        await session.execute(
+            select(Device).where(
+                Device.id == device_id,
+                Device.tenant_id == principal.tenant_id,
+            )
         )
-    )).scalar_one()
+    ).scalar_one()
     await audit_service.record(
         session,
         action="device.restored",

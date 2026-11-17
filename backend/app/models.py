@@ -68,8 +68,8 @@ class ApiKeyStatus(str, enum.Enum):
 
 
 class EmbedSessionStatus(str, enum.Enum):
-    pending = "pending"     # minted, not yet used
-    consumed = "consumed"   # enrollment succeeded, token dead
+    pending = "pending"  # minted, not yet used
+    consumed = "consumed"  # enrollment succeeded, token dead
 
 
 class EmbedPurpose(str, enum.Enum):
@@ -79,6 +79,7 @@ class EmbedPurpose(str, enum.Enum):
 
 class BillingCycle(str, enum.Enum):
     """How often the subscription renews and invoices are issued."""
+
     annual = "annual"
     semiannual = "semiannual"  # 6 months
     monthly = "monthly"
@@ -113,7 +114,9 @@ class Tenant(Base, TimestampMixin):
     # branding, attendance defaults, kiosk prefs, etc.
     config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     users: Mapped[list[User]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
@@ -450,7 +453,7 @@ class Plan(Base, TimestampMixin):
     features: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    tiers: Mapped[list["PlanTier"]] = relationship(
+    tiers: Mapped[list[PlanTier]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="PlanTier.sort_order"
     )
 
@@ -487,15 +490,15 @@ class TenantSubscription(Base, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    plan_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("plans.id"), nullable=False
-    )
+    plan_id: Mapped[str] = mapped_column(String(36), ForeignKey("plans.id"), nullable=False)
     billing_cycle: Mapped[BillingCycle] = mapped_column(
         Enum(BillingCycle, name="billing_cycle"),
         default=BillingCycle.annual,
         nullable=False,
     )
-    unit_price_override: Mapped[int | None] = mapped_column(Integer, nullable=True)  # per-user override
+    unit_price_override: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )  # per-user override
     discount_pct: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # 0-100
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -566,7 +569,7 @@ class Invoice(Base, TimestampMixin):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    lines: Mapped[list["InvoiceLine"]] = relationship(
+    lines: Mapped[list[InvoiceLine]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.sort_order"
     )
 

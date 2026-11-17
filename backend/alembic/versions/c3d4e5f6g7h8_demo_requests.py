@@ -4,9 +4,10 @@ Revision ID: c3d4e5f6g7h8
 Revises: b2c3d4e5f6g7
 Create Date: 2026-08-13
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import ENUM
+
+from alembic import op
 
 revision = 'c3d4e5f6g7h8'
 down_revision = 'b2c3d4e5f6g7'

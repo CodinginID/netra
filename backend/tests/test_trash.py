@@ -12,14 +12,17 @@ from app.services.soft_delete import hard_delete
 @pytest.mark.asyncio
 async def test_hard_delete_user_removes_from_trash_and_db(client: AsyncClient, tenant_admin):
     """A hard-deleted user disappears from the trash and from the DB."""
-    from app.db.session import SessionFactory, _set_tenant
     from sqlalchemy import select
+
+    from app.db.session import SessionFactory, _set_tenant
 
     user_id = (await tenant_admin._create_user("Siswa Trash", "s-trash")).id
 
     # Soft-delete → user enters trash.
     await client.request(
-        "DELETE", f"/api/v1/users/{user_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/users/{user_id}",
+        headers=tenant_admin.headers,
     )
 
     # Verify it's in trash.
@@ -29,7 +32,9 @@ async def test_hard_delete_user_removes_from_trash_and_db(client: AsyncClient, t
 
     # Hard-delete.
     resp = await client.request(
-        "DELETE", f"/api/v1/trash/users/{user_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/trash/users/{user_id}",
+        headers=tenant_admin.headers,
     )
     assert resp.status_code == 204, resp.text
 
@@ -40,9 +45,7 @@ async def test_hard_delete_user_removes_from_trash_and_db(client: AsyncClient, t
     # Gone from DB.
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
-        row = (
-            await s.execute(select(User).where(User.id == user_id))
-        ).scalar_one_or_none()
+        row = (await s.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
         assert row is None
 
 
@@ -53,10 +56,14 @@ async def test_hard_delete_user_404_on_restored_entity(client: AsyncClient, tena
 
     # Restore → hard delete now.
     await client.request(
-        "POST", f"/api/v1/users/{user_id}/restore", headers=tenant_admin.headers,
+        "POST",
+        f"/api/v1/users/{user_id}/restore",
+        headers=tenant_admin.headers,
     )
     resp = await client.request(
-        "DELETE", f"/api/v1/trash/users/{user_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/trash/users/{user_id}",
+        headers=tenant_admin.headers,
     )
     assert resp.status_code == 404, resp.text
 
@@ -75,46 +82,54 @@ async def test_hard_delete_user_404_on_nonexistent_entity(client: AsyncClient, t
 @pytest.mark.asyncio
 async def test_hard_delete_device_removes_from_trash(client: AsyncClient, tenant_admin):
     """A hard-deleted device disappears from the trash."""
-    from app.db.session import SessionFactory, _set_tenant
     from sqlalchemy import select
+
+    from app.db.session import SessionFactory, _set_tenant
 
     device_id = (await tenant_admin._create_device("TrashKiosk")).id
 
     # Soft-delete → enter trash.
     await client.request(
-        "DELETE", f"/api/v1/devices/{device_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/devices/{device_id}",
+        headers=tenant_admin.headers,
     )
 
     resp = await client.request(
-        "DELETE", f"/api/v1/trash/devices/{device_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/trash/devices/{device_id}",
+        headers=tenant_admin.headers,
     )
     assert resp.status_code == 204, resp.text
 
     # Gone.
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
-        row = (
-            await s.execute(select(Device).where(Device.id == device_id))
-        ).scalar_one_or_none()
+        row = (await s.execute(select(Device).where(Device.id == device_id))).scalar_one_or_none()
         assert row is None
 
 
 @pytest.mark.asyncio
 async def test_hard_delete_schedule_removes_from_trash(client: AsyncClient, tenant_admin):
     """A hard-deleted schedule disappears from the trash."""
-    from app.db.session import SessionFactory, _set_tenant
     from sqlalchemy import select
+
+    from app.db.session import SessionFactory, _set_tenant
 
     # Create a schedule via the normal flow then soft-delete it.
     # For simplicity we create and immediately soft-delete a schedule row.
     schedule_id = (await tenant_admin._create_schedule("TrashSchedule")).id
 
     await client.request(
-        "DELETE", f"/api/v1/schedules/{schedule_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/schedules/{schedule_id}",
+        headers=tenant_admin.headers,
     )
 
     resp = await client.request(
-        "DELETE", f"/api/v1/trash/schedules/{schedule_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/trash/schedules/{schedule_id}",
+        headers=tenant_admin.headers,
     )
     assert resp.status_code == 204, resp.text
 
@@ -129,26 +144,31 @@ async def test_hard_delete_schedule_removes_from_trash(client: AsyncClient, tena
 @pytest.mark.asyncio
 async def test_hard_delete_is_audit_logged(client: AsyncClient, tenant_admin):
     """Hard-delete must be recorded in the audit log with action trash.hard_deleted."""
+    from sqlalchemy import select
+
     from app.db.session import SessionFactory, _set_tenant
     from app.models import AuditLog
-    from sqlalchemy import select
 
     user_id = (await tenant_admin._create_user("Siswa Audit", "s-audit")).id
 
     await client.request(
-        "DELETE", f"/api/v1/users/{user_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/users/{user_id}",
+        headers=tenant_admin.headers,
     )
     resp = await client.request(
-        "DELETE", f"/api/v1/trash/users/{user_id}", headers=tenant_admin.headers,
+        "DELETE",
+        f"/api/v1/trash/users/{user_id}",
+        headers=tenant_admin.headers,
     )
     assert resp.status_code == 204, resp.text
 
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
         log_rows = list(
-            (await s.execute(
-                select(AuditLog).where(AuditLog.action == "trash.hard_deleted")
-            )).scalars()
+            (
+                await s.execute(select(AuditLog).where(AuditLog.action == "trash.hard_deleted"))
+            ).scalars()
         )
         assert len(log_rows) == 1
         assert log_rows[0].detail["entity_type"] == "user"
@@ -158,8 +178,9 @@ async def test_hard_delete_is_audit_logged(client: AsyncClient, tenant_admin):
 @pytest.mark.asyncio
 async def test_soft_delete_service_hard_delete_removes_row():
     """The service function itself correctly removes a row by ID."""
-    from app.db.session import SessionFactory, _set_tenant
     from sqlalchemy import select
+
+    from app.db.session import SessionFactory, _set_tenant
 
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
@@ -183,9 +204,7 @@ async def test_soft_delete_service_hard_delete_removes_row():
             removed = await hard_delete(s2, User, uid)
             assert removed is True
 
-            row = (
-                await s2.execute(select(User).where(User.id == uid))
-            ).scalar_one_or_none()
+            row = (await s2.execute(select(User).where(User.id == uid))).scalar_one_or_none()
             assert row is None
 
 

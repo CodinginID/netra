@@ -98,9 +98,7 @@ async def test_tenant_admin_manages_own_config(client: AsyncClient, super_admin)
     )
     assert reg.status_code == 201, reg.text
 
-    admin = await _token(
-        client, email="cfgadmin@sekolah-cfg.app", password="adminpass123"
-    )
+    admin = await _token(client, email="cfgadmin@sekolah-cfg.app", password="adminpass123")
     aheaders = {"Authorization": f"Bearer {admin}"}
 
     # Defaults on a fresh tenant.
@@ -193,9 +191,7 @@ async def _make_tenant(client: AsyncClient, headers: dict, slug: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_delete_tenant_removes_tenant_and_its_users(
-    client: AsyncClient, super_admin
-):
+async def test_delete_tenant_removes_tenant_and_its_users(client: AsyncClient, super_admin):
     """Deleting a tenant cascades to its rows — starting with the admin that
     onboarding created, which used to block the delete."""
     owner = await _token(client, email="owner@netra.app", password="ownerpass123")
@@ -212,9 +208,7 @@ async def test_delete_tenant_removes_tenant_and_its_users(
             await s.execute(select(Tenant).where(Tenant.id == tenant_id))
         ).scalar_one_or_none()
         assert tenant is None
-        users = list(
-            (await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars()
-        )
+        users = list((await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars())
         assert users == []
         actions = {a.action for a in (await s.execute(select(AuditLog))).scalars()}
         assert "tenant.deleted" in actions
@@ -250,9 +244,7 @@ async def test_delete_tenant_with_soft_deleted_user(client: AsyncClient, super_a
 
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
-        users = list(
-            (await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars()
-        )
+        users = list((await s.execute(select(User).where(User.tenant_id == tenant_id))).scalars())
         assert users == []
 
 

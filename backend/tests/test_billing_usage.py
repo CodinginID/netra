@@ -8,7 +8,7 @@ very tenant admins whose own page calls it.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -27,7 +27,7 @@ from app.services import billing_service
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @asynccontextmanager
@@ -200,9 +200,7 @@ async def test_by_tenant_endpoint_requires_super_admin(client: AsyncClient, supe
     )
     assert resp.status_code == 201, resp.text
 
-    tenant_token = await _token(
-        client, email="admin@usage-tenant.app", password="adminpass123"
-    )
+    tenant_token = await _token(client, email="admin@usage-tenant.app", password="adminpass123")
     resp = await client.get(
         "/api/v1/billing/usage/by-tenant",
         headers={"Authorization": f"Bearer {tenant_token}"},
@@ -238,9 +236,7 @@ async def test_tenant_admin_can_read_its_own_usage(client: AsyncClient, super_ad
 
 
 @pytest.mark.asyncio
-async def test_tenant_admin_cannot_read_another_tenants_usage(
-    client: AsyncClient, super_admin
-):
+async def test_tenant_admin_cannot_read_another_tenants_usage(client: AsyncClient, super_admin):
     """tenant_id in the query string must not widen a tenant admin's scope."""
     token = await _token(client, email="owner@netra.app", password="ownerpass123")
     headers = {"Authorization": f"Bearer {token}"}

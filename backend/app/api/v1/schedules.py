@@ -87,14 +87,24 @@ async def list_schedules(
     total = counts[schedule_type] if schedule_type else all_count
     offset = (page - 1) * limit
     items_result = await session.execute(
-        select(Schedule).where(*filters).order_by(Schedule.created_at.desc()).offset(offset).limit(limit)
+        select(Schedule)
+        .where(*filters)
+        .order_by(Schedule.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
     items = [ScheduleOut.model_validate(s) for s in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
-    return Envelope(data={
-        "items": items, "total": total, "page": page, "limit": limit, "pages": pages,
-        "counts": counts,
-    })
+    return Envelope(
+        data={
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": pages,
+            "counts": counts,
+        }
+    )
 
 
 @router.patch("/{schedule_id}", response_model=Envelope[ScheduleOut])
@@ -175,10 +185,12 @@ async def list_deleted_schedules(
 ) -> Envelope[list[ScheduleOut]]:
     """List soft-deleted schedules (recycle bin)."""
     result = await session.execute(
-        select(Schedule).where(
+        select(Schedule)
+        .where(
             Schedule.deleted_at.isnot(None),
             Schedule.tenant_id == principal.tenant_id,
-        ).order_by(Schedule.deleted_at.desc())
+        )
+        .order_by(Schedule.deleted_at.desc())
     )
     return Envelope(data=[ScheduleOut.model_validate(s) for s in result.scalars()])
 
@@ -195,21 +207,27 @@ async def restore_schedule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or not deleted"
         )
-    schedule = (await session.execute(
-        select(Schedule).where(
-            Schedule.id == schedule_id,
-            Schedule.tenant_id == principal.tenant_id,
+    schedule = (
+        await session.execute(
+            select(Schedule).where(
+                Schedule.id == schedule_id,
+                Schedule.tenant_id == principal.tenant_id,
+            )
         )
-    )).scalar_one()
+    ).scalar_one()
     if schedule.is_default:
         # Another schedule became the default while this one was in the trash.
-        other = (await session.execute(
-            select(Schedule.id).where(
-                Schedule.is_default.is_(True),
-                Schedule.deleted_at.is_(None),
-                Schedule.id != schedule.id,
-            ).limit(1)
-        )).scalar_one_or_none()
+        other = (
+            await session.execute(
+                select(Schedule.id)
+                .where(
+                    Schedule.is_default.is_(True),
+                    Schedule.deleted_at.is_(None),
+                    Schedule.id != schedule.id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
         if other is not None:
             schedule.is_default = False
     await schedule_service.ensure_default(session)

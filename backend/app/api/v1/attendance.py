@@ -6,7 +6,7 @@ geofence enforcement -> record with schedule-derived status -> webhook dispatch.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -34,7 +34,8 @@ from app.services import (
 )
 from app.services.face import NoFaceDetectedError
 from app.services.liveness import LivenessError, get_liveness_engine
-from app.services.soft_delete import restore as soft_restore, soft_delete
+from app.services.soft_delete import restore as soft_restore
+from app.services.soft_delete import soft_delete
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 log = get_logger("netra.attendance")
@@ -45,7 +46,7 @@ def _to_tenant_local(when: datetime, tz_name: str) -> datetime:
     time; occurred_at is stored as this (timezone-aware) local instant. A naive
     timestamp is taken as already tenant-local."""
     try:
-        tz = ZoneInfo(tz_name)
+        tz: tzinfo = ZoneInfo(tz_name)
     except Exception:  # unknown tz string → fall back to UTC
         tz = UTC
     return when.replace(tzinfo=tz) if when.tzinfo is None else when.astimezone(tz)
@@ -110,11 +111,13 @@ async def _get_open_checkin(
 
     had_checkout = (
         await session.execute(
-            select(AttendanceRecord.id).where(
+            select(AttendanceRecord.id)
+            .where(
                 AttendanceRecord.user_id == user_id,
                 AttendanceRecord.type == AttendanceType.check_out,
                 AttendanceRecord.occurred_at > last_checkin.occurred_at,
-            ).limit(1)
+            )
+            .limit(1)
         )
     ).scalar_one_or_none()
 
@@ -286,7 +289,9 @@ async def auto_attend(
         lng=lng,
     )
     if principal.tenant_id is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
+        )
 
     now_utc = occurred_at or datetime.now(UTC)
     image_bytes = await image.read()
@@ -312,7 +317,9 @@ async def auto_attend(
             liveness = get_liveness_engine().score(image_bytes)
         except LivenessError as exc:
             log.error("auto_attend_liveness_error", error=str(exc), error_type=type(exc).__name__)
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
         log.info("auto_attend_liveness_score", score=liveness)
         if liveness < settings.liveness_threshold:
             raise HTTPException(
@@ -322,13 +329,19 @@ async def auto_attend(
 
     # 2. Identify (1:N)
     try:
-        match = await recognition_service.identify(session, image_bytes, threshold=cfg.recognition.match_threshold)
+        match = await recognition_service.identify(
+            session, image_bytes, threshold=cfg.recognition.match_threshold
+        )
     except NoFaceDetectedError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if match is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Face not recognized")
 
-    user = (await session.execute(select(User).where(User.id == match.user_id))).scalar_one_or_none()
+    user = (
+        await session.execute(select(User).where(User.id == match.user_id))
+    ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -428,7 +441,9 @@ async def list_attendance(
     )
     items = [AttendanceOut.model_validate(r) for r in items_result.scalars()]
     pages = (total + limit - 1) // limit if total > 0 else 0
-    return Envelope(data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages})
+    return Envelope(
+        data={"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
+    )
 
 
 @router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -488,10 +503,12 @@ async def restore_attendance_record(
             status_code=status.HTTP_404_NOT_FOUND, detail="Record not found or not deleted"
         )
     record = (
-        await session.execute(select(AttendanceRecord).where(
-            AttendanceRecord.id == record_id,
-            AttendanceRecord.tenant_id == principal.tenant_id,
-        ))
+        await session.execute(
+            select(AttendanceRecord).where(
+                AttendanceRecord.id == record_id,
+                AttendanceRecord.tenant_id == principal.tenant_id,
+            )
+        )
     ).scalar_one()
     await audit_service.record(
         session,

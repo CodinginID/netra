@@ -7,7 +7,7 @@ Each tenant with an active subscription gets one snapshot per day.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,22 +23,18 @@ from app.services import billing_service
 
 def _get_yesterday() -> datetime:
     """Yesterday at 00:00 UTC."""
-    return (datetime.now(timezone.utc) - timedelta(days=1)).replace(
+    return (datetime.now(UTC) - timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
 
 def _get_period_start() -> datetime:
     """Today at 00:00 UTC (for the latest snapshot)."""
-    now = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    now = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     return now
 
 
-async def record_for_tenant(
-    session: AsyncSession, tenant_id: str
-) -> UsageSnapshot | None:
+async def record_for_tenant(session: AsyncSession, tenant_id: str) -> UsageSnapshot | None:
     """Record usage snapshot for a single tenant using current session.
 
     Skips tenants without an active subscription. Returns the
@@ -47,9 +43,7 @@ async def record_for_tenant(
     snap_date = _get_yesterday()
 
     # Check subscription is active and not ended
-    stmt = select(TenantSubscription).where(
-        TenantSubscription.tenant_id == tenant_id
-    )
+    stmt = select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_id)
     sub = (await session.execute(stmt)).scalar_one_or_none()
     if not sub or sub.status.value != "active":
         return None
@@ -69,23 +63,24 @@ async def record_for_tenant(
         AttendanceRecord.deleted_at.is_(None),
     )
 
-    stmt = select(func.count(func.distinct(AttendanceRecord.user_id))).where(*in_day)
-    result = await session.execute(stmt)
-    active_users = result.scalar() or 0
+    users_q = select(func.count(func.distinct(AttendanceRecord.user_id))).where(*in_day)
+    active_users: int = (await session.execute(users_q)).scalar() or 0
 
-    stmt = select(func.count(func.distinct(AttendanceRecord.device_id))).where(
+    devices_q = select(func.count(func.distinct(AttendanceRecord.device_id))).where(
         *in_day, AttendanceRecord.device_id.isnot(None)
     )
-    result = await session.execute(stmt)
-    devices = result.scalar() or 0
+    devices: int = (await session.execute(devices_q)).scalar() or 0
 
-    stmt = select(func.count()).where(*in_day)
-    result = await session.execute(stmt)
-    punches = result.scalar() or 0
+    punches_q = select(func.count()).where(*in_day)
+    punches: int = (await session.execute(punches_q)).scalar() or 0
 
     return await billing_service.record_usage_snapshot(
-        session, tenant_id, snap_date.strftime("%Y-%m-%d"),
-        active_users, devices, punches,
+        session,
+        tenant_id,
+        snap_date.strftime("%Y-%m-%d"),
+        active_users,
+        devices,
+        punches,
     )
 
 
@@ -99,9 +94,7 @@ async def record_all() -> dict:
     async with SessionFactory() as session:
         await _set_tenant(session, None, platform=True)
 
-        stmt = select(TenantSubscription).where(
-            TenantSubscription.status == "active"
-        )
+        stmt = select(TenantSubscription).where(TenantSubscription.status == "active")
         subs = (await session.execute(stmt)).scalars().all()
 
         for sub in subs:

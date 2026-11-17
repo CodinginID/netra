@@ -13,7 +13,6 @@ SHA-256 is verified automatically.
 from __future__ import annotations
 
 import hashlib
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -27,10 +26,13 @@ MODEL_SHA256 = "d7b3cd9ba8a7ceb13baa8c4720902e27ca3112eff52f926c08804af6b6eecc7b
 def main() -> None:
     # Resolve destination path from .env / Settings if available, else default
     try:
-        import sys, os
+        import os
+        import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent))
         os.chdir(Path(__file__).parent.parent)  # ensure .env is found
         from app.core.config import settings
+
         dest = Path(settings.silentface_model_path)
     except Exception:
         dest = Path("models/silentface.onnx")
@@ -43,7 +45,7 @@ def main() -> None:
         print(f"[WARN] Existing file at {dest} has wrong SHA-256 — re-downloading")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading MiniFASNetV2 ONNX (~1.7 MB) from HuggingFace …")
+    print("Downloading MiniFASNetV2 ONNX (~1.7 MB) from HuggingFace …")
 
     req = urllib.request.Request(MODEL_URL, headers={"User-Agent": "netra/1.0"})
     try:
@@ -56,7 +58,11 @@ def main() -> None:
                 downloaded += len(chunk)
                 if total:
                     pct = downloaded * 100 // total
-                    print(f"\r  {pct:3d}%  {downloaded // 1024} KB / {total // 1024} KB", end="", flush=True)
+                    print(
+                        f"\r  {pct:3d}%  {downloaded // 1024} KB / {total // 1024} KB",
+                        end="",
+                        flush=True,
+                    )
             print()
             data = b"".join(chunks)
     except OSError as exc:

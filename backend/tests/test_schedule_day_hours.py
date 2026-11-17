@@ -120,8 +120,10 @@ def test_valid_day_hours_accepted():
 SESSION_RULES = {
     "type": "session",
     "day_sessions": {
-        "1": [{"name": "Sesi 1", "start": "07:30", "end": "09:00"},
-              {"name": "Sesi 2", "start": "09:15", "end": "12:00"}],
+        "1": [
+            {"name": "Sesi 1", "start": "07:30", "end": "09:00"},
+            {"name": "Sesi 2", "start": "09:15", "end": "12:00"},
+        ],
         "5": [{"name": "Sesi Jumat", "start": "07:00", "end": "10:00"}],
     },
 }

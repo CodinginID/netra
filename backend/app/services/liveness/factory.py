@@ -22,7 +22,7 @@ def get_liveness_engine() -> LivenessEngine:
     if engine == "silentface":
         try:
             # Check that onnxruntime is importable BEFORE trying SilentFace.
-            import onnxruntime as _ort  # noqa: F841
+            import onnxruntime as _ort  # noqa: F401
         except ImportError as exc:
             log.warning(
                 "silentface_unavailable_fallback",
@@ -34,12 +34,11 @@ def get_liveness_engine() -> LivenessEngine:
             return FakeLivenessEngine()
 
         try:
-            from app.services.liveness.passive import SilentFaceLivenessEngine
-
             # Proactively validate that the model is accessible before returning.
             from pathlib import Path
 
             from app.core.config import settings as _settings
+            from app.services.liveness.passive import SilentFaceLivenessEngine
 
             model_path = Path(_settings.silentface_model_path)
             if not model_path.is_file():

@@ -38,9 +38,7 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         },
     )
     assert resp.status_code == 201, resp.text
-    admin = await _token(
-        client, email=f"admin-{slug}@netra.app", password="adminpass123"
-    )
+    admin = await _token(client, email=f"admin-{slug}@netra.app", password="adminpass123")
     return {"Authorization": f"Bearer {admin}"}
 
 

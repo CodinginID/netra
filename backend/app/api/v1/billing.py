@@ -2,28 +2,35 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
-    PLATFORM_TENANT_SCOPE,
     Principal,
     get_db,
     get_db_unscoped,
     require_super_admin,
     require_tenant_admin,
 )
-from app.models import Invoice, InvoiceLine, InvoiceStatus, Plan, PlanTier, SubscriptionStatus, TenantSubscription, UsageSnapshot
 from app.core.config import settings
+from app.models import (
+    Invoice,
+    InvoiceLine,
+    InvoiceStatus,
+    Plan,
+    PlanTier,
+    SubscriptionStatus,
+    TenantSubscription,
+    UsageSnapshot,
+)
 from app.schemas import (
     BillingSummary,
     Envelope,
     InvoiceCreate,
     InvoiceGenerate,
-    InvoiceLineSchema,
     InvoiceSchema,
     InvoiceUpdate,
     PageData,
@@ -331,7 +338,9 @@ async def list_subscriptions(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await session.execute(count_stmt)).scalar() or 0
 
-    stmt = stmt.order_by(TenantSubscription.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    stmt = (
+        stmt.order_by(TenantSubscription.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    )
     subs = list((await session.execute(stmt)).scalars().all())
 
     return Envelope(
@@ -451,7 +460,6 @@ async def usage_by_tenant(
     return Envelope(data=[TenantUsageRow.model_validate(r) for r in rows])
 
 
-
 @router.get(
     "/usage",
     response_model=Envelope[PageData[dict]],
@@ -569,7 +577,7 @@ async def create_invoice(
     # Created straight into 'issued' — stamp the same dates the draft→issued
     # transition in update_invoice would have stamped.
     if invoice.status == InvoiceStatus.issued:
-        invoice.issued_at = datetime.now(timezone.utc)
+        invoice.issued_at = datetime.now(UTC)
         invoice.due_date = invoice.issued_at + timedelta(days=settings.invoice_net_days)
 
     session.add(invoice)
@@ -661,7 +669,7 @@ async def list_invoices(
     stmt = stmt.order_by(Invoice.created_at.desc()).offset((page - 1) * limit).limit(limit)
     rows = list((await session.execute(stmt)).scalars().all())
 
-    items = [
+    items: list[dict[str, object]] = [
         {
             "id": r.id,
             "invoice_number": r.invoice_number,
@@ -720,7 +728,9 @@ async def get_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     # Load lines
-    lines_stmt = select(InvoiceLine).where(InvoiceLine.invoice_id == inv.id).order_by(InvoiceLine.sort_order)
+    lines_stmt = (
+        select(InvoiceLine).where(InvoiceLine.invoice_id == inv.id).order_by(InvoiceLine.sort_order)
+    )
     lines = list((await session.execute(lines_stmt)).scalars().all())
 
     return Envelope(
@@ -746,16 +756,16 @@ async def get_invoice(
             "notes": inv.notes,
             "lines": [
                 {
-                    "id": l.id,
-                    "description": l.description,
-                    "qty": l.qty,
-                    "unit_price": l.unit_price,
-                    "amount": l.amount,
-                    "sort_order": l.sort_order,
-                    "created_at": l.created_at.isoformat(),
-                    "updated_at": l.updated_at.isoformat(),
+                    "id": line.id,
+                    "description": line.description,
+                    "qty": line.qty,
+                    "unit_price": line.unit_price,
+                    "amount": line.amount,
+                    "sort_order": line.sort_order,
+                    "created_at": line.created_at.isoformat(),
+                    "updated_at": line.updated_at.isoformat(),
                 }
-                for l in lines
+                for line in lines
             ],
             "created_at": inv.created_at.isoformat(),
             "updated_at": inv.updated_at.isoformat(),
@@ -783,9 +793,7 @@ async def update_invoice(
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    became_issued = (
-        payload.status == InvoiceStatus.issued and inv.status != InvoiceStatus.issued
-    )
+    became_issued = payload.status == InvoiceStatus.issued and inv.status != InvoiceStatus.issued
     if payload.status is not None:
         inv.status = payload.status
     if payload.notes is not None:
@@ -795,13 +803,13 @@ async def update_invoice(
 
     if became_issued:
         if inv.issued_at is None:
-            inv.issued_at = datetime.now(timezone.utc)
+            inv.issued_at = datetime.now(UTC)
         # Fill the deadline only when nobody supplied one, so an explicit
         # due_date in this very request survives the default net terms.
         if inv.due_date is None:
             inv.due_date = inv.issued_at + timedelta(days=settings.invoice_net_days)
     if payload.status == InvoiceStatus.paid and inv.paid_at is None:
-        inv.paid_at = datetime.now(timezone.utc)
+        inv.paid_at = datetime.now(UTC)
 
     await session.flush()
     await session.refresh(inv)
@@ -815,7 +823,9 @@ async def update_invoice(
     )
 
     # Load lines for response
-    lines_stmt = select(InvoiceLine).where(InvoiceLine.invoice_id == inv.id).order_by(InvoiceLine.sort_order)
+    lines_stmt = (
+        select(InvoiceLine).where(InvoiceLine.invoice_id == inv.id).order_by(InvoiceLine.sort_order)
+    )
     lines = list((await session.execute(lines_stmt)).scalars().all())
 
     return Envelope(
@@ -841,16 +851,16 @@ async def update_invoice(
             "notes": inv.notes,
             "lines": [
                 {
-                    "id": l.id,
-                    "description": l.description,
-                    "qty": l.qty,
-                    "unit_price": l.unit_price,
-                    "amount": l.amount,
-                    "sort_order": l.sort_order,
-                    "created_at": l.created_at.isoformat(),
-                    "updated_at": l.updated_at.isoformat(),
+                    "id": line.id,
+                    "description": line.description,
+                    "qty": line.qty,
+                    "unit_price": line.unit_price,
+                    "amount": line.amount,
+                    "sort_order": line.sort_order,
+                    "created_at": line.created_at.isoformat(),
+                    "updated_at": line.updated_at.isoformat(),
                 }
-                for l in lines
+                for line in lines
             ],
             "created_at": inv.created_at.isoformat(),
             "updated_at": inv.updated_at.isoformat(),

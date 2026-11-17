@@ -27,14 +27,19 @@ async def grant_consent(
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="tenant_id could not be resolved — include X-Tenant-Id header if acting as super_admin",
+            detail=(
+                "tenant_id could not be resolved — "
+                "include X-Tenant-Id header if acting as super_admin"
+            ),
         )
 
     user = (
-        await session.execute(select(User).where(
-            User.id == payload.user_id,
-            User.tenant_id == tenant_id,
-        ))
+        await session.execute(
+            select(User).where(
+                User.id == payload.user_id,
+                User.tenant_id == tenant_id,
+            )
+        )
     ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

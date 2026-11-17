@@ -43,9 +43,7 @@ async def _create_user(client: AsyncClient, headers: dict[str, str], **payload) 
 
 
 @pytest.mark.asyncio
-async def test_readding_deleted_end_user_revives_the_same_record(
-    client: AsyncClient, super_admin
-):
+async def test_readding_deleted_end_user_revives_the_same_record(client: AsyncClient, super_admin):
     headers = await _tenant_admin_headers(client, "revive-end-user")
     created = await _create_user(
         client, headers, full_name="Siswa Satu", role="end_user", external_id="NIS-1"
@@ -75,9 +73,7 @@ async def test_readding_deleted_end_user_revives_the_same_record(
 
 
 @pytest.mark.asyncio
-async def test_readding_deleted_staff_replaces_the_old_credential(
-    client: AsyncClient, super_admin
-):
+async def test_readding_deleted_staff_replaces_the_old_credential(client: AsyncClient, super_admin):
     """A revived staff account must not still accept the password it had before."""
     headers = await _tenant_admin_headers(client, "revive-staff")
     created = await _create_user(
@@ -126,9 +122,7 @@ async def test_duplicate_of_a_live_user_still_conflicts(client: AsyncClient, sup
 
 
 @pytest.mark.asyncio
-async def test_identifiers_spanning_two_deleted_users_are_refused(
-    client: AsyncClient, super_admin
-):
+async def test_identifiers_spanning_two_deleted_users_are_refused(client: AsyncClient, super_admin):
     """Reviving here would merge two people into one record, so it must refuse."""
     headers = await _tenant_admin_headers(client, "revive-ambiguous")
     first = await _create_user(

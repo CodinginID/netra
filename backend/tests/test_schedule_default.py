@@ -74,7 +74,9 @@ async def test_checkin_is_judged_in_tenant_timezone(client: AsyncClient, super_a
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
     enrolled = await client.post(
-        "/api/v1/enrollment", headers=hdr, data={"user_id": alice},
+        "/api/v1/enrollment",
+        headers=hdr,
+        data={"user_id": alice},
         files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
     )
     assert enrolled.status_code == 201
@@ -103,7 +105,9 @@ async def test_recompute_script_fixes_punches_stored_without_a_schedule(
     alice = await _create_user(client, hdr, "Alice", "alice")
     await _grant_consent(client, hdr, alice)
     await client.post(
-        "/api/v1/enrollment", headers=hdr, data={"user_id": alice},
+        "/api/v1/enrollment",
+        headers=hdr,
+        data={"user_id": alice},
         files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
     )
     # No schedule yet: a 09:00 WIB check-in is stored on_time.

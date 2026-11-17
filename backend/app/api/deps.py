@@ -148,7 +148,19 @@ async def get_effective_principal(
     return principal
 
 
-async def get_db(principal: Principal = Depends(get_effective_principal)) -> AsyncIterator[AsyncSession]:
+def tenant_id_of(principal: Principal) -> str:
+    """The principal's tenant id, or 400 for a cross-tenant ('*') super admin
+    on an endpoint that only makes sense inside one tenant."""
+    if principal.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
+        )
+    return principal.tenant_id
+
+
+async def get_db(
+    principal: Principal = Depends(get_effective_principal),
+) -> AsyncIterator[AsyncSession]:
     """Tenant-bound DB session for the authenticated principal (RLS-scoped).
 
     Refuses to open a session when no tenant was resolved. Tenant-scoped
@@ -241,9 +253,7 @@ async def require_feature(
         .join(TenantSubscription, TenantSubscription.plan_id == Plan.id)
         .where(
             TenantSubscription.tenant_id == principal.tenant_id,
-            TenantSubscription.status.in_(
-                (SubscriptionStatus.trial, SubscriptionStatus.active)
-            ),
+            TenantSubscription.status.in_((SubscriptionStatus.trial, SubscriptionStatus.active)),
         )
         .limit(1)
     )
@@ -288,11 +298,7 @@ async def get_device_principal(
             await session.execute(select(Device).where(Device.token_hash == token_hash))
         ).scalar_one_or_none()
         # A soft-deleted device must not authenticate even if it was still active.
-        if (
-            device is None
-            or device.deleted_at is not None
-            or device.status != DeviceStatus.active
-        ):
+        if device is None or device.deleted_at is not None or device.status != DeviceStatus.active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked device token"
             )
@@ -432,17 +438,13 @@ class EmbedPrincipal:
 
 async def _embed_principal_from_token(token: str | None) -> EmbedPrincipal:
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing embed token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing embed token")
     token_hash = hash_embed_token(token)
     async with SessionFactory() as session:
         # Platform context: the tenant is unknown until the token's row is found.
         await _set_tenant(session, None, platform=True)
         embed = (
-            await session.execute(
-                select(EmbedSession).where(EmbedSession.token_hash == token_hash)
-            )
+            await session.execute(select(EmbedSession).where(EmbedSession.token_hash == token_hash))
         ).scalar_one_or_none()
         if embed is None or embed.status != EmbedSessionStatus.pending:
             raise HTTPException(

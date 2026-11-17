@@ -9,7 +9,7 @@ turning that count into money via the plan's tier bands.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -30,7 +30,7 @@ from app.services import billing_service
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @asynccontextmanager
@@ -194,9 +194,7 @@ async def test_soft_deleted_records_are_not_billed():
     async with platform_session() as session:
         tenant_id = await _tenant(session, "deleted")
         user_id = await _user(session, tenant_id, "removed")
-        await _punch(
-            session, tenant_id, user_id, when=_now() - timedelta(days=2), deleted=True
-        )
+        await _punch(session, tenant_id, user_id, when=_now() - timedelta(days=2), deleted=True)
 
         count = await billing_service.count_billable_users(
             session, tenant_id, _now() - timedelta(days=30), _now()
@@ -211,24 +209,36 @@ async def test_usage_is_counted_per_tenant():
         tenant_a = await _tenant(session, "meter-a")
         tenant_b = await _tenant(session, "meter-b")
         await _punch(
-            session, tenant_a, await _user(session, tenant_a, "a1"),
+            session,
+            tenant_a,
+            await _user(session, tenant_a, "a1"),
             when=_now() - timedelta(days=1),
         )
         await _punch(
-            session, tenant_b, await _user(session, tenant_b, "b1"),
+            session,
+            tenant_b,
+            await _user(session, tenant_b, "b1"),
             when=_now() - timedelta(days=1),
         )
         await _punch(
-            session, tenant_b, await _user(session, tenant_b, "b2"),
+            session,
+            tenant_b,
+            await _user(session, tenant_b, "b2"),
             when=_now() - timedelta(days=1),
         )
 
-        assert await billing_service.count_billable_users(
-            session, tenant_a, _now() - timedelta(days=30), _now()
-        ) == 1
-        assert await billing_service.count_billable_users(
-            session, tenant_b, _now() - timedelta(days=30), _now()
-        ) == 2
+        assert (
+            await billing_service.count_billable_users(
+                session, tenant_a, _now() - timedelta(days=30), _now()
+            )
+            == 1
+        )
+        assert (
+            await billing_service.count_billable_users(
+                session, tenant_b, _now() - timedelta(days=30), _now()
+            )
+            == 2
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -244,16 +254,36 @@ async def test_band_is_chosen_by_headcount_not_by_row_order():
     """
     async with platform_session() as session:
         plan = Plan(
-            code="scrambled", name="Scrambled", default_billing_cycle="annual",
-            currency="IDR", features={}, is_active=True,
+            code="scrambled",
+            name="Scrambled",
+            default_billing_cycle="annual",
+            currency="IDR",
+            features={},
+            is_active=True,
         )
         session.add(plan)
         await session.flush()
         # sort_order runs backwards relative to min_users.
-        session.add(PlanTier(plan_id=plan.id, min_users=1, max_users=99,
-                             unit_price=10_000, min_charge=0, sort_order=9))
-        session.add(PlanTier(plan_id=plan.id, min_users=100, max_users=None,
-                             unit_price=6_000, min_charge=0, sort_order=0))
+        session.add(
+            PlanTier(
+                plan_id=plan.id,
+                min_users=1,
+                max_users=99,
+                unit_price=10_000,
+                min_charge=0,
+                sort_order=9,
+            )
+        )
+        session.add(
+            PlanTier(
+                plan_id=plan.id,
+                min_users=100,
+                max_users=None,
+                unit_price=6_000,
+                min_charge=0,
+                sort_order=0,
+            )
+        )
         await session.flush()
 
         tier = await billing_service.get_plan_tier(session, plan.id, 100)
@@ -276,7 +306,9 @@ async def test_invoice_totals_are_derived_from_measured_usage():
 
         for n in range(3):
             await _punch(
-                session, tenant_id, await _user(session, tenant_id, f"u{n}"),
+                session,
+                tenant_id,
+                await _user(session, tenant_id, f"u{n}"),
                 when=_now() - timedelta(days=3),
             )
 
@@ -297,7 +329,9 @@ async def test_min_charge_is_the_floor_for_a_quiet_period():
         await _subscribe(session, tenant_id, plan.id)
 
         await _punch(
-            session, tenant_id, await _user(session, tenant_id, "lonely"),
+            session,
+            tenant_id,
+            await _user(session, tenant_id, "lonely"),
             when=_now() - timedelta(days=1),
         )
 
@@ -313,14 +347,14 @@ async def test_growth_moves_the_tenant_into_a_cheaper_band():
     """Crossing a band boundary lowers the per-user price automatically."""
     async with platform_session() as session:
         tenant_id = await _tenant(session, "growing")
-        plan = await _plan(
-            session, "growth-plan", [(1, 99, 10_000, 0), (100, None, 6_000, 0)]
-        )
+        plan = await _plan(session, "growth-plan", [(1, 99, 10_000, 0), (100, None, 6_000, 0)])
         await _subscribe(session, tenant_id, plan.id)
 
         for n in range(100):
             await _punch(
-                session, tenant_id, await _user(session, tenant_id, f"g{n}"),
+                session,
+                tenant_id,
+                await _user(session, tenant_id, f"g{n}"),
                 when=_now() - timedelta(days=2),
             )
 
@@ -341,7 +375,9 @@ async def test_discount_and_tax_apply_in_that_order():
 
         for n in range(10):
             await _punch(
-                session, tenant_id, await _user(session, tenant_id, f"d{n}"),
+                session,
+                tenant_id,
+                await _user(session, tenant_id, f"d{n}"),
                 when=_now() - timedelta(days=2),
             )
 
@@ -350,7 +386,7 @@ async def test_discount_and_tax_apply_in_that_order():
         )
         assert invoice.subtotal == 100_000
         assert invoice.discount == 10_000
-        assert invoice.tax_amount == 9_900   # 11% of 90_000, not of 100_000
+        assert invoice.tax_amount == 9_900  # 11% of 90_000, not of 100_000
         assert invoice.total == 99_900
 
 
@@ -364,7 +400,9 @@ async def test_negotiated_unit_price_overrides_the_band():
 
         for n in range(5):
             await _punch(
-                session, tenant_id, await _user(session, tenant_id, f"n{n}"),
+                session,
+                tenant_id,
+                await _user(session, tenant_id, f"n{n}"),
                 when=_now() - timedelta(days=2),
             )
 
@@ -389,7 +427,9 @@ async def test_offset_aware_period_is_metered_as_the_same_instant():
         await _subscribe(session, tenant_id, plan.id)
 
         await _punch(
-            session, tenant_id, await _user(session, tenant_id, "o1"),
+            session,
+            tenant_id,
+            await _user(session, tenant_id, "o1"),
             when=_now() - timedelta(days=2),
         )
 
@@ -398,8 +438,8 @@ async def test_offset_aware_period_is_metered_as_the_same_instant():
         invoice = await billing_service.generate_invoice(session, tenant_id, start, end)
 
         assert invoice.billed_users == 1
-        assert invoice.period_start == start.astimezone(timezone.utc)
-        assert invoice.period_end == end.astimezone(timezone.utc)
+        assert invoice.period_start == start.astimezone(UTC)
+        assert invoice.period_end == end.astimezone(UTC)
 
 
 @pytest.mark.asyncio

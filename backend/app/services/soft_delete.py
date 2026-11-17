@@ -1,12 +1,15 @@
 """Soft delete utilities — mark entities as deleted without removing them."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete as sa_delete, update
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.results import rowcount
 
 log = get_logger("netra.soft_delete")
 
@@ -25,7 +28,7 @@ async def soft_delete(session: AsyncSession, model_cls, entity_id: str) -> bool:
         .values(deleted_at=datetime.now(UTC))
     )
     result = await session.execute(stmt)
-    if result.rowcount == 0:
+    if rowcount(result) == 0:
         log.warning("soft_delete_no_rows", model=model_cls.__name__, entity_id=entity_id)
         return False
     return True
@@ -39,7 +42,7 @@ async def restore(session: AsyncSession, model_cls, entity_id: str) -> bool:
         .values(deleted_at=None)
     )
     result = await session.execute(stmt)
-    return result.rowcount > 0
+    return rowcount(result) > 0
 
 
 async def hard_delete(session: AsyncSession, model_cls, entity_id: str) -> bool:
@@ -51,7 +54,7 @@ async def hard_delete(session: AsyncSession, model_cls, entity_id: str) -> bool:
     """
     stmt = sa_delete(model_cls).where(model_cls.id == entity_id)
     result = await session.execute(stmt)
-    return (result.rowcount or 0) > 0
+    return rowcount(result) > 0
 
 
 async def hard_delete_older_than(
@@ -67,7 +70,7 @@ async def hard_delete_older_than(
         model_cls.deleted_at < cutoff,
     )
     result = await session.execute(stmt)
-    return result.rowcount
+    return rowcount(result)
 
 
 async def purge_expired(days: int = 30) -> dict[str, int]:

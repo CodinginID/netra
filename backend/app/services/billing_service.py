@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -39,8 +39,8 @@ def _as_utc(value: datetime) -> datetime:
     depend on where the process happens to run.
     """
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 async def next_invoice_number(session: AsyncSession, when: datetime | None = None) -> str:
@@ -50,7 +50,7 @@ async def next_invoice_number(session: AsyncSession, when: datetime | None = Non
     concurrent callers each get a distinct number instead of colliding on the
     ``invoice_number`` unique constraint.
     """
-    moment = when or datetime.now(timezone.utc)
+    moment = when or datetime.now(UTC)
     period = moment.strftime("%Y%m")
 
     stmt = (
@@ -83,7 +83,7 @@ async def operational_summary(session: AsyncSession, now: datetime | None = None
     Money is reported per currency: ``Invoice.currency`` is per row, so adding
     totals across currencies would produce a number that means nothing.
     """
-    moment = now or datetime.now(timezone.utc)
+    moment = now or datetime.now(UTC)
     month_start = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     unpaid = (Invoice.status == InvoiceStatus.issued) & (Invoice.paid_at.is_(None))
@@ -99,10 +99,14 @@ async def operational_summary(session: AsyncSession, now: datetime | None = None
 
     stmt = select(
         Invoice.currency,
-        _count(unpaid), _sum(unpaid),
-        _count(overdue), _sum(overdue),
-        _count(draft), _sum(draft),
-        _count(paid_this_month), _sum(paid_this_month),
+        _count(unpaid),
+        _sum(unpaid),
+        _count(overdue),
+        _sum(overdue),
+        _count(draft),
+        _sum(draft),
+        _count(paid_this_month),
+        _sum(paid_this_month),
     ).group_by(Invoice.currency)
 
     buckets: dict[str, dict] = {
@@ -115,39 +119,41 @@ async def operational_summary(session: AsyncSession, now: datetime | None = None
             count, total = row[1 + offset * 2], row[2 + offset * 2]
             if count:
                 buckets[name]["count"] += count
-                buckets[name]["by_currency"].append(
-                    {"currency": currency, "total": int(total)}
-                )
+                buckets[name]["by_currency"].append({"currency": currency, "total": int(total)})
 
     async def _scalar(stmt_) -> int:
         return (await session.execute(stmt_)).scalar() or 0
 
     trials_ending = await _scalar(
-        select(func.count()).select_from(TenantSubscription).where(
+        select(func.count())
+        .select_from(TenantSubscription)
+        .where(
             TenantSubscription.status == SubscriptionStatus.trial,
             TenantSubscription.trial_ends_at.isnot(None),
             TenantSubscription.trial_ends_at >= moment,
-            TenantSubscription.trial_ends_at
-            <= moment + timedelta(days=TRIAL_ENDING_WINDOW_DAYS),
+            TenantSubscription.trial_ends_at <= moment + timedelta(days=TRIAL_ENDING_WINDOW_DAYS),
         )
     )
     past_due_count = await _scalar(
-        select(func.count()).select_from(TenantSubscription).where(
-            TenantSubscription.status == SubscriptionStatus.past_due
-        )
+        select(func.count())
+        .select_from(TenantSubscription)
+        .where(TenantSubscription.status == SubscriptionStatus.past_due)
     )
     subscriptions_ending = await _scalar(
-        select(func.count()).select_from(TenantSubscription).where(
+        select(func.count())
+        .select_from(TenantSubscription)
+        .where(
             TenantSubscription.status == SubscriptionStatus.active,
             TenantSubscription.ends_at >= moment,
-            TenantSubscription.ends_at
-            <= moment + timedelta(days=SUBSCRIPTION_ENDING_WINDOW_DAYS),
+            TenantSubscription.ends_at <= moment + timedelta(days=SUBSCRIPTION_ENDING_WINDOW_DAYS),
         )
     )
     # Soft-deleted tenants are excluded: they are on their way out, so listing
     # them as "missing a subscription" would be permanent noise.
     tenants_without_subscription = await _scalar(
-        select(func.count()).select_from(Tenant).where(
+        select(func.count())
+        .select_from(Tenant)
+        .where(
             Tenant.status == TenantStatus.active,
             Tenant.deleted_at.is_(None),
             ~select(TenantSubscription.id)
@@ -176,7 +182,7 @@ async def usage_by_tenant(session: AsyncSession, now: datetime | None = None) ->
     per tenant in a loop would issue a query per tenant on a page that exists
     precisely to compare tenants against each other.
     """
-    moment = now or datetime.now(timezone.utc)
+    moment = now or datetime.now(UTC)
     cutoff = moment - timedelta(days=USAGE_TREND_WINDOW_DAYS)
 
     ranked = select(
@@ -196,16 +202,20 @@ async def usage_by_tenant(session: AsyncSession, now: datetime | None = None) ->
     latest = select(ranked).where(ranked.c.rn == 1).subquery()
 
     # Baseline for the trend: the newest snapshot at or before the cutoff.
-    baseline = select(
-        UsageSnapshot.tenant_id,
-        UsageSnapshot.active_users.label("baseline_users"),
-        func.row_number()
-        .over(
-            partition_by=UsageSnapshot.tenant_id,
-            order_by=UsageSnapshot.snapshot_date.desc(),
+    baseline = (
+        select(
+            UsageSnapshot.tenant_id,
+            UsageSnapshot.active_users.label("baseline_users"),
+            func.row_number()
+            .over(
+                partition_by=UsageSnapshot.tenant_id,
+                order_by=UsageSnapshot.snapshot_date.desc(),
+            )
+            .label("rn"),
         )
-        .label("rn"),
-    ).where(UsageSnapshot.snapshot_date <= cutoff).subquery()
+        .where(UsageSnapshot.snapshot_date <= cutoff)
+        .subquery()
+    )
     baseline_latest = select(baseline).where(baseline.c.rn == 1).subquery()
 
     # The plan's ceiling is the top band's max_users — NULL (unlimited) if any
@@ -359,9 +369,17 @@ async def create_subscription(
         billing_cycle=billing_cycle,
         unit_price_override=unit_price_override,
         discount_pct=discount_pct,
-        starts_at=datetime.fromisoformat(starts_at).replace(tzinfo=timezone.utc) if starts_at else datetime.now(timezone.utc),
-        ends_at=datetime.fromisoformat(ends_at).replace(tzinfo=timezone.utc) if ends_at else datetime.now(timezone.utc),
-        trial_ends_at=datetime.fromisoformat(trial_ends_at).replace(tzinfo=timezone.utc) if trial_ends_at else None,
+        starts_at=(
+            datetime.fromisoformat(starts_at).replace(tzinfo=UTC)
+            if starts_at
+            else datetime.now(UTC)
+        ),
+        ends_at=(
+            datetime.fromisoformat(ends_at).replace(tzinfo=UTC) if ends_at else datetime.now(UTC)
+        ),
+        trial_ends_at=(
+            datetime.fromisoformat(trial_ends_at).replace(tzinfo=UTC) if trial_ends_at else None
+        ),
         status=SubscriptionStatus.trial,
     )
     session.add(sub)
@@ -395,7 +413,7 @@ async def record_usage_snapshot(
     punches: int,
 ) -> UsageSnapshot:
     """Record or update a daily usage snapshot for a tenant."""
-    snap_date = datetime.fromisoformat(snapshot_date).replace(tzinfo=timezone.utc)
+    snap_date = datetime.fromisoformat(snapshot_date).replace(tzinfo=UTC)
 
     stmt = select(UsageSnapshot).where(
         UsageSnapshot.tenant_id == tenant_id,
@@ -451,8 +469,8 @@ async def create_invoice(
         invoice_number=await next_invoice_number(session),
         tenant_id=tenant_id,
         subscription_id=subscription_id,
-        period_start=datetime.fromisoformat(period_start).replace(tzinfo=timezone.utc),
-        period_end=datetime.fromisoformat(period_end).replace(tzinfo=timezone.utc),
+        period_start=datetime.fromisoformat(period_start).replace(tzinfo=UTC),
+        period_end=datetime.fromisoformat(period_end).replace(tzinfo=UTC),
         billed_users=billed_users,
         tier_id=tier_id,
         subtotal=subtotal,

@@ -14,8 +14,13 @@ async def test_list_schedules_filters_by_type_with_counts(client: AsyncClient, s
     bodies = [
         {"name": "Shift A", "rules": {"type": "shift", "workday_start": "08:00"}},
         {"name": "Legacy", "rules": {"workday_start": "07:00"}},  # no type = shift
-        {"name": "Sekolah", "rules": {"type": "session", "sessions": [
-            {"name": "Sesi 1", "start": "07:30", "end": "09:00"}]}},
+        {
+            "name": "Sekolah",
+            "rules": {
+                "type": "session",
+                "sessions": [{"name": "Sesi 1", "start": "07:30", "end": "09:00"}],
+            },
+        },
     ]
     for body in bodies:
         resp = await client.post("/api/v1/schedules", headers=headers, json=body)

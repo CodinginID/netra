@@ -78,9 +78,7 @@ async def test_tenant_onboarding_flow(client: AsyncClient, super_admin):
     assert resp.json()["data"]["slug"] == "sekolah-maju"
 
     # Tenant admin can now log in by email — tenant_id comes from the JWT, no slug.
-    admin_token = await _token(
-        client, email="admin@sekolah-maju.app", password="adminpass123"
-    )
+    admin_token = await _token(client, email="admin@sekolah-maju.app", password="adminpass123")
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # Tenant admin creates an end user with external_id (NIS).

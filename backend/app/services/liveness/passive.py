@@ -28,9 +28,9 @@ _MODEL_URL = (
 )
 _MODEL_SHA256 = "d7b3cd9ba8a7ceb13baa8c4720902e27ca3112eff52f926c08804af6b6eecc7b"
 
-_INPUT_SIZE = (80, 80)   # (width, height)
-_SCALE = 2.7             # face crop margin multiplier
-_LIVE_CLASS = 2          # softmax index for the "real/live" class (this model)
+_INPUT_SIZE = (80, 80)  # (width, height)
+_SCALE = 2.7  # face crop margin multiplier
+_LIVE_CLASS = 2  # softmax index for the "real/live" class (this model)
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -84,9 +84,7 @@ class SilentFaceLivenessEngine:
         if not model_path.is_file():
             _download_model(model_path)
 
-        self._session = ort.InferenceSession(
-            str(model_path), providers=["CPUExecutionProvider"]
-        )
+        self._session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
         return self._session
 
     def _get_cascade(self):
@@ -123,7 +121,7 @@ class SilentFaceLivenessEngine:
             side = min(h, w)
             cy, cx = h // 2, w // 2
             half = side // 2
-            return bgr[max(0, cy - half):cy + half, max(0, cx - half):cx + half]
+            return bgr[max(0, cy - half) : cy + half, max(0, cx - half) : cx + half]
 
         fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
         cx, cy = fx + fw // 2, fy + fh // 2
@@ -137,10 +135,10 @@ class SilentFaceLivenessEngine:
         import cv2
 
         crop = self._crop_face(bgr)
-        resized = cv2.resize(crop, _INPUT_SIZE)               # 80×80 BGR
-        norm = resized.astype(np.float32) / 255.0             # [0, 1], no ImageNet normalisation
-        chw = np.transpose(norm, (2, 0, 1))                   # HWC → CHW
-        return np.expand_dims(chw, axis=0)                    # (1, 3, 80, 80)
+        resized = cv2.resize(crop, _INPUT_SIZE)  # 80×80 BGR
+        norm = resized.astype(np.float32) / 255.0  # [0, 1], no ImageNet normalisation
+        chw = np.transpose(norm, (2, 0, 1))  # HWC → CHW
+        return np.expand_dims(chw, axis=0)  # (1, 3, 80, 80)
 
     def score(self, image: bytes) -> float:
         """Return liveness probability in [0, 1]. 1.0 = definitely live."""

@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     app_name: str = "netra"
     environment: str = Field(default="development")  # development | staging | production
     debug: bool = Field(default=True)
-    log_json: bool = Field(default=True, description="Emit JSON log lines (set false for pretty dev console)")
+    log_json: bool = Field(
+        default=True, description="Emit JSON log lines (set false for pretty dev console)"
+    )
     api_v1_prefix: str = "/api/v1"
 
     # --- Database ---

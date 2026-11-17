@@ -1,8 +1,9 @@
 """WebSocket endpoint for real-time event push."""
+
 from __future__ import annotations
 
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from app.core.logging import get_logger
 from app.core.security import JWTError, decode_token, hash_device_token

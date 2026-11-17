@@ -12,7 +12,7 @@ Tests cover:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -21,9 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionFactory, _set_tenant
 from app.models import (
-    Invoice,
-    InvoiceLine,
-    InvoiceStatus,
     Plan,
     PlanTier,
     Role,
@@ -31,7 +28,6 @@ from app.models import (
     Tenant,
     TenantStatus,
     TenantSubscription,
-    UsageSnapshot,
 )
 
 
@@ -65,7 +61,9 @@ async def _create_tenant_in_session(session: AsyncSession, slug: str) -> str:
     return tenant.id
 
 
-async def _create_tenant(client: AsyncClient, super_admin_token: str, slug: str = "test-tenant") -> str:
+async def _create_tenant(
+    client: AsyncClient, super_admin_token: str, slug: str = "test-tenant"
+) -> str:
     """Create a tenant and return its ID."""
     resp = await client.post(
         "/api/v1/tenants",
@@ -342,8 +340,8 @@ async def test_create_subscription(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     assert resp.status_code == 201, resp.text
@@ -380,8 +378,8 @@ async def test_update_subscription_status(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     sub_id = sub_resp.json()["data"]["id"]
@@ -423,8 +421,8 @@ async def test_cancel_subscription(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     sub_id = sub_resp.json()["data"]["id"]
@@ -473,8 +471,8 @@ async def test_create_invoice(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     sub_id = sub_resp.json()["data"]["id"]
@@ -486,8 +484,8 @@ async def test_create_invoice(client: AsyncClient, super_admin):
         json={
             "tenant_id": tenant_id,
             "subscription_id": sub_id,
-            "period_start": datetime.now(timezone.utc).isoformat(),
-            "period_end": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "period_start": datetime.now(UTC).isoformat(),
+            "period_end": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
             "billed_users": 50,
             "tier_id": None,
             "subtotal": 2500000,
@@ -532,8 +530,8 @@ async def test_list_invoices(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     sub_id = sub_resp.json()["data"]["id"]
@@ -545,8 +543,8 @@ async def test_list_invoices(client: AsyncClient, super_admin):
         json={
             "tenant_id": tenant_id,
             "subscription_id": sub_id,
-            "period_start": datetime.now(timezone.utc).isoformat(),
-            "period_end": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "period_start": datetime.now(UTC).isoformat(),
+            "period_end": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
             "billed_users": 50,
             "tier_id": None,
             "subtotal": 2500000,
@@ -593,8 +591,8 @@ async def test_update_invoice(client: AsyncClient, super_admin):
             "plan_id": plan_id,
             "billing_cycle": "annual",
             "discount_pct": 0,
-            "starts_at": datetime.now(timezone.utc).isoformat(),
-            "ends_at": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "starts_at": datetime.now(UTC).isoformat(),
+            "ends_at": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
         },
     )
     sub_id = sub_resp.json()["data"]["id"]
@@ -606,8 +604,8 @@ async def test_update_invoice(client: AsyncClient, super_admin):
         json={
             "tenant_id": tenant_id,
             "subscription_id": sub_id,
-            "period_start": datetime.now(timezone.utc).isoformat(),
-            "period_end": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            "period_start": datetime.now(UTC).isoformat(),
+            "period_end": (datetime.now(UTC) + timedelta(days=365)).isoformat(),
             "billed_users": 50,
             "tier_id": None,
             "subtotal": 2500000,
@@ -657,7 +655,7 @@ async def test_usage_snapshot_idempotent():
         from app.services import billing_service
 
         tenant_id = await _create_tenant_in_session(session, "usage-idem")
-        snap_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        snap_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
         # First record
         snap1 = await billing_service.record_usage_snapshot(
@@ -693,8 +691,8 @@ async def test_tenant_isolation_subscriptions():
             plan_id=plan_resp.id,
             billing_cycle="annual",
             discount_pct=0,
-            starts_at=datetime.now(timezone.utc),
-            ends_at=datetime.now(timezone.utc) + timedelta(days=365),
+            starts_at=datetime.now(UTC),
+            ends_at=datetime.now(UTC) + timedelta(days=365),
             status=SubscriptionStatus.trial,
         )
         sub2 = TenantSubscription(
@@ -702,8 +700,8 @@ async def test_tenant_isolation_subscriptions():
             plan_id=plan_resp.id,
             billing_cycle="annual",
             discount_pct=0,
-            starts_at=datetime.now(timezone.utc),
-            ends_at=datetime.now(timezone.utc) + timedelta(days=365),
+            starts_at=datetime.now(UTC),
+            ends_at=datetime.now(UTC) + timedelta(days=365),
             status=SubscriptionStatus.trial,
         )
         session.add(sub1)
@@ -746,7 +744,7 @@ async def _create_plan_in_session(session: AsyncSession, code: str) -> Plan:
 # which meant one tenant's entitlements answered for everybody.
 async def _subscribe(session: AsyncSession, tenant_id: str, plan_id: str) -> None:
     """Give a tenant a live subscription to a plan."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session.add(
         TenantSubscription(
             tenant_id=tenant_id,
@@ -771,15 +769,11 @@ async def test_require_feature_check():
         tenant_id = await _create_tenant_in_session(session, "feature-on")
         plan = await _create_plan_in_session(session, "feature-on-plan")
         plan.features = {"billing": {"enabled": True}}
-        session.add(
-            PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
-        )
+        session.add(PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0))
         await session.flush()
         await _subscribe(session, tenant_id, plan.id)
 
-        principal = Principal(
-            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
-        )
+        principal = Principal(subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id)
         # Does not raise.
         await require_feature("billing.enabled", principal, session)
 
@@ -796,15 +790,11 @@ async def test_require_feature_missing():
         tenant_id = await _create_tenant_in_session(session, "feature-off")
         plan = await _create_plan_in_session(session, "feature-off-plan")
         plan.features = {}
-        session.add(
-            PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0)
-        )
+        session.add(PlanTier(plan_id=plan.id, min_users=1, unit_price=0, min_charge=0))
         await session.flush()
         await _subscribe(session, tenant_id, plan.id)
 
-        principal = Principal(
-            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
-        )
+        principal = Principal(subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id)
         with pytest.raises(HTTPException) as exc:
             await require_feature("billing.enabled", principal, session)
         assert exc.value.status_code == 403
@@ -826,14 +816,10 @@ async def test_require_feature_reads_only_the_tenants_own_plan():
 
         generous = await _create_plan_in_session(session, "generous-plan")
         generous.features = {"billing": {"enabled": True}}
-        session.add(
-            PlanTier(plan_id=generous.id, min_users=1, unit_price=0, min_charge=0)
-        )
+        session.add(PlanTier(plan_id=generous.id, min_users=1, unit_price=0, min_charge=0))
         stingy = await _create_plan_in_session(session, "stingy-plan")
         stingy.features = {}
-        session.add(
-            PlanTier(plan_id=stingy.id, min_users=1, unit_price=0, min_charge=0)
-        )
+        session.add(PlanTier(plan_id=stingy.id, min_users=1, unit_price=0, min_charge=0))
         await session.flush()
 
         other_tenant = await _create_tenant_in_session(session, "the-generous-one")
@@ -842,9 +828,7 @@ async def test_require_feature_reads_only_the_tenants_own_plan():
         tenant_id = await _create_tenant_in_session(session, "the-stingy-one")
         await _subscribe(session, tenant_id, stingy.id)
 
-        principal = Principal(
-            subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id
-        )
+        principal = Principal(subject="user-1", role=Role.tenant_admin, tenant_id=tenant_id)
         with pytest.raises(HTTPException) as exc:
             await require_feature("billing.enabled", principal, session)
         assert exc.value.status_code == 403
@@ -880,7 +864,7 @@ async def test_billing_service_get_subscription_by_tenant():
         from app.services import billing_service
 
         # This will raise if no subscription exists for tenant
-        with pytest.raises(Exception):
+        with pytest.raises(billing_service.BillingError):
             await billing_service.get_subscription_by_tenant(session, "nonexistent-tenant")
 
 
@@ -900,8 +884,8 @@ async def test_billing_service_create_invoice():
             plan_id=plan.id,
             billing_cycle="annual",
             discount_pct=0,
-            starts_at=datetime.now(timezone.utc),
-            ends_at=datetime.now(timezone.utc) + timedelta(days=365),
+            starts_at=datetime.now(UTC),
+            ends_at=datetime.now(UTC) + timedelta(days=365),
             status=SubscriptionStatus.active,
         )
         session.add(sub)
@@ -912,8 +896,8 @@ async def test_billing_service_create_invoice():
             session,
             tenant_id=tenant_id,
             subscription_id=sub.id,
-            period_start=datetime.now(timezone.utc).isoformat(),
-            period_end=(datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+            period_start=datetime.now(UTC).isoformat(),
+            period_end=(datetime.now(UTC) + timedelta(days=365)).isoformat(),
             billed_users=50,
             tier_id=None,
             subtotal=2500000,

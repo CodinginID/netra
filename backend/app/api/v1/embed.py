@@ -78,10 +78,14 @@ async def frame_origin(
     """
     if not _ORIGIN_RE.match(principal.return_origin):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"X-Frame-Origin": principal.return_origin})
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT, headers={"X-Frame-Origin": principal.return_origin}
+    )
 
 
-@router.post("/enroll", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/enroll", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED
+)
 async def embed_enroll(
     images: list[UploadFile] = File(...),
     consent: bool = Form(False),
@@ -90,13 +94,17 @@ async def embed_enroll(
     session: AsyncSession = Depends(get_embed_db),
 ) -> Envelope[EnrollmentResult]:
     if principal.purpose != "enroll":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not for enrollment")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not for enrollment"
+        )
     if not images or len(images) > 3:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provide 1–3 face images"
         )
     if not consent:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Biometric consent required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Biometric consent required"
+        )
     if principal.is_minor and not (guardian_name and guardian_name.strip()):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -116,7 +124,9 @@ async def embed_enroll(
             full_name=principal.full_name,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
     # Record consent BEFORE enroll (enroll_multi requires an existing grant).
     session.add(

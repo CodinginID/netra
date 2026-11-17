@@ -99,7 +99,7 @@ class TenantCreate(BaseModel):
     admin_password: str = Field(min_length=8)
     admin_full_name: str = Field(min_length=2)
     admin_username: str | None = Field(default=None, min_length=3)  # optional display handle
-    config: "TenantConfig | None" = None
+    config: TenantConfig | None = None
 
 
 class TenantOut(BaseModel):

@@ -10,7 +10,7 @@ timestamps; timezone normalization is a later refinement — see attendance_serv
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -150,12 +150,16 @@ async def daily_recap(session: AsyncSession, day: date, tenant_id: str) -> Atten
     return await _recap_for_range(session, start, end, tenant_id)
 
 
-async def monthly_recap(session: AsyncSession, year: int, month: int, tenant_id: str) -> AttendanceRecap:
+async def monthly_recap(
+    session: AsyncSession, year: int, month: int, tenant_id: str
+) -> AttendanceRecap:
     start, end = _month_bounds(year, month)
     return await _recap_for_range(session, start, end, tenant_id)
 
 
-async def export_rows(session: AsyncSession, start_day: date, end_day: date, tenant_id: str) -> list[ExportRow]:
+async def export_rows(
+    session: AsyncSession, start_day: date, end_day: date, tenant_id: str
+) -> list[ExportRow]:
     """Flat, ordered list of records in ``[start_day, end_day]`` (inclusive)."""
     start, _ = _day_bounds(start_day)
     _, end = _day_bounds(end_day)
@@ -195,24 +199,28 @@ async def daily_status(
     'absent'. The day window is the tenant's local calendar day.
     """
     try:
-        tz = ZoneInfo(tz_name)
+        tz: tzinfo = ZoneInfo(tz_name)
     except Exception:
         tz = UTC
     day_start = datetime(day.year, day.month, day.day, tzinfo=tz)
     day_end = day_start + timedelta(days=1)
 
     users = (
-        await session.execute(
-            select(User)
-            .where(
-                User.role == Role.end_user,
-                User.is_active.is_(True),
-                User.deleted_at.is_(None),
-                User.tenant_id == tenant_id,
+        (
+            await session.execute(
+                select(User)
+                .where(
+                    User.role == Role.end_user,
+                    User.is_active.is_(True),
+                    User.deleted_at.is_(None),
+                    User.tenant_id == tenant_id,
+                )
+                .order_by(User.full_name.asc())
             )
-            .order_by(User.full_name.asc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     records = (
         await session.execute(
@@ -243,16 +251,16 @@ async def daily_status(
 
     roster: list[DailyStatus] = []
     for u in users:
-        f = folded.get(u.id)
-        if not f or f["in"] is None:
+        fold = folded.get(u.id)
+        if not fold or fold["in"] is None:
             status = "absent"
             check_in_at = check_out_at = None
-        elif f["out"] is not None:
+        elif fold["out"] is not None:
             status = "checked_out"
-            check_in_at, check_out_at = f["in"], f["out"]
+            check_in_at, check_out_at = fold["in"], fold["out"]
         else:
-            status = "late" if f["in_status"] == AttendanceStatus.late else "present"
-            check_in_at, check_out_at = f["in"], None
+            status = "late" if fold["in_status"] == AttendanceStatus.late else "present"
+            check_in_at, check_out_at = fold["in"], None
         roster.append(
             DailyStatus(
                 user_id=u.id,

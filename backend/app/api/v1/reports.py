@@ -19,7 +19,7 @@ from openpyxl import Workbook
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_db, require_staff
+from app.api.deps import Principal, get_db, require_staff, tenant_id_of
 from app.schemas import Envelope, TenantConfig
 from app.services import report_service, tenant_service
 
@@ -120,7 +120,7 @@ async def daily_report(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[AttendanceRecapOut]:
     day = _parse_date(date_str)
-    recap = await report_service.daily_recap(session, day, principal.tenant_id)
+    recap = await report_service.daily_recap(session, day, tenant_id_of(principal))
     return Envelope(data=_to_recap_out(recap))
 
 
@@ -131,7 +131,7 @@ async def monthly_report(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[AttendanceRecapOut]:
     year, mon = _parse_month(month)
-    recap = await report_service.monthly_recap(session, year, mon, principal.tenant_id)
+    recap = await report_service.monthly_recap(session, year, mon, tenant_id_of(principal))
     return Envelope(data=_to_recap_out(recap))
 
 
@@ -153,9 +153,10 @@ async def daily_status(
     """Roster of every active end-user with their attendance state for the day,
     including those who haven't shown up ('absent')."""
     day = _parse_date(date_str)
-    tenant = await tenant_service.get_tenant(session, principal.tenant_id)
+    tenant_id = tenant_id_of(principal)
+    tenant = await tenant_service.get_tenant(session, tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
-    rows = await report_service.daily_status(session, day, cfg.attendance.timezone, principal.tenant_id)
+    rows = await report_service.daily_status(session, day, cfg.attendance.timezone, tenant_id)
     return Envelope(
         data=[
             DailyStatusOut(
@@ -276,8 +277,13 @@ def _pdf_bytes(rows: list[report_service.ExportRow]) -> bytes:
         )
 
     col_widths = [
-        1.2 * inch, 1.0 * inch, 1.5 * inch, 0.8 * inch,
-        0.8 * inch, 0.8 * inch, 0.9 * inch,
+        1.2 * inch,
+        1.0 * inch,
+        1.5 * inch,
+        0.8 * inch,
+        0.8 * inch,
+        0.8 * inch,
+        0.9 * inch,
     ]
     tbl = Table(data, colWidths=col_widths)
     tbl.setStyle(
@@ -320,7 +326,7 @@ async def export_report(
             detail="'to' must not be earlier than 'from'",
         )
 
-    rows = await report_service.export_rows(session, start_day, end_day, principal.tenant_id)
+    rows = await report_service.export_rows(session, start_day, end_day, tenant_id_of(principal))
     filename = f"attendance_{from_str}_{to_str}.{fmt}"
 
     if fmt == "csv":

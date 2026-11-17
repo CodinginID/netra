@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_db, require_tenant_admin
+from app.api.deps import Principal, get_db, require_tenant_admin, tenant_id_of
 from app.schemas import (
     API_SCOPES,
     ApiKeyCreate,
@@ -42,7 +42,9 @@ async def create_api_key(
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[ApiKeyCreated]:
     if principal.tenant_id is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant context required"
+        )
     key, plaintext = await api_key_service.create(
         session,
         principal.tenant_id,
@@ -66,7 +68,7 @@ async def list_api_keys(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[ApiKeyOut]]:
-    keys = await api_key_service.list_keys(session, principal.tenant_id)
+    keys = await api_key_service.list_keys(session, tenant_id_of(principal))
     return Envelope(data=[ApiKeyOut.model_validate(k) for k in keys])
 
 

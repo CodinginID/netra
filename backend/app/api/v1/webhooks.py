@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_db, require_tenant_admin
+from app.api.deps import Principal, get_db, require_tenant_admin, tenant_id_of
 from app.schemas import Envelope, WebhookCreate, WebhookOut, WebhookRegistered
 from app.services import audit_service, webhook_service
 
@@ -43,5 +43,5 @@ async def list_webhooks(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[list[WebhookOut]]:
-    endpoints = await webhook_service.list_endpoints(session, principal.tenant_id)
+    endpoints = await webhook_service.list_endpoints(session, tenant_id_of(principal))
     return Envelope(data=[WebhookOut.model_validate(e) for e in endpoints])

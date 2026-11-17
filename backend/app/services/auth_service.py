@@ -42,9 +42,7 @@ def _issue_tokens(user: User) -> TokenResponse:
     return TokenResponse(access_token=access, refresh_token=refresh, role=user.role)
 
 
-async def authenticate(
-    session: AsyncSession, *, email: str, password: str
-) -> TokenResponse:
+async def authenticate(session: AsyncSession, *, email: str, password: str) -> TokenResponse:
     """Authenticate staff by their GLOBAL email identifier.
 
     Email is unique across all tenants, so it identifies the user (and thus the

@@ -113,7 +113,9 @@ async def daily_status(
     day = _parse_day(date_str, "date").date()
     tenant = await tenant_service.get_tenant(session, principal.tenant_id)
     cfg = TenantConfig.model_validate((tenant.config if tenant else None) or {})
-    rows = await report_service.daily_status(session, day, cfg.attendance.timezone, principal.tenant_id)
+    rows = await report_service.daily_status(
+        session, day, cfg.attendance.timezone, principal.tenant_id
+    )
     return Envelope(
         data=[
             DailyStatusOut(

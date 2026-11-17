@@ -112,7 +112,9 @@ async def test_update_api_key_origins(client: AsyncClient, super_admin):
 async def test_update_api_key_origins_unknown_key_404(client: AsyncClient, super_admin):
     headers = await _onboard_tenant_admin(client)
     resp = await client.patch(
-        "/api/v1/api-keys/does-not-exist", headers=headers, json={"allowed_origins": ["https://x.id"]}
+        "/api/v1/api-keys/does-not-exist",
+        headers=headers,
+        json={"allowed_origins": ["https://x.id"]},
     )
     assert resp.status_code == 404
 

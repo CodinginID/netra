@@ -62,9 +62,9 @@ async def list_endpoints(session: AsyncSession, tenant_id: str) -> list[WebhookE
     return list(
         (
             await session.execute(
-                select(WebhookEndpoint).where(
-                    WebhookEndpoint.tenant_id == tenant_id
-                ).order_by(WebhookEndpoint.created_at.desc())
+                select(WebhookEndpoint)
+                .where(WebhookEndpoint.tenant_id == tenant_id)
+                .order_by(WebhookEndpoint.created_at.desc())
             )
         ).scalars()
     )

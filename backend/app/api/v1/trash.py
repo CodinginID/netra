@@ -1,4 +1,5 @@
 """Trash management — hard-delete purge of all soft-deleted entities."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,13 +23,19 @@ async def list_all_trash(
     """Combined trash listing: all soft-deleted entities grouped by type (tenant-scoped)."""
     tid = principal.tenant_id
     users_result = await session.execute(
-        select(User).where(User.deleted_at.isnot(None), User.tenant_id == tid).order_by(User.deleted_at.desc())
+        select(User)
+        .where(User.deleted_at.isnot(None), User.tenant_id == tid)
+        .order_by(User.deleted_at.desc())
     )
     devices_result = await session.execute(
-        select(Device).where(Device.deleted_at.isnot(None), Device.tenant_id == tid).order_by(Device.deleted_at.desc())
+        select(Device)
+        .where(Device.deleted_at.isnot(None), Device.tenant_id == tid)
+        .order_by(Device.deleted_at.desc())
     )
     schedules_result = await session.execute(
-        select(Schedule).where(Schedule.deleted_at.isnot(None), Schedule.tenant_id == tid).order_by(Schedule.deleted_at.desc())
+        select(Schedule)
+        .where(Schedule.deleted_at.isnot(None), Schedule.tenant_id == tid)
+        .order_by(Schedule.deleted_at.desc())
     )
     attendance_result = await session.execute(
         select(AttendanceRecord)
@@ -40,9 +47,7 @@ async def list_all_trash(
             "users": [UserOut.model_validate(u) for u in users_result.scalars()],
             "devices": [DeviceOut.model_validate(d) for d in devices_result.scalars()],
             "schedules": [ScheduleOut.model_validate(s) for s in schedules_result.scalars()],
-            "attendance": [
-                AttendanceOut.model_validate(r) for r in attendance_result.scalars()
-            ],
+            "attendance": [AttendanceOut.model_validate(r) for r in attendance_result.scalars()],
         }
     )
 
@@ -55,7 +60,9 @@ async def hard_delete_trash_user(
 ) -> None:
     """Permanently delete a soft-deleted user from the trash."""
     if not await hard_delete(session, User, entity_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not soft-deleted")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found or not soft-deleted"
+        )
     await audit_service.record(
         session,
         action="trash.hard_deleted",
@@ -73,7 +80,9 @@ async def hard_delete_trash_device(
 ) -> None:
     """Permanently delete a soft-deleted device from the trash."""
     if not await hard_delete(session, Device, entity_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or not soft-deleted")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found or not soft-deleted"
+        )
     await audit_service.record(
         session,
         action="trash.hard_deleted",
@@ -91,7 +100,9 @@ async def hard_delete_trash_schedule(
 ) -> None:
     """Permanently delete a soft-deleted schedule from the trash."""
     if not await hard_delete(session, Schedule, entity_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or not soft-deleted")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found or not soft-deleted"
+        )
     await audit_service.record(
         session,
         action="trash.hard_deleted",

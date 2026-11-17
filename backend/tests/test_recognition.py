@@ -9,6 +9,7 @@ tenant isolation without any ML model.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
 import pytest
@@ -42,9 +43,7 @@ async def _onboard(client: AsyncClient, owner_hdr: dict, slug: str) -> dict:
         },
     )
     assert resp.status_code == 201, resp.text
-    admin = await _token(
-        client, email=f"admin-{slug}@netra.app", password="adminpass123"
-    )
+    admin = await _token(client, email=f"admin-{slug}@netra.app", password="adminpass123")
     return {"Authorization": f"Bearer {admin}"}
 
 
@@ -174,7 +173,7 @@ async def test_checkin_recognizes_and_records_with_status(client: AsyncClient, s
     # Staff can list the tenant's attendance.
     listing = await client.get("/api/v1/attendance", headers=hdr)
     assert listing.status_code == 200
-    assert len(listing.json()["data"]) == 2
+    assert len(listing.json()["data"]["items"]) == 2
 
     async with SessionFactory() as s:
         await _set_tenant(s, None, platform=True)
@@ -244,7 +243,7 @@ async def test_liveness_rejects_spoof(client: AsyncClient, super_admin):
 
 
 @pytest.mark.asyncio
-async def test_geofence_enforced(client: AsyncClient, super_admin):
+async def test_geofence_flags_out_of_area_punches(client: AsyncClient, super_admin):
     owner = await _token(client, email="owner@netra.app", password="ownerpass123")
     hdr = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "geo-a")
     alice = await _create_user(client, hdr, "Alice", "alice")
@@ -266,33 +265,26 @@ async def test_geofence_enforced(client: AsyncClient, super_admin):
     device = await _device_token(client, hdr)
     dhdr = {"X-Device-Token": device}
 
-    # No location -> rejected.
-    no_loc = await client.post(
-        "/api/v1/attendance/checkin",
-        headers=dhdr,
-        files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
-    )
-    assert no_loc.status_code == 422
-    assert "location" in no_loc.json()["error"].lower()
+    # FLAG mode: a geofence never blocks a punch, it tags it. Each punch is on
+    # its own day so the double check-in guard doesn't interfere.
+    async def _punch(day: str, loc: dict | None) -> dict:
+        resp = await client.post(
+            "/api/v1/attendance/checkin",
+            headers=dhdr,
+            data={"occurred_at": f"2026-06-{day}T09:00:00+07:00", **(loc or {})},
+            files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["data"]["attendance"]
 
-    # Far away -> rejected.
-    far = await client.post(
-        "/api/v1/attendance/checkin",
-        headers=dhdr,
-        data={"lat": "1.0", "lng": "1.0"},
-        files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
-    )
-    assert far.status_code == 422
-    assert "geofence" in far.json()["error"].lower()
-
-    # Within ~11 m -> accepted.
-    near = await client.post(
-        "/api/v1/attendance/checkin",
-        headers=dhdr,
-        data={"lat": "0.0001", "lng": "0.0"},
-        files={"image": ("a.jpg", ALICE_FACE, "image/jpeg")},
-    )
-    assert near.status_code == 200, near.text
+    # No location -> recorded, nothing to judge.
+    assert (await _punch("10", None))["location"] is None
+    # Far away -> recorded, flagged outside.
+    far = await _punch("11", {"lat": "1.0", "lng": "1.0"})
+    assert far["location"]["outside_geofence"] is True
+    # Within ~11 m -> recorded, inside.
+    near = await _punch("12", {"lat": "0.0001", "lng": "0.0"})
+    assert near["location"]["outside_geofence"] is False
 
 
 @pytest.mark.asyncio
@@ -335,11 +327,21 @@ async def test_identify_does_not_block_event_loop(super_admin):
     unrelated enroll/identify call was mid-inference on a single-process
     uvicorn server)."""
 
+    lock = threading.Lock()
+    running = 0
+    peak = 0
+
     class _SlowEngine:
         name = "slow"
 
         def embed(self, image: bytes) -> list[float]:
+            nonlocal running, peak
+            with lock:
+                running += 1
+                peak = max(peak, running)
             time.sleep(0.3)  # stands in for CPU-bound ONNX inference
+            with lock:
+                running -= 1
             return [0.0] * 512
 
     async with SessionFactory() as s:
@@ -354,13 +356,12 @@ async def test_identify_does_not_block_event_loop(super_admin):
             await _set_tenant(s, tid)
             await recognition_service.identify(s, b"q", engine=_SlowEngine())
 
-    start = time.perf_counter()
     await asyncio.gather(_run(), _run(), _run())
-    elapsed = time.perf_counter() - start
 
-    # Serialized on a blocked event loop: ~3 * 0.3s = 0.9s. Offloaded to a
-    # thread pool: all three overlap, close to a single 0.3s call.
-    assert elapsed < 0.6, f"identify() calls ran serially (event loop blocked): {elapsed:.2f}s"
+    # Run on the event loop, the embeds execute one at a time (peak 1). Offloaded
+    # to a thread pool they overlap. Counting overlap instead of timing wall-clock
+    # keeps the test stable on a loaded machine.
+    assert peak >= 2, "identify() calls ran serially (event loop blocked)"
 
 
 @pytest.mark.asyncio

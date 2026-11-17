@@ -9,11 +9,11 @@ so RLS is not what keeps this inside one tenant).
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, cast
 
-from sqlalchemy import CursorResult, Delete, delete, update
+from sqlalchemy import Delete, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.results import rowcount
 from app.models import AttendanceRecord, Device, FaceEmbedding, Role, User
 
 
@@ -35,8 +35,7 @@ _ORDER = [
 
 
 async def _delete(session: AsyncSession, stmt: Delete) -> int:
-    result = cast(CursorResult[Any], await session.execute(stmt))
-    return result.rowcount or 0
+    return rowcount(await session.execute(stmt))
 
 
 async def _reset_attendance(session: AsyncSession, tenant_id: str) -> int:

@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
+from app.db.results import rowcount
 from app.models import Role, Tenant, TenantStatus, User
 from app.schemas import TenantCreate
 
@@ -56,11 +57,11 @@ async def list_tenants(
     base = select(Tenant).where(Tenant.deleted_at.is_(None))
     if search:
         search_pattern = f"%{search}%"
-        base = base.where(
-            or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern))
-        )
+        base = base.where(or_(Tenant.name.ilike(search_pattern), Tenant.slug.ilike(search_pattern)))
 
-    count_stmt = select(func.count(Tenant.id)).select_from(Tenant).where(Tenant.deleted_at.is_(None))
+    count_stmt = (
+        select(func.count(Tenant.id)).select_from(Tenant).where(Tenant.deleted_at.is_(None))
+    )
     if search:
         search_pattern = f"%{search}%"
         count_stmt = count_stmt.where(
@@ -124,4 +125,4 @@ async def delete_tenant(session: AsyncSession, tenant_id: str) -> bool:
     """
     result = await session.execute(delete(Tenant).where(Tenant.id == tenant_id))
     await session.flush()
-    return (result.rowcount or 0) > 0
+    return rowcount(result) > 0

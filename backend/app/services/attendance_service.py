@@ -87,7 +87,7 @@ def _window_bounds(schedule: Schedule | None, when: datetime) -> tuple[time | No
 
 
 def evaluate_scan(
-    schedule: "Schedule | None",
+    schedule: Schedule | None,
     *,
     has_checkin: bool,
     has_checkout: bool,
@@ -104,9 +104,8 @@ def evaluate_scan(
     ``now`` MUST be in the tenant's local timezone (HH:MM comparisons).
     Raises AttendanceRuleError on any violation (caller maps to HTTP 409).
     """
-    if last_record_at is not None:
-        if (now - last_record_at).total_seconds() < COOLDOWN_SECONDS:
-            raise AttendanceRuleError("Baru saja absen — tunggu sebentar lalu coba lagi.")
+    if last_record_at is not None and (now - last_record_at).total_seconds() < COOLDOWN_SECONDS:
+        raise AttendanceRuleError("Baru saja absen — tunggu sebentar lalu coba lagi.")
 
     if has_checkin and has_checkout:
         raise AttendanceRuleError("Absensi hari ini sudah lengkap (masuk & pulang).")

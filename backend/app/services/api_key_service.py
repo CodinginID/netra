@@ -32,9 +32,7 @@ async def create(
 ) -> tuple[ApiKey, str]:
     """Create a key. Returns (ApiKey, plaintext_key) — surface the key once."""
     plaintext = generate_api_key()
-    expires_at = (
-        datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
-    )
+    expires_at = datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
     key = ApiKey(
         tenant_id=tenant_id,
         name=name,
@@ -58,9 +56,7 @@ async def list_keys(session: AsyncSession, tenant_id: str) -> list[ApiKey]:
 
 
 async def get(session: AsyncSession, key_id: str) -> ApiKey | None:
-    return (
-        await session.execute(select(ApiKey).where(ApiKey.id == key_id))
-    ).scalar_one_or_none()
+    return (await session.execute(select(ApiKey).where(ApiKey.id == key_id))).scalar_one_or_none()
 
 
 async def rotate(session: AsyncSession, key: ApiKey) -> str:

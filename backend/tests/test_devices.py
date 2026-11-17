@@ -54,9 +54,11 @@ async def test_device_register_returns_plaintext_token_once(client: AsyncClient,
         device = (await s.execute(select(Device).where(Device.id == data["id"]))).scalar_one()
         assert device.token_hash == hash_device_token(token)
         assert device.token_hash != token
-        raw = (await s.execute(
-            text("SELECT token_encrypted FROM devices WHERE id = :id"), {"id": data["id"]}
-        )).scalar_one()
+        raw = (
+            await s.execute(
+                text("SELECT token_encrypted FROM devices WHERE id = :id"), {"id": data["id"]}
+            )
+        ).scalar_one()
         assert raw and raw != token
         assert device.token_encrypted == token
 

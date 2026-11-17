@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -14,9 +14,9 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
+from app.api import ws
 from app.api.middleware import RequestContextMiddleware
 from app.api.v1 import api_router
-from app.api import ws
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         (tenant_id, snapshot_date).
         """
         while True:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             target = now.replace(hour=0, minute=30, second=0, microsecond=0)
             if target <= now:
                 target += timedelta(days=1)

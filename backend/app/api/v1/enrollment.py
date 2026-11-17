@@ -22,7 +22,9 @@ log = get_logger("netra.enrollment")
 router = APIRouter(prefix="/enrollment", tags=["enrollment"])
 
 
-@router.post("/self", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/self", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED
+)
 async def self_enroll_face(
     image: UploadFile = File(...),
     principal: Principal = Depends(get_principal),
@@ -135,7 +137,9 @@ async def self_enroll_multi_angle(
     )
 
 
-@router.post("/multi", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/multi", response_model=Envelope[EnrollmentResult], status_code=status.HTTP_201_CREATED
+)
 async def enroll_face_multi(
     user_id: str = Form(...),
     images: list[UploadFile] = File(...),

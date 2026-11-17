@@ -8,7 +8,7 @@ meaningful in the first place.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -27,7 +27,7 @@ from app.services import billing_service
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @asynccontextmanager
@@ -146,13 +146,19 @@ async def test_unpaid_and_overdue_buckets():
 
         # Issued, deadline already passed.
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.issued,
-            total=1000, due_date=_now() - timedelta(days=3),
+            session,
+            tenant.id,
+            status=InvoiceStatus.issued,
+            total=1000,
+            due_date=_now() - timedelta(days=3),
         )
         # Issued, deadline still ahead.
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.issued,
-            total=500, due_date=_now() + timedelta(days=10),
+            session,
+            tenant.id,
+            status=InvoiceStatus.issued,
+            total=500,
+            due_date=_now() + timedelta(days=10),
         )
 
         summary = await billing_service.operational_summary(session)
@@ -168,9 +174,7 @@ async def test_draft_without_due_date_is_never_overdue():
     """The backfill leaves drafts NULL; they must not read as arrears."""
     async with platform_session() as session:
         tenant = await _tenant(session, "draft-only")
-        await _invoice(
-            session, tenant.id, status=InvoiceStatus.draft, total=900, due_date=None
-        )
+        await _invoice(session, tenant.id, status=InvoiceStatus.draft, total=900, due_date=None)
 
         summary = await billing_service.operational_summary(session)
 
@@ -185,8 +189,12 @@ async def test_paid_invoice_is_never_overdue_however_late():
     async with platform_session() as session:
         tenant = await _tenant(session, "paid-late")
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.paid, total=700,
-            due_date=_now() - timedelta(days=60), paid_at=_now(),
+            session,
+            tenant.id,
+            status=InvoiceStatus.paid,
+            total=700,
+            due_date=_now() - timedelta(days=60),
+            paid_at=_now(),
         )
 
         summary = await billing_service.operational_summary(session)
@@ -203,12 +211,20 @@ async def test_currencies_are_reported_separately():
         tenant = await _tenant(session, "multi-currency")
         due = _now() + timedelta(days=5)
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.issued,
-            total=1_000_000, currency="IDR", due_date=due,
+            session,
+            tenant.id,
+            status=InvoiceStatus.issued,
+            total=1_000_000,
+            currency="IDR",
+            due_date=due,
         )
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.issued,
-            total=250, currency="USD", due_date=due,
+            session,
+            tenant.id,
+            status=InvoiceStatus.issued,
+            total=250,
+            currency="USD",
+            due_date=due,
         )
 
         summary = await billing_service.operational_summary(session)
@@ -225,11 +241,17 @@ async def test_paid_this_month_excludes_earlier_months():
         month_start = _now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.paid, total=100,
+            session,
+            tenant.id,
+            status=InvoiceStatus.paid,
+            total=100,
             paid_at=month_start + timedelta(hours=1),
         )
         await _invoice(
-            session, tenant.id, status=InvoiceStatus.paid, total=999,
+            session,
+            tenant.id,
+            status=InvoiceStatus.paid,
+            total=999,
             paid_at=month_start - timedelta(days=1),
         )
 
@@ -258,22 +280,28 @@ async def test_lapse_signals_respect_their_windows():
             return TenantSubscription(**defaults)
 
         # Trial ending inside the 7-day window, and one well outside it.
-        session.add(_sub(
-            await _tenant(session, "trial-soon"),
-            status=SubscriptionStatus.trial,
-            trial_ends_at=_now() + timedelta(days=3),
-        ))
-        session.add(_sub(
-            await _tenant(session, "trial-later"),
-            status=SubscriptionStatus.trial,
-            trial_ends_at=_now() + timedelta(days=30),
-        ))
+        session.add(
+            _sub(
+                await _tenant(session, "trial-soon"),
+                status=SubscriptionStatus.trial,
+                trial_ends_at=_now() + timedelta(days=3),
+            )
+        )
+        session.add(
+            _sub(
+                await _tenant(session, "trial-later"),
+                status=SubscriptionStatus.trial,
+                trial_ends_at=_now() + timedelta(days=30),
+            )
+        )
         session.add(_sub(await _tenant(session, "past-due"), status=SubscriptionStatus.past_due))
         # Active subscription ending inside the 30-day window.
-        session.add(_sub(
-            await _tenant(session, "ending-soon"),
-            ends_at=_now() + timedelta(days=10),
-        ))
+        session.add(
+            _sub(
+                await _tenant(session, "ending-soon"),
+                ends_at=_now() + timedelta(days=10),
+            )
+        )
         await session.flush()
 
         summary = await billing_service.operational_summary(session)
@@ -293,15 +321,17 @@ async def test_tenants_without_subscription_ignores_deleted_tenants():
         await _tenant(session, "soft-deleted", deleted=True)
 
         covered = await _tenant(session, "covered")
-        session.add(TenantSubscription(
-            tenant_id=covered.id,
-            plan_id=plan.id,
-            billing_cycle="annual",
-            discount_pct=0,
-            starts_at=_now(),
-            ends_at=_now() + timedelta(days=365),
-            status=SubscriptionStatus.active,
-        ))
+        session.add(
+            TenantSubscription(
+                tenant_id=covered.id,
+                plan_id=plan.id,
+                billing_cycle="annual",
+                discount_pct=0,
+                starts_at=_now(),
+                ends_at=_now() + timedelta(days=365),
+                status=SubscriptionStatus.active,
+            )
+        )
         await session.flush()
 
         summary = await billing_service.operational_summary(session)
@@ -312,9 +342,7 @@ async def test_tenants_without_subscription_ignores_deleted_tenants():
 @pytest.mark.asyncio
 async def test_summary_endpoint_returns_zeros_not_404(client: AsyncClient, super_admin):
     token = await _token(client, email="owner@netra.app", password="ownerpass123")
-    resp = await client.get(
-        "/api/v1/billing/summary", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/api/v1/billing/summary", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["unpaid"]["count"] == 0
@@ -340,9 +368,7 @@ async def test_summary_endpoint_refuses_tenant_admin(client: AsyncClient, super_
     )
     assert resp.status_code == 201, resp.text
 
-    tenant_token = await _token(
-        client, email="admin@summary-tenant.app", password="adminpass123"
-    )
+    tenant_token = await _token(client, email="admin@summary-tenant.app", password="adminpass123")
     resp = await client.get(
         "/api/v1/billing/summary",
         headers={"Authorization": f"Bearer {tenant_token}"},
@@ -354,9 +380,7 @@ async def test_summary_endpoint_refuses_tenant_admin(client: AsyncClient, super_
 # due_date rules
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_issuing_an_invoice_derives_due_date_from_net_terms(
-    client: AsyncClient, super_admin
-):
+async def test_issuing_an_invoice_derives_due_date_from_net_terms(client: AsyncClient, super_admin):
     from app.core.config import settings
 
     token = await _token(client, email="owner@netra.app", password="ownerpass123")
