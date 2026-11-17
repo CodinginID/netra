@@ -52,7 +52,7 @@ async def hard_delete(session: AsyncSession, model_cls, entity_id: str) -> bool:
     triggered this deletion. Returns True if a row was removed, False if no
     row matched (already restored, or never existed).
     """
-    stmt = sa_delete(model_cls).where(model_cls.id == entity_id)
+    stmt = sa_delete(model_cls).where(model_cls.id == entity_id, model_cls.deleted_at.isnot(None))
     result = await session.execute(stmt)
     return rowcount(result) > 0
 
