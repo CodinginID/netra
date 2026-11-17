@@ -2,11 +2,52 @@
 
 from __future__ import annotations
 
+import uuid
+from dataclasses import dataclass
+from types import SimpleNamespace
+
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 
-from app.models import Device, Schedule, User
+from app.models import Device, Schedule, Tenant, User
 from app.services.soft_delete import hard_delete
+from tests.test_recognition import _create_user, _onboard, _token
+
+
+@dataclass
+class _TenantAdmin:
+    """A freshly onboarded tenant's admin plus helpers to create its entities."""
+
+    client: AsyncClient
+    headers: dict
+
+    async def _post(self, path: str, body: dict) -> SimpleNamespace:
+        resp = await self.client.post(path, headers=self.headers, json=body)
+        assert resp.status_code == 201, resp.text
+        return SimpleNamespace(**resp.json()["data"])
+
+    async def _create_user(self, full_name: str, external_id: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=await _create_user(self.client, self.headers, full_name, external_id)
+        )
+
+    async def _create_device(self, name: str) -> SimpleNamespace:
+        return await self._post("/api/v1/devices", {"name": name})
+
+    async def _create_schedule(self, name: str) -> SimpleNamespace:
+        return await self._post("/api/v1/schedules", {"name": name, "rules": {}})
+
+    @staticmethod
+    def _uuid() -> str:
+        return str(uuid.uuid4())
+
+
+@pytest_asyncio.fixture
+async def tenant_admin(client: AsyncClient, super_admin) -> _TenantAdmin:
+    owner = await _token(client, email="owner@netra.app", password="ownerpass123")
+    headers = await _onboard(client, {"Authorization": f"Bearer {owner}"}, "trash")
+    return _TenantAdmin(client=client, headers=headers)
 
 
 @pytest.mark.asyncio
@@ -187,8 +228,11 @@ async def test_soft_delete_service_hard_delete_removes_row():
         # Create a test entity in a throwaway way — directly insert.
         from datetime import UTC, datetime
 
+        tenant = Tenant(name="Trash Svc", slug="trash-svc")
+        s.add(tenant)
+        await s.flush()
         user = User(
-            tenant_id="00000000-0000-0000-0000-000000000001",
+            tenant_id=tenant.id,
             full_name="Service Test",
             role="end_user",
             deleted_at=datetime.now(UTC),

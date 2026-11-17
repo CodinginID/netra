@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,10 +102,12 @@ async def list_users(
     principal: Principal = Depends(require_tenant_admin),
     session: AsyncSession = Depends(get_db),
 ) -> Envelope[dict]:
-    base = select(User).where(
-        User.deleted_at.is_(None),
-        User.tenant_id == principal.tenant_id,
-    )
+    # '*' (platform scope) lists every tenant's users, by explicit request;
+    # otherwise the caller's own tenant only.
+    scope: list[ColumnElement[bool]] = [User.deleted_at.is_(None)]
+    if not principal.platform_scope:
+        scope.append(User.tenant_id == principal.tenant_id)
+    base = select(User).where(*scope)
     if search:
         search_pattern = f"%{search}%"
         base = base.where(
@@ -113,14 +115,7 @@ async def list_users(
         )
 
     # Count total
-    count_stmt = (
-        select(func.count(User.id))
-        .select_from(User)
-        .where(
-            User.deleted_at.is_(None),
-            User.tenant_id == principal.tenant_id,
-        )
-    )
+    count_stmt = select(func.count(User.id)).select_from(User).where(*scope)
     if search:
         search_pattern = f"%{search}%"
         count_stmt = count_stmt.where(
