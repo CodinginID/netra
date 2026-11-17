@@ -9,7 +9,7 @@ on:
 jobs:
   # ── Backend ────────────────────────────────────────────────────────────────
   backend:
-    name: Backend (lint · type-check · migrate · test)
+    name: Backend (migrate · test)
     runs-on: ubuntu-latest
 
     services:
@@ -53,14 +53,8 @@ jobs:
       - name: Install dependencies (including dev)
         run: uv sync --frozen
 
-      - name: Lint (ruff)
-        run: uv run ruff check .
-
-      - name: Format check (black)
-        run: uv run black --check .
-
-      - name: Type-check (mypy)
-        run: uv run mypy app
+      # Lint / format / type checks run locally before push (scripts/check.sh,
+      # wired as .githooks/pre-push), not here — they fail fast on a laptop.
 
       - name: Validate migration graph (no multiple heads)
         run: |

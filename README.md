@@ -85,7 +85,7 @@ including testing, linting, type-checking, and migration commands.
 
 GitHub Actions runs on every push and pull request:
 
-- **Backend**: ruff lint → mypy type-check → alembic migrate → pytest
+- **Backend**: alembic migrate → pytest (ruff · black · mypy run locally before push: `scripts/check.sh`, enable the hook once with `git config core.hooksPath .githooks`)
 - **Frontend**: npm ci → build (non-blocking while `ui/` is in progress)
 
 See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
