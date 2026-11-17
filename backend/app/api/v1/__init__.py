@@ -19,6 +19,7 @@ from app.api.v1 import (
     onboarding,
     reports,
     schedules,
+    tenant_reset,
     tenants,
     trash,
     users,
@@ -29,6 +30,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(tenants.router)
+api_router.include_router(tenant_reset.router)
 api_router.include_router(onboarding.router)
 api_router.include_router(users.router)
 api_router.include_router(consent.router)

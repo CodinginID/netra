@@ -568,6 +568,25 @@ export async function deleteTenant(token: string, tenantId: string): Promise<voi
   return apiFetch<void>(`${API_BASE}/tenants/${tenantId}`, token, { method: 'DELETE' })
 }
 
+export type TenantResetCategory = 'attendance' | 'faces' | 'users' | 'devices'
+
+export interface TenantResetResult {
+  tenant_id: string
+  removed: Partial<Record<TenantResetCategory, number>>
+}
+
+export async function resetTenantData(
+  token: string,
+  tenantId: string,
+  categories: TenantResetCategory[],
+  confirmSlug: string,
+): Promise<TenantResetResult> {
+  return apiFetch<TenantResetResult>(`${API_BASE}/tenants/${tenantId}/reset`, token, {
+    method: 'POST',
+    body: JSON.stringify({ categories, confirm_slug: confirmSlug }),
+  })
+}
+
 // --------------------------------------------------------------------------- //
 // Trash / Recycle Bin
 // --------------------------------------------------------------------------- //

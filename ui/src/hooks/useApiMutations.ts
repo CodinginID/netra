@@ -355,6 +355,20 @@ export function useDeleteTenant(onSuccess?: () => void) {
   })
 }
 
+export function useResetTenantData(onSuccess?: () => void) {
+  const token = useAuthStore((s) => s.accessToken)
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { tenantId: string; categories: api.TenantResetCategory[]; confirmSlug: string }) =>
+      api.resetTenantData(token!, v.tenantId, v.categories, v.confirmSlug),
+    onSuccess: () => {
+      // Every tenant-scoped list (users, faces, attendance, devices) may now be stale.
+      qc.invalidateQueries()
+      onSuccess?.()
+    },
+  })
+}
+
 export function useCompleteOnboarding(onSuccess?: () => void) {
   const call = useScopedCall()
   const qc = useQueryClient()

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, EyeOff, Plus, Search, X, ArrowUpRight, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Plus, Search, X, ArrowUpRight, Trash2, RotateCcw } from 'lucide-react'
 import {
   type TenantOut,
 } from '@/api/adminApi'
@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast'
 import { useModalA11y } from '@/hooks/useModalA11y'
 import { Pagination } from '@/components/Pagination'
 import { MobileFab } from '@/components/MobileFab'
+import { ResetTenantDataModal } from '@/components/ResetTenantDataModal'
 import { useTenants } from '@/hooks/useApiQueries'
 import { useCreateTenant, useSuspendTenant, useActivateTenant, useDeleteTenant } from '@/hooks/useApiMutations'
 import { useNavigate } from 'react-router-dom'
@@ -303,6 +304,7 @@ export function TenantsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<TenantOut | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<TenantOut | null>(null)
+  const [resetTarget, setResetTarget] = useState<TenantOut | null>(null)
 
   const handleKelola = (tenantId: string) => {
     navigate(`/admin/tenants/${tenantId}`)
@@ -466,7 +468,17 @@ export function TenantsPage() {
                       </button>
                     )}
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => setResetTarget(tenant)}
+                      disabled={busyId === tenant.id}
+                      title={t('tenant.reset')}
+                      aria-label={t('tenant.reset')}
+                      style={{ marginRight: 6 }}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
                     <button
                       className="btn btn-sm btn-danger"
                       onClick={() => setDeleteTarget(tenant)}
@@ -509,6 +521,10 @@ export function TenantsPage() {
           onClose={() => setDeleteTarget(null)}
           busy={deleteMutation.isPending}
         />
+      )}
+
+      {resetTarget && (
+        <ResetTenantDataModal tenant={resetTarget} onClose={() => setResetTarget(null)} />
       )}
     </div>
   )
