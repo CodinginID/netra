@@ -43,7 +43,7 @@ export function DashboardLayout({
   children,
   headerSlot,
 }: DashboardLayoutProps) {
-  const { role, username, logout } = useAuthStore()
+  const { role, logout } = useAuthStore()
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -51,7 +51,8 @@ export function DashboardLayout({
 
   const current = activeLeaf(nav, location.pathname)
   const pageTitle = current ? t(current.labelKey) : title
-  const who = username ?? roleLabel(role)
+  // The token only carries the user id, so the role is the friendliest label we have.
+  const who = roleLabel(role)
 
   function handleLogout() {
     logout()
@@ -81,7 +82,7 @@ export function DashboardLayout({
           <span className="sidebar-avatar" aria-hidden>{initials(who)}</span>
           <div className="sidebar-who">
             <div className="sidebar-who-name" title={who}>{who}</div>
-            <div className="sidebar-who-role">{roleLabel(role)}</div>
+            {tone === 'dark' && <div className="sidebar-who-role">Netra {t('menu.platform')}</div>}
           </div>
           <button
             type="button"
