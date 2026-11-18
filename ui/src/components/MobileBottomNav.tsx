@@ -43,7 +43,7 @@ export function MobileBottomNav({ nav, tabs, onLogout, onChangePassword }: Mobil
           return (
             <NavLink key={item.to} to={item.to} end={item.end} className={`mobile-nav-item${isActive ? ' active' : ''}`}>
               <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-              <span>{t(item.labelKey)}</span>
+              <span>{t(item.tabLabelKey ?? item.labelKey)}</span>
             </NavLink>
           )
         })}

@@ -36,6 +36,8 @@ export interface NavLeaf {
   end?: boolean
   /** Extra paths that also count as this page (e.g. a bare index route). */
   aliases?: string[]
+  /** Shorter/clearer label for a phone bottom-nav tab, when the menu label needs its group for context. */
+  tabLabelKey?: string
 }
 
 /** A parent menu that opens and closes its submenu. */
@@ -131,6 +133,7 @@ export function platformNav(): NavEntry[] {
           icon: ChartPie,
           aliases: ['/admin/billing'],
           end: true,
+          tabLabelKey: 'menu.billing',
         },
         { labelKey: 'menu.subscriptions', to: '/admin/billing/subscriptions', icon: Repeat },
         { labelKey: 'menu.invoices', to: '/admin/billing/invoices', icon: Receipt },

@@ -748,6 +748,10 @@
   font-weight: 500;
   transition: color 0.15s;
   -webkit-tap-highlight-color: transparent;
+  background: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .mobile-nav-item svg {
