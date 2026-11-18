@@ -1,24 +1,25 @@
 import { useState } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, LogOut } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { useI18n } from '@/store/i18nStore'
 import { NotificationBell } from '@/components/NotificationBell'
 import { ProfileMenu } from '@/components/ProfileMenu'
 import { ChangePasswordModal } from '@/components/ChangePasswordModal'
 import { MobileBottomNav } from '@/components/MobileBottomNav'
+import { SidebarNav } from '@/components/nav/SidebarNav'
+import { activeLeaf } from '@/components/nav/navConfig'
+import type { NavEntry } from '@/components/nav/navConfig'
 import '@/styles/layout.css'
-
-interface NavItem {
-  label: string
-  to: string
-  icon?: LucideIcon
-  divider?: boolean
-}
 
 interface DashboardLayoutProps {
   title: string
-  navItems: NavItem[]
+  /** Sidebar menu: plain pages and parents with a submenu. */
+  nav: NavEntry[]
+  /** Paths shown as bottom-nav tabs on phones; the rest go to "Lainnya". */
+  mobileTabs: string[]
+  /** `light` for tenant workspaces, `dark` for the super-admin platform. */
+  tone?: 'light' | 'dark'
   children: React.ReactNode
   /** Optional element rendered in the topbar (e.g. tenant switcher for super admins). */
   headerSlot?: React.ReactNode
@@ -29,17 +30,28 @@ function roleLabel(role?: string | null): string {
   return role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-export function DashboardLayout({ title, navItems, children, headerSlot }: DashboardLayoutProps) {
-  const { role, logout } = useAuthStore()
+function initials(name: string): string {
+  const parts = name.split(/[\s._@-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?'
+}
+
+export function DashboardLayout({
+  title,
+  nav,
+  mobileTabs,
+  tone = 'light',
+  children,
+  headerSlot,
+}: DashboardLayoutProps) {
+  const { role, username, logout } = useAuthStore()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [showChangePw, setShowChangePw] = useState(false)
 
-  // Derive active page label from current route
-  const activeNav = navItems.find(
-    (item) => !item.divider && location.pathname === item.to,
-  )
-  const pageTitle = activeNav?.label ?? title
+  const current = activeLeaf(nav, location.pathname)
+  const pageTitle = current ? t(current.labelKey) : title
+  const who = username ?? roleLabel(role)
 
   function handleLogout() {
     logout()
@@ -49,50 +61,36 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
   return (
     <div className="layout">
       <a href="#main-content" className="skip-link">
-        Langsung ke konten utama
+        {t('nav.skip_link')}
       </a>
 
-      <aside className="sidebar">
+      <aside className={`sidebar sidebar--${tone}`}>
         <div className="sidebar-header">
           <div className="sidebar-brand">
-            <Eye size={20} className="sidebar-brand-icon" />
-            <span>netra</span>
+            <span className="sidebar-brand-mark" aria-hidden />
+            <span className="sidebar-brand-name">Netra</span>
+            {tone === 'dark' && <span className="sidebar-brand-tag">{t('menu.platform')}</span>}
           </div>
-          <div className="sidebar-role">{roleLabel(role)}</div>
         </div>
 
-        <ul className="sidebar-nav">
-          {navItems.map((item) =>
-            item.divider ? (
-              <li key={item.label} style={{
-                padding: '0.5rem 0.875rem 0.25rem',
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'rgba(165,180,252,0.4)',
-                marginTop: '0.25rem',
-              }}>
-                {item.label.replace(/─+/g, '').trim()}
-              </li>
-            ) : (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) => `sidebar-nav-link${isActive ? ' active' : ''}`}
-                >
-                  {item.icon && <item.icon size={16} />}
-                  <span>{item.label}</span>
-                </NavLink>
-              </li>
-            )
-          )}
-        </ul>
+        <nav className="sidebar-scroll" aria-label={title}>
+          <SidebarNav entries={nav} />
+        </nav>
 
         <div className="sidebar-footer">
-          <button onClick={handleLogout}>
+          <span className="sidebar-avatar" aria-hidden>{initials(who)}</span>
+          <div className="sidebar-who">
+            <div className="sidebar-who-name" title={who}>{who}</div>
+            <div className="sidebar-who-role">{roleLabel(role)}</div>
+          </div>
+          <button
+            type="button"
+            className="sidebar-logout"
+            onClick={handleLogout}
+            title={t('menu.sign_out')}
+            aria-label={t('menu.sign_out')}
+          >
             <LogOut size={16} />
-            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -122,10 +120,8 @@ export function DashboardLayout({ title, navItems, children, headerSlot }: Dashb
 
       {/* Mobile bottom navigation — the ONLY nav on mobile (sidebar is hidden). */}
       <MobileBottomNav
-        items={navItems
-          .filter((item) => !item.divider)
-          .map((item) => ({ label: item.label, to: item.to, icon: item.icon! }))
-        }
+        nav={nav}
+        tabs={mobileTabs}
         onLogout={handleLogout}
         onChangePassword={() => setShowChangePw(true)}
       />

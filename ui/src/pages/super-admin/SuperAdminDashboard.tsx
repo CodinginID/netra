@@ -1,59 +1,21 @@
 import { Outlet, Navigate, useNavigate, useLocation, useParams, Link } from 'react-router-dom'
 import {
-  LayoutDashboard,
   Building2,
   Users,
   Activity,
   CheckCircle2,
-  ScanFace,
-  Monitor,
-  CalendarDays,
-  ClipboardList,
-  UserCheck,
-  KeyRound,
-  Trash2,
   ArrowUpRight,
-  Settings,
   AlertCircle,
   XCircle,
-  CreditCard,
-  CalendarClock,
   Wallet,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
+import { tenantNav, tenantMobileTabs, platformNav, platformMobileTabs } from '@/components/nav/navConfig'
 import { DonutChart } from '@/components/charts/DonutChart'
 import { useTenants, useUsers, useDailyReport, useBillingSummary } from '@/hooks/useApiQueries'
 import { useI18n } from '@/store/i18nStore'
 import type { TenantOut } from '@/api/adminApi'
 import { EmptyState } from '@/components/EmptyState'
-
-// Nav items for global (no-tenant) context
-const NAV_ITEMS_GLOBAL = [
-  { labelKey: 'nav.dashboard' as const, to: '/admin/dashboard', icon: LayoutDashboard },
-  { labelKey: 'nav.tenant' as const, to: '/admin/tenants', icon: Building2 },
-  { labelKey: 'nav.billing' as const, to: '/admin/billing', icon: CreditCard },
-  { labelKey: 'nav.demo_requests' as const, to: '/admin/demo-requests', icon: CalendarClock },
-  { labelKey: 'nav.trash' as const, to: '/admin/trash', icon: Trash2 },
-  { labelKey: 'nav.settings' as const, to: '/admin/settings', icon: Settings },
-]
-
-/** Build tenant-scoped nav items for a given tenant ID. */
-function buildTenantNavItemsKeys(tenantId: string) {
-  const base = `/admin/tenants/${tenantId}`
-  return [
-    { labelKey: 'nav.dashboard' as const, to: base, icon: LayoutDashboard },
-    { labelKey: 'nav.users' as const, to: `${base}/users`, icon: Users },
-    { labelKey: 'nav.enrollment' as const, to: `${base}/enrollment`, icon: ScanFace },
-    { labelKey: 'nav.devices' as const, to: `${base}/devices`, icon: Monitor },
-    { labelKey: 'nav.schedules' as const, to: `${base}/schedules`, icon: CalendarDays },
-    { labelKey: 'nav.attendance' as const, to: `${base}/attendance`, icon: ClipboardList },
-    { labelKey: 'nav.daily_status' as const, to: `${base}/status`, icon: UserCheck },
-    { labelKey: 'nav.integration' as const, to: `${base}/integration`, icon: KeyRound },
-    { labelKey: 'nav.billing' as const, to: `${base}/billing`, icon: CreditCard },
-    { labelKey: 'nav.trash' as const, to: `${base}/trash`, icon: Trash2 },
-    { labelKey: 'nav.settings' as const, to: `${base}/settings`, icon: Settings },
-  ]
-}
 
 /**
  * Extract tenantId from the current pathname.
@@ -69,22 +31,15 @@ export function SuperAdminDashboard() {
   const tenantId = extractTenantIdFromPath(location.pathname)
   const { t } = useI18n()
 
-  // Build nav items based on whether we're in a tenant-scoped route
-  const navItemKeys = tenantId
-    ? buildTenantNavItemsKeys(tenantId)
-    : NAV_ITEMS_GLOBAL
-
-  const navItems = navItemKeys.map((item) => ({
-    label: t(item.labelKey),
-    to: item.to,
-    icon: item.icon,
-  }))
+  const base = tenantId ? `/admin/tenants/${tenantId}` : null
+  const nav = base ? tenantNav(base, base) : platformNav()
+  const mobileTabs = base ? tenantMobileTabs(base, base) : platformMobileTabs()
 
   // Derive title from context
   const title = tenantId ? t('title.manage_tenant') : t('title.super_admin')
 
   return (
-    <DashboardLayout title={title} navItems={navItems}>
+    <DashboardLayout title={title} nav={nav} mobileTabs={mobileTabs} tone="dark">
       <Outlet />
     </DashboardLayout>
   )

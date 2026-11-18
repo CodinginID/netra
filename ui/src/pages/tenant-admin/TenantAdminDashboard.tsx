@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Outlet, Navigate } from 'react-router-dom'
 import {
-  Users,
-  ScanFace,
-  Monitor,
-  CalendarDays,
-  ClipboardList,
   CheckCircle2,
   AlertCircle,
   XCircle,
   UserCheck,
-  KeyRound,
-  Trash2,
-  CreditCard,
-  Settings,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
+import { tenantNav, tenantMobileTabs } from '@/components/nav/navConfig'
 import { dailyReport } from '@/api/adminApi'
 import { useAttendance, useDailyReport, useUsers, useOnboardingStatus } from '@/hooks/useApiQueries'
 import { useAuthStore } from '@/store/authStore'
@@ -28,27 +20,20 @@ import { StepProgress } from '@/components/charts/StepProgress'
 
 export function TenantAdminDashboard() {
   const { t } = useI18n()
-  const navItems = [
-    { label: t('users.title'), to: '/tenant/users', icon: Users },
-    { label: t('enrollment.title'), to: '/tenant/enrollment', icon: ScanFace },
-    { label: t('devices.title'), to: '/tenant/devices', icon: Monitor },
-    { label: t('schedules.title'), to: '/tenant/schedules', icon: CalendarDays },
-    { label: t('attendance.title'), to: '/tenant/attendance', icon: ClipboardList },
-    { label: t('daily_status.title'), to: '/tenant/status', icon: UserCheck },
-    { label: t('integration.title'), to: '/tenant/integration', icon: KeyRound },
-    { label: t('billing.title'), to: '/tenant/billing', icon: CreditCard },
-    { label: t('trash.title'), to: '/tenant/trash', icon: Trash2 },
-    { label: t('nav.settings'), to: '/tenant/settings', icon: Settings },
-  ]
   return (
-    <DashboardLayout title={t('tenant_admin.title')} navItems={navItems}>
+    <DashboardLayout
+      title={t('tenant_admin.title')}
+      nav={tenantNav('/tenant')}
+      mobileTabs={tenantMobileTabs('/tenant')}
+      tone="light"
+    >
       <Outlet />
     </DashboardLayout>
   )
 }
 
 export function TenantAdminIndex() {
-  return <Navigate to="/tenant/attendance" replace />
+  return <Navigate to="/tenant/dashboard" replace />
 }
 
 interface StatCard {

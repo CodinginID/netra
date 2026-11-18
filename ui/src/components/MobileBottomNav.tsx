@@ -1,44 +1,49 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { MoreHorizontal, KeyRound, LogOut } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { MoreHorizontal, KeyRound, LogOut, ChevronRight } from 'lucide-react'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { useI18n } from '@/store/i18nStore'
+import { flattenNav, isGroup, leafMatches } from '@/components/nav/navConfig'
+import type { NavEntry, NavLeaf } from '@/components/nav/navConfig'
 import '@/styles/layout.css'
 
-interface NavItem {
-  label: string
-  to: string
-  icon: LucideIcon
-}
-
 interface MobileBottomNavProps {
-  items: NavItem[]
+  nav: NavEntry[]
+  /** Paths shown as tabs (max 4 incl. "Lainnya"); every other page is in the sheet. */
+  tabs: string[]
   onLogout: () => void
   onChangePassword: () => void
 }
 
-// Native apps keep the tab bar to ~5 targets. The rest live in a "More" sheet.
-const MAX_TABS = 4
-
-export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBottomNavProps) {
+export function MobileBottomNav({ nav, tabs, onLogout, onChangePassword }: MobileBottomNavProps) {
   const location = useLocation()
   const { t } = useI18n()
   const [moreOpen, setMoreOpen] = useState(false)
 
-  const primary = items.slice(0, MAX_TABS)
-  const overflow = items.slice(MAX_TABS)
-  const overflowActive = overflow.some((i) => i.to === location.pathname)
+  const leaves = flattenNav(nav)
+  const primary = tabs
+    .map((to) => leaves.find((l) => l.to === to))
+    .filter((l): l is NavLeaf => !!l)
+  const inTabs = (l: NavLeaf) => primary.includes(l)
+  // "Lainnya" keeps the sidebar's grouping; pages already on a tab are left out.
+  const sections = nav
+    .map((e) =>
+      isGroup(e)
+        ? { key: e.labelKey, title: t(e.labelKey), items: e.children.filter((c) => !inTabs(c)) }
+        : { key: e.to, title: '', items: inTabs(e) ? [] : [e] },
+    )
+    .filter((s) => s.items.length > 0)
+  const overflowActive = sections.some((s) => s.items.some((l) => leafMatches(l, location.pathname)))
 
   return (
     <>
       <nav className="mobile-bottom-nav" aria-label="Navigasi utama">
         {primary.map((item) => {
-          const isActive = location.pathname === item.to
+          const isActive = leafMatches(item, location.pathname)
           return (
-            <NavLink key={item.to} to={item.to} className={`mobile-nav-item${isActive ? ' active' : ''}`}>
+            <NavLink key={item.to} to={item.to} end={item.end} className={`mobile-nav-item${isActive ? ' active' : ''}`}>
               <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </NavLink>
           )
         })}
@@ -64,24 +69,29 @@ export function MobileBottomNav({ items, onLogout, onChangePassword }: MobileBot
           >
             <div className="mobile-more-handle" />
 
-            {overflow.length > 0 && (
-              <div className="mobile-more-grid">
-                {overflow.map((item) => {
-                  const isActive = location.pathname === item.to
-                  return (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setMoreOpen(false)}
-                      className={`mobile-more-item${isActive ? ' active' : ''}`}
-                    >
-                      <item.icon size={22} />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  )
-                })}
+            {sections.map((section) => (
+              <div key={section.key} className="mobile-more-section">
+                {section.title && <div className="mobile-more-section-title">{section.title}</div>}
+                <div className="mobile-more-list">
+                  {section.items.map((item) => {
+                    const isActive = leafMatches(item, location.pathname)
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.end}
+                        onClick={() => setMoreOpen(false)}
+                        className={`mobile-more-item${isActive ? ' active' : ''}`}
+                      >
+                        <item.icon size={18} aria-hidden />
+                        <span>{t(item.labelKey)}</span>
+                        <ChevronRight size={16} className="mobile-more-chevron" aria-hidden />
+                      </NavLink>
+                    )
+                  })}
+                </div>
               </div>
-            )}
+            ))}
 
             <div className="mobile-more-actions">
               <div className="mobile-more-row">

@@ -979,12 +979,6 @@ a:focus-visible {
   border-radius: 2px;
 }
 
-/* Sidebar nav links — light outline on dark background */
-.sidebar-nav-link:focus-visible {
-  outline: 2px solid var(--sidebar-accent);
-  outline-offset: -2px;
-}
-
 /* Notification bell */
 .notif-trigger:focus-visible {
   outline: 2px solid var(--color-brand);
