@@ -1,250 +1,260 @@
-/* Self-enrollment flow — used by SelfEnrollPage */
-.selfenroll-title {
-  font-size: 0.85rem;
-  color: #94a3b8;
-  font-weight: 500;
-}
+/* Enrol wajah — self-enrol on the phone + embedded widget (mockup cbafa81a).
+   Shared by SelfEnrollPage and EmbedEnrollPage. Light/dark via theme tokens. */
 
-.selfenroll-steps {
+.se-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
   display: flex;
-  gap: 0.5rem;
-  width: 100%;
   justify-content: center;
-  flex-wrap: wrap;
+  padding: 16px;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
-
-.selfenroll-step {
-  font-size: 0.78rem;
-  color: #475569;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-.selfenroll-step.active {
-  color: #6ee7e7;
-  border-color: rgba(13, 148, 136, 0.4);
-  background: rgba(13, 148, 136, 0.12);
-}
-
-.selfenroll-step.done {
-  color: #34d399;
-  border-color: rgba(52, 211, 153, 0.3);
-}
-
-.selfenroll-form {
+.se-shell {
   width: 100%;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 14px;
+  padding: 8px 0 24px;
 }
 
-.selfenroll-hint {
-  font-size: 0.85rem;
-  color: #94a3b8;
-  line-height: 1.6;
-  text-align: center;
+/* ── Brand + steps ── */
+.se-brand { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.se-brand-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.se-brand-name { font-weight: 800; font-size: 15px; }
 
-.selfenroll-upload {
-  width: 100%;
-  text-align: center;
-  padding: 0.7rem;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  color: #94a3b8;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+.se-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.se-step { flex: 1; min-width: 0; }
+.se-step-bar { display: block; height: 4px; border-radius: 999px; background: var(--color-border); transition: background 0.2s; }
+.se-step.is-done .se-step-bar { background: var(--color-brand); }
+.se-step-label { display: block; margin-top: 5px; font-size: 11px; font-weight: 500; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.se-step.is-current .se-step-label { font-weight: 700; color: var(--color-brand-text); }
+
+.se-heading { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; margin: 0; }
+.se-muted { font-size: 13px; color: var(--color-text-muted); line-height: 1.55; margin: 0; }
+.se-center { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px 0; }
+.se-caption { font-size: 12px; color: var(--color-text-muted); text-align: center; margin: 0; }
+.se-error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
 }
+.se-hidden { display: none; }
 
-.selfenroll-upload:hover {
-  border-color: rgba(13, 148, 136, 0.4);
-  color: #e2e8f0;
+/* ── Cards / forms ── */
+.se-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-level-1);
+  padding: 16px;
 }
-
-.selfenroll-preview-sm {
-  aspect-ratio: 4 / 3;
-  max-width: 240px;
+.se-form, .se-consent { display: flex; flex-direction: column; gap: 12px; }
+.se-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); text-align: left; }
+.se-input {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  outline: none;
 }
+.se-input:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-light); }
+.se-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--color-text); cursor: pointer; text-align: left; }
+.se-check input { margin-top: 2px; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-brand); cursor: pointer; }
 
-.selfenroll-consent {
-  width: 100%;
-  background: #1e293b;
-  border: 1px solid rgba(107, 216, 203, 0.15);
+/* ── Buttons ── */
+.se-actions { display: flex; gap: 10px; }
+.se-actions .se-btn { flex: 1; }
+.se-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
   border-radius: 12px;
-  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+.se-btn:hover:not(:disabled) { background: var(--color-bg); }
+.se-btn--primary { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }
+.se-btn--primary:hover:not(:disabled) { background: var(--color-brand-dark); }
+.se-btn--block { width: 100%; }
+.se-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.se-btn:focus-visible, .se-input:focus-visible, .se-check input:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+.se-spin { animation: se-spin 0.9s linear infinite; }
+@keyframes se-spin { to { transform: rotate(360deg); } }
+
+/* ── Camera frame ── */
+.se-cam {
+  position: relative;
+  height: 300px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #334155, #0f172a);
+  color: #fff;
+}
+.se-cam--compact { height: 190px; border-radius: 14px; }
+.se-cam-video, .se-cam-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+.se-cam-overlay { pointer-events: none; }
+.se-cam-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.selfenroll-consent-text {
-  font-size: 0.82rem;
-  color: #94a3b8;
-  line-height: 1.65;
-}
-
-.selfenroll-consent-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  font-size: 0.85rem;
-  color: #e2e8f0;
-  cursor: pointer;
-  line-height: 1.5;
-}
-
-.selfenroll-consent-check input {
-  margin-top: 0.2rem;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  accent-color: #0d9488;
-  cursor: pointer;
-}
-
-/* ── Active capture: phase progress dots ── */
-.selfenroll-phase-dots {
-  display: flex;
-  gap: 0.5rem;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+  color: #cbd5e1;
+  font-size: 14px;
+  z-index: 1;
 }
-
-.selfenroll-phase-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.1);
-  border: 1.5px solid rgba(255,255,255,0.15);
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.selfenroll-phase-dot.active {
-  background: #0d9488;
-  border-color: #0d9488;
-  box-shadow: 0 0 6px rgba(13,148,136,0.6);
-}
-
-.selfenroll-phase-dot.done {
-  background: #34d399;
-  border-color: #34d399;
-}
-
-/* ── Phase instruction overlay ── */
-.selfenroll-phase-overlay {
+.se-cam-ring {
   position: absolute;
-  bottom: 0;
+  left: 50%;
+  top: 46%;
+  height: 66%;
+  aspect-ratio: 150 / 196;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.se-cam--compact .se-cam-ring { height: 62%; border-width: 2.5px; top: 50%; }
+.se-cam-ring.is-locked { border-style: solid; border-color: #34d399; box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.2); }
+.se-cam-caption {
+  position: absolute;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.6) 80%, transparent 100%);
-  padding: 1.5rem 1.25rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
+  bottom: 0;
+  padding: 28px 14px 12px;
+  text-align: center;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0));
   pointer-events: none;
 }
+.se-cam-instruction { font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.se-cam-hint { font-size: 12px; color: #cbd5e1; margin-top: 2px; }
+.se-arrow { font-size: 18px; color: #6ee7e7; }
+.se-cam-count { display: flex; align-items: center; gap: 8px; max-width: 200px; margin: 8px auto 0; }
+.se-cam-count-bar { flex: 1; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.se-cam-count-bar > span { display: block; height: 100%; background: #34d399; border-radius: 999px; transition: width 0.9s linear; }
+.se-cam-count-num { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 22px; text-align: right; }
+.se-cam--compact .se-cam-caption { padding: 20px 10px 8px; }
+.se-cam--compact .se-cam-instruction { font-size: 13px; }
 
-.selfenroll-phase-overlay--dim {
-  background: linear-gradient(to top, rgba(15,23,42,0.7) 0%, transparent 100%);
-}
-
-.selfenroll-phase-label {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  letter-spacing: -0.2px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.selfenroll-arrow {
-  font-size: 1.4rem;
-  color: #6ee7e7;
-}
-
-.selfenroll-phase-hint {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  letter-spacing: 0.02em;
-}
-
-.selfenroll-phase-num {
-  font-size: 0.72rem;
-  color: rgba(107,216,203,0.55);
-  font-weight: 600;
-  letter-spacing: 0.1em;
-}
-
-/* ── Countdown bar ── */
-.selfenroll-countdown-wrap {
-  width: 100%;
-  max-width: 240px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.2rem;
-}
-
-.selfenroll-countdown-bar {
+/* ── Angle chips ── */
+.se-angles { display: flex; gap: 8px; }
+.se-angle {
   flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 99px;
-  overflow: hidden;
-}
-
-.selfenroll-countdown-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #0d9488, #6ee7e7);
-  border-radius: 99px;
-  transition: width 0.9s linear;
-}
-
-.selfenroll-countdown-num {
-  font-size: 0.78rem;
-  color: #6ee7e7;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  min-width: 1.6rem;
-  text-align: right;
-}
-
-/* ── Preview thumbnails (3 angles) ── */
-.selfenroll-previews {
-  display: flex;
-  gap: 0.75rem;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  width: 100%;
+  gap: 4px;
+  padding: 8px 0;
+  border-radius: 12px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
+.se-angle.is-active { border-color: var(--color-brand); color: var(--color-brand-text); }
+.se-angle.is-done { border-color: var(--color-success); background: var(--color-success-bg); color: var(--color-success); }
 
-.selfenroll-previews--sm .selfenroll-preview-thumb img {
-  max-height: 90px;
-}
+/* ── Preview thumbnails ── */
+.se-previews { display: flex; gap: 8px; }
+.se-preview { flex: 1; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.se-preview img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; border: 1px solid var(--color-border); }
+.se-preview figcaption { font-size: 11px; font-weight: 600; color: var(--color-text-muted); }
 
-.selfenroll-preview-thumb {
+/* ── Result (success / error) ── */
+.se-result {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
-  flex: 1;
-  max-width: 160px;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 24px 8px;
 }
+.se-result-icon { width: 76px; height: 76px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+.se-result-icon.ok { background: var(--color-success-bg); color: var(--color-success); }
+.se-result-icon.bad { background: var(--color-danger-bg); color: var(--color-danger); }
+.se-result-title { font-size: 20px; font-weight: 800; }
+.se-result-text { font-size: 13px; color: var(--color-text-muted); line-height: 1.5; max-width: 320px; }
 
-.selfenroll-preview-thumb img {
+/* ── Embedded widget (inside the client's iframe) ── */
+.se-embed {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: transparent;
+  color: var(--color-text);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.se-embed-card {
   width: 100%;
-  aspect-ratio: 4/3;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1.5px solid rgba(107,216,203,0.3);
+  max-width: 380px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-brand);
+  border-radius: 14px;
+  box-shadow: var(--shadow-level-1);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.se-embed-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.se-embed-title { font-weight: 800; font-size: 14px; }
+.se-embed-by { font-size: 10px; color: var(--color-text-muted); }
+.se-embed .se-result { padding: 16px 4px; }
+.se-embed .se-result-icon { width: 64px; height: 64px; }
+.se-embed .se-result-title { font-size: 17px; }
+
+@media (min-width: 769px) {
+  .se-page { align-items: flex-start; padding-top: 40px; }
 }
 
-.selfenroll-preview-thumb span {
-  font-size: 0.72rem;
-  color: #64748b;
-  font-weight: 500;
+@media (prefers-reduced-motion: reduce) {
+  .se-spin { animation: none; }
+  .se-cam-ring, .se-cam-count-bar > span, .se-step-bar { transition: none; }
 }

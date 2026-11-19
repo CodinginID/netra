@@ -9,23 +9,8 @@ import { useCreatePlan, useUpdatePlan, useDeletePlan } from '@/hooks/useApiMutat
 import { type PlanOut } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
 import { MobileFab } from '@/components/MobileFab'
-import { BillingTabs } from './BillingTabs'
-import '@/styles/layout.css'
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function ActiveBadge({ isActive }: { isActive: boolean }) {
-  const { t } = useI18n()
-  return (
-    <span className={isActive ? 'badge badge-green' : 'badge badge-gray'}>
-      {isActive ? t('active') : t('suspended')}
-    </span>
-  )
-}
+import { Chip, FilterPills, PageHead, formatDate } from './saShared'
+import '@/styles/pages/sa-billing.css'
 
 interface CreatePlanModalProps {
   onClose: () => void
@@ -94,9 +79,9 @@ function CreatePlanModal({ onClose, onCreated }: CreatePlanModalProps) {
               value={defaultBillingCycle}
               onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
-              <option value="annual">Annual</option>
-              <option value="semiannual">Semiannual</option>
-              <option value="monthly">Monthly</option>
+              <option value="annual">{t('billing_page.cycle_annual')}</option>
+              <option value="semiannual">{t('billing_page.cycle_semiannual')}</option>
+              <option value="monthly">{t('billing_page.cycle_monthly')}</option>
             </select>
           </div>
           <div className="field">
@@ -179,9 +164,9 @@ function EditPlanModal({ plan, onClose, onUpdated }: EditPlanModalProps) {
               value={defaultBillingCycle}
               onChange={(e) => setDefaultBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
-              <option value="annual">Annual</option>
-              <option value="semiannual">Semiannual</option>
-              <option value="monthly">Monthly</option>
+              <option value="annual">{t('billing_page.cycle_annual')}</option>
+              <option value="semiannual">{t('billing_page.cycle_semiannual')}</option>
+              <option value="monthly">{t('billing_page.cycle_monthly')}</option>
             </select>
           </div>
           <div className="field">
@@ -279,21 +264,17 @@ export function PlansEditor() {
   const pages = plansData?.pages ?? 1
 
   return (
-    <div>
-      <div className="page-toolbar">
-        <div>
-          <h2 className="page-title">{t('billing.plan_management')}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            {t('billing.plan_management_desc')}
-          </p>
-        </div>
-        <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
-          <Plus size={16} />
-          {t('common.create')}
-        </button>
-      </div>
-
-      <BillingTabs />
+    <div className="sa-page">
+      <PageHead
+        title={t('billing.plan_management')}
+        sub={t('billing.plan_management_desc')}
+        actions={
+          <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
+            <Plus size={16} />
+            {t('billing.create_plan')}
+          </button>
+        }
+      />
 
       {showCreate && <CreatePlanModal onClose={() => setShowCreate(false)} onCreated={refetch} />}
       {editingPlan && (
@@ -303,102 +284,78 @@ export function PlansEditor() {
         <DeletePlanModal plan={deletingPlan} onClose={() => setDeletingPlan(null)} onDeleted={refetch} />
       )}
 
-      <div className="filter-row">
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={activeOnly}
-            onChange={(e) => {
-              setActiveOnly(e.target.checked)
-              setPage(1)
-            }}
-          />
-          <span className="filter-label">{t('billing.show_active_only')}</span>
-        </label>
-      </div>
+      <FilterPills<'all' | 'active'>
+        ariaLabel={t('plan.is_active')}
+        value={activeOnly ? 'active' : 'all'}
+        onChange={(v) => {
+          setActiveOnly(v === 'active')
+          setPage(1)
+        }}
+        options={[
+          { value: 'all', label: t('tenants.filter_all') },
+          { value: 'active', label: t('active') },
+        ]}
+      />
 
-      <div className="data-card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>{t('plan.code')}</th>
-              <th>{t('plan.name')}</th>
-              <th>{t('plan.default_billing_cycle')}</th>
-              <th>{t('plan.currency')}</th>
-              <th>{t('plan.is_active')}</th>
-              <th>{t('plan.created_at')}</th>
-              <th style={{ textAlign: 'right' }}>{t('common.actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading &&
-              [0, 1, 2].map((i) => (
-                <tr key={`sk-${i}`}>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-badge" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text" style={{ width: 60, marginLeft: 'auto' }} /></td>
-                </tr>
-              ))}
+      {isLoading && (
+        <div className="bl-plans">
+          {[0, 1].map((i) => (
+            <div key={i} className="sa-card bl-plan"><div className="skeleton skeleton-text" /></div>
+          ))}
+        </div>
+      )}
 
-            {!isLoading && plans.length === 0 && (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">{t('billing.no_plans')}</div>
-                </td>
-              </tr>
-            )}
+      {!isLoading && plans.length === 0 && (
+        <div className="sa-card"><div className="sa-empty">{t('billing.no_plans')}</div></div>
+      )}
 
-            {!isLoading &&
-              plans.map((plan) => (
-                <tr key={plan.id}>
-                  <td style={{ fontWeight: 600 }}>{plan.code}</td>
-                  <td>{plan.name}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{plan.default_billing_cycle}</td>
-                  <td>{plan.currency}</td>
-                  <td><ActiveBadge isActive={plan.is_active} /></td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(plan.created_at)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: 8 }}>
-                      <button
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setEditingPlan(plan)}
-                        title={t('common.edit')}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => setDeletingPlan(plan)}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-        {!isLoading && (
-          <Pagination
-            page={page}
-            limit={limit}
-            total={total}
-            pages={pages}
-            onPageChange={setPage}
-            onLimitChange={(newLimit) => {
-              setLimit(newLimit)
-              setPage(1)
-            }}
-          />
-        )}
-      </div>
+      {!isLoading && plans.length > 0 && (
+        <div className="bl-plans">
+          {plans.map((plan) => (
+            <div key={plan.id} className={`sa-card bl-plan${plan.is_active ? '' : ' is-off'}`}>
+              <div className="bl-plan-top">
+                <span className="bl-plan-name">{plan.name}</span>
+                <Chip tone={plan.is_active ? 'g' : 'm'}>
+                  {plan.is_active ? t('active') : t('billing_page.plan_inactive')}
+                </Chip>
+              </div>
+              <div className="bl-plan-code sa-mono">{plan.code}</div>
+              <div className="bl-plan-meta">
+                {t(`billing_page.cycle_${plan.default_billing_cycle}`)} · {plan.currency} · {formatDate(plan.created_at)}
+              </div>
+              <div className="bl-plan-actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => setEditingPlan(plan)}>
+                  <Pencil size={14} /> {t('common.edit')}
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ color: 'var(--color-danger)' }}
+                  onClick={() => setDeletingPlan(plan)}
+                  aria-label={`${t('common.delete')} ${plan.name}`}
+                >
+                  <Trash2 size={14} /> {t('common.delete')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <MobileFab onClick={() => setShowCreate(true)} label={t('common.create')}>
+      {!isLoading && (
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          pages={pages}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit)
+            setPage(1)
+          }}
+        />
+      )}
+
+      <MobileFab onClick={() => setShowCreate(true)} label={t('billing.create_plan')}>
         <Plus size={24} />
       </MobileFab>
     </div>

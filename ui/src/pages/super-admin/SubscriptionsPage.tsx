@@ -9,30 +9,10 @@ import { useCreateSubscription, useCancelSubscription } from '@/hooks/useApiMuta
 import { type SubscriptionOut } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
 import { MobileFab } from '@/components/MobileFab'
-import { BillingTabs } from './BillingTabs'
-import '@/styles/layout.css'
+import { FilterPills, PageHead, Who, formatDate } from './saShared'
+import { SubscriptionStatusChip, usePlanNames, useTenantNames } from './billingShared'
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function StatusBadge({ status }: { status: SubscriptionOut['status'] }) {
-  const { t } = useI18n()
-  const statusClass: Record<SubscriptionOut['status'], string> = {
-    trial: 'badge-orange',
-    active: 'badge-green',
-    past_due: 'badge-red',
-    canceled: 'badge-gray',
-  }
-
-  return (
-    <span className={`badge ${statusClass[status] ?? 'badge-gray'}`}>
-      {t(`subscription.status.${status}`)}
-    </span>
-  )
-}
+type SubFilter = 'all' | SubscriptionOut['status']
 
 interface CreateSubscriptionModalProps {
   onClose: () => void
@@ -44,6 +24,8 @@ function CreateSubscriptionModal({ onClose, onCreated }: CreateSubscriptionModal
   const { t } = useI18n()
   const createSubscription = useCreateSubscription()
   const { modalRef, handleBackdropKeyDown } = useModalA11y({ isOpen: true, onClose })
+  const { tenants } = useTenantNames()
+  const { plans } = usePlanNames()
 
   const [tenantId, setTenantId] = useState('')
   const [planId, setPlanId] = useState('')
@@ -78,24 +60,34 @@ function CreateSubscriptionModal({ onClose, onCreated }: CreateSubscriptionModal
         <h3 className="modal-title">{t('billing.create_subscription')}</h3>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="sub-tenant-id">{t('subscription.tenant_id')}</label>
-            <input
+            <label htmlFor="sub-tenant-id">{t('billing.usage.tenant')}</label>
+            <select
               id="sub-tenant-id"
               className="field-input"
               value={tenantId}
               onChange={(e) => setTenantId(e.target.value)}
               required
-            />
+            >
+              <option value="">{t('billing_page.choose_tenant')}</option>
+              {tenants.map((tn) => (
+                <option key={tn.id} value={tn.id}>{tn.name} ({tn.slug})</option>
+              ))}
+            </select>
           </div>
           <div className="field">
-            <label htmlFor="sub-plan-id">{t('subscription.plan_id')}</label>
-            <input
+            <label htmlFor="sub-plan-id">{t('billing.usage.plan')}</label>
+            <select
               id="sub-plan-id"
               className="field-input"
               value={planId}
               onChange={(e) => setPlanId(e.target.value)}
               required
-            />
+            >
+              <option value="">{t('billing_page.choose_plan')}</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id} disabled={!p.is_active}>{p.name} ({p.code})</option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label htmlFor="sub-cycle">{t('subscription.billing_cycle')}</label>
@@ -105,9 +97,9 @@ function CreateSubscriptionModal({ onClose, onCreated }: CreateSubscriptionModal
               value={billingCycle}
               onChange={(e) => setBillingCycle(e.target.value as 'annual' | 'semiannual' | 'monthly')}
             >
-              <option value="annual">Annual</option>
-              <option value="semiannual">Semiannual</option>
-              <option value="monthly">Monthly</option>
+              <option value="annual">{t('billing_page.cycle_annual')}</option>
+              <option value="semiannual">{t('billing_page.cycle_semiannual')}</option>
+              <option value="monthly">{t('billing_page.cycle_monthly')}</option>
             </select>
           </div>
           <div className="field">
@@ -200,35 +192,64 @@ function CancelSubscriptionModal({ subscription, onClose, onCanceled }: CancelSu
   )
 }
 
+/** Billing → Langganan. */
 export function SubscriptionsPage() {
   const { t } = useI18n()
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
+  const [filter, setFilter] = useState<SubFilter>('all')
   const [showCreate, setShowCreate] = useState(false)
   const [cancelingSub, setCancelingSub] = useState<SubscriptionOut | null>(null)
+  const tenantNames = useTenantNames()
+  const planNames = usePlanNames()
 
   const { data: subsData, isLoading, refetch } = useSubscription({ page, limit })
 
-  const subs = subsData?.items ?? []
+  // The API has no status filter; the pills narrow the page that is loaded.
+  const all = subsData?.items ?? []
+  const subs = filter === 'all' ? all : all.filter((s) => s.status === filter)
   const total = subsData?.total ?? 0
   const pages = subsData?.pages ?? 1
 
-  return (
-    <div>
-      <div className="page-toolbar">
-        <div>
-          <h2 className="page-title">{t('billing.subscription_management')}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            {t('billing.subscription_management_desc')}
-          </p>
-        </div>
-        <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
-          <Plus size={16} />
-          {t('common.create')}
-        </button>
-      </div>
+  const cancelBtn = (sub: SubscriptionOut) =>
+    sub.status === 'active' && (
+      <button
+        className="btn btn-sm btn-ghost"
+        style={{ color: 'var(--color-danger)' }}
+        onClick={() => setCancelingSub(sub)}
+        title={t('billing.cancel_subscription')}
+      >
+        <Ban size={14} /> {t('billing_page.cancel_short')}
+      </button>
+    )
 
-      <BillingTabs />
+  const empty = <div className="sa-empty">{t('billing.no_subscriptions')}</div>
+
+  return (
+    <div className="sa-page">
+      <PageHead
+        title={t('billing.subscription_management')}
+        sub={t('billing.subscription_management_desc')}
+        actions={
+          <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
+            <Plus size={16} />
+            {t('billing.create_subscription')}
+          </button>
+        }
+      />
+
+      <FilterPills<SubFilter>
+        ariaLabel={t('subscription.status')}
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: 'all', label: t('tenants.filter_all') },
+          { value: 'active', label: t('subscription.status.active') },
+          { value: 'trial', label: t('subscription.status.trial') },
+          { value: 'past_due', label: t('subscription.status.past_due') },
+          { value: 'canceled', label: t('subscription.status.canceled') },
+        ]}
+      />
 
       {showCreate && <CreateSubscriptionModal onClose={() => setShowCreate(false)} onCreated={refetch} />}
       {cancelingSub && (
@@ -239,81 +260,79 @@ export function SubscriptionsPage() {
         />
       )}
 
-      <div className="data-card">
-        <table className="data-table">
+      <div className="sa-card sa-table-card bl-table">
+        <table className="sa-table">
           <thead>
             <tr>
-              <th>{t('subscription.tenant_id')}</th>
-              <th>{t('subscription.plan_id')}</th>
+              <th>{t('billing.usage.tenant')}</th>
+              <th>{t('billing.usage.plan')}</th>
               <th>{t('subscription.billing_cycle')}</th>
               <th>{t('subscription.status')}</th>
               <th>{t('subscription.starts_at')}</th>
               <th>{t('subscription.ends_at')}</th>
-              <th style={{ textAlign: 'right' }}>{t('common.actions')}</th>
+              <th className="sa-right"><span className="sa-sr-only">{t('common.actions')}</span></th>
             </tr>
           </thead>
           <tbody>
-            {isLoading &&
-              [0, 1, 2].map((i) => (
-                <tr key={`sk-${i}`}>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-badge" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text" style={{ width: 60, marginLeft: 'auto' }} /></td>
-                </tr>
-              ))}
-
-            {!isLoading && subs.length === 0 && (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">{t('billing.no_subscriptions')}</div>
-                </td>
-              </tr>
+            {isLoading && (
+              <tr><td colSpan={7}><div className="skeleton skeleton-text sm" /></td></tr>
             )}
-
+            {!isLoading && subs.length === 0 && (
+              <tr><td colSpan={7}>{empty}</td></tr>
+            )}
             {!isLoading &&
               subs.map((sub) => (
                 <tr key={sub.id}>
-                  <td style={{ fontWeight: 600 }}>{sub.tenant_id}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{sub.plan_id}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{sub.billing_cycle}</td>
-                  <td><StatusBadge status={sub.status} /></td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(sub.starts_at)}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(sub.ends_at)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {sub.status === 'active' && (
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => setCancelingSub(sub)}
-                        title={t('billing.cancel_subscription')}
-                      >
-                        <Ban size={14} />
-                      </button>
+                  <td><Who name={tenantNames.name(sub.tenant_id)} /></td>
+                  <td>{planNames.name(sub.plan_id)}</td>
+                  <td className="sa-muted">{t(`billing_page.cycle_${sub.billing_cycle}`)}</td>
+                  <td><SubscriptionStatusChip status={sub.status} /></td>
+                  <td className="sa-muted">{formatDate(sub.starts_at)}</td>
+                  <td className="sa-muted">
+                    {formatDate(sub.ends_at)}
+                    {sub.status === 'trial' && sub.trial_ends_at && (
+                      <div className="sa-who-sub">{t('billing_page.trial_ends', { date: formatDate(sub.trial_ends_at) })}</div>
                     )}
                   </td>
+                  <td className="sa-right">{cancelBtn(sub)}</td>
                 </tr>
               ))}
           </tbody>
         </table>
-        {!isLoading && (
-          <Pagination
-            page={page}
-            limit={limit}
-            total={total}
-            pages={pages}
-            onPageChange={setPage}
-            onLimitChange={(newLimit) => {
-              setLimit(newLimit)
-              setPage(1)
-            }}
-          />
-        )}
       </div>
 
-      <MobileFab onClick={() => setShowCreate(true)} label={t('common.create')}>
+      <div className="bl-cards">
+        {!isLoading && subs.length === 0 && <div className="sa-card">{empty}</div>}
+        {subs.map((sub) => (
+          <div key={sub.id} className="sa-card bl-card">
+            <div className="bl-card-top">
+              <Who name={tenantNames.name(sub.tenant_id)} sub={planNames.name(sub.plan_id)} />
+              <SubscriptionStatusChip status={sub.status} />
+            </div>
+            <div className="bl-card-meta">
+              <span>{t(`billing_page.cycle_${sub.billing_cycle}`)}</span>
+              <span>{formatDate(sub.starts_at)} – {formatDate(sub.ends_at)}</span>
+            </div>
+            {sub.status === 'active' && <div>{cancelBtn(sub)}</div>}
+          </div>
+        ))}
+      </div>
+
+      {!isLoading && (
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          pages={pages}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit)
+            setPage(1)
+          }}
+        />
+      )}
+
+      <MobileFab onClick={() => setShowCreate(true)} label={t('billing.create_subscription')}>
         <Plus size={24} />
       </MobileFab>
     </div>

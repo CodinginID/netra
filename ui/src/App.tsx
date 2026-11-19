@@ -120,86 +120,97 @@ function AppRoutes() {
       <KeyboardShortcuts />
       <OnboardingTooltips />
       <BrowserRouter>
-        <RouteFade>
-        <Routes>
-        {/* Public */}
-        <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
-        <Route path="/403" element={<ErrorBoundary><ForbiddenPage /></ErrorBoundary>} />
-        <Route path="/attendance" element={<ErrorBoundary><KioskPage /></ErrorBoundary>} />
-        <Route path="/embed/enroll" element={<ErrorBoundary><EmbedEnrollPage /></ErrorBoundary>} />
-
-        {/* Root redirect */}
-        <Route path="/" element={<ErrorBoundary><RootRedirect /></ErrorBoundary>} />
-
-        {/* Tenant Admin routes */}
-        <Route
-          path="/tenant"
-          element={
-            <ProtectedRoute roles={['tenant_admin', 'supervisor']}>
-              <TenantAdminDashboard />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<TenantAdminIndex />} />
-          <Route path="dashboard" element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
-          <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
-          <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
-          <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
-          <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
-          <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
-          <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
-          <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
-          <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
-          <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
-          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
-        </Route>
-
-        {/* Super Admin routes — tenant pages also rendered inside SuperAdminDashboard layout */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute roles={['super_admin']}>
-              <SuperAdminDashboard />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<SuperAdminIndex />} />
-          <Route path="dashboard" element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
-          <Route path="tenants" element={<ErrorBoundary><TenantsPage /></ErrorBoundary>} />
-          <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
-          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
-
-          {/* Billing routes — platform-level */}
-          <Route path="billing" element={<ErrorBoundary><BillingSummaryPage /></ErrorBoundary>} />
-          <Route path="billing/summary" element={<ErrorBoundary><BillingSummaryPage /></ErrorBoundary>} />
-          <Route path="billing/plans" element={<ErrorBoundary><PlansEditor /></ErrorBoundary>} />
-          <Route path="billing/subscriptions" element={<ErrorBoundary><SubscriptionsPage /></ErrorBoundary>} />
-          <Route path="billing/invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
-          <Route path="billing/usage" element={<ErrorBoundary><UsagePage /></ErrorBoundary>} />
-          <Route path="demo-requests" element={<ErrorBoundary><DemoRequestsPage /></ErrorBoundary>} />
-
-          {/* Tenant-scoped routes — context-switched view for a specific tenant */}
-          <Route path="tenants/:tenantId" element={<ErrorBoundary><TenantScopedDashboard /></ErrorBoundary>}>
-            <Route index element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
-            <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
-            <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
-            <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
-            <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
-            <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
-            <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
-            <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
-            <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
-            <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
-            <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
-          </Route>
-        </Route>
-
-        {/* 404 */}
-        <Route path="*" element={<ErrorBoundary><NotFoundPage /></ErrorBoundary>} />
-        </Routes>
-        </RouteFade>
+        <AppRouteTree />
       </BrowserRouter>
     </ToastProvider>
+  )
+}
+
+/**
+ * The whole route table, without a router around it. App wraps it in a
+ * BrowserRouter; the dev-only /mockup preview renders it in a MemoryRouter
+ * with sample data, so every mockup screen is the real page.
+ */
+export function AppRouteTree() {
+  return (
+    <RouteFade>
+    <Routes>
+    {/* Public */}
+    <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
+    <Route path="/403" element={<ErrorBoundary><ForbiddenPage /></ErrorBoundary>} />
+    <Route path="/attendance" element={<ErrorBoundary><KioskPage /></ErrorBoundary>} />
+    <Route path="/embed/enroll" element={<ErrorBoundary><EmbedEnrollPage /></ErrorBoundary>} />
+
+    {/* Root redirect */}
+    <Route path="/" element={<ErrorBoundary><RootRedirect /></ErrorBoundary>} />
+
+    {/* Tenant Admin routes */}
+    <Route
+      path="/tenant"
+      element={
+        <ProtectedRoute roles={['tenant_admin', 'supervisor']}>
+          <TenantAdminDashboard />
+        </ProtectedRoute>
+      }
+    >
+      <Route index element={<TenantAdminIndex />} />
+      <Route path="dashboard" element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
+      <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+      <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
+      <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
+      <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
+      <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+      <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
+      <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
+      <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
+      <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+      <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+    </Route>
+
+    {/* Super Admin routes — tenant pages also rendered inside SuperAdminDashboard layout */}
+    <Route
+      path="/admin"
+      element={
+        <ProtectedRoute roles={['super_admin']}>
+          <SuperAdminDashboard />
+        </ProtectedRoute>
+      }
+    >
+      <Route index element={<SuperAdminIndex />} />
+      <Route path="dashboard" element={<ErrorBoundary><SuperAdminHomePage /></ErrorBoundary>} />
+      <Route path="tenants" element={<ErrorBoundary><TenantsPage /></ErrorBoundary>} />
+      <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+      <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+
+      {/* Billing routes — platform-level */}
+      <Route path="billing" element={<ErrorBoundary><BillingSummaryPage /></ErrorBoundary>} />
+      <Route path="billing/summary" element={<ErrorBoundary><BillingSummaryPage /></ErrorBoundary>} />
+      <Route path="billing/plans" element={<ErrorBoundary><PlansEditor /></ErrorBoundary>} />
+      <Route path="billing/subscriptions" element={<ErrorBoundary><SubscriptionsPage /></ErrorBoundary>} />
+      <Route path="billing/invoices" element={<ErrorBoundary><InvoicesPage /></ErrorBoundary>} />
+      <Route path="billing/usage" element={<ErrorBoundary><UsagePage /></ErrorBoundary>} />
+      <Route path="demo-requests" element={<ErrorBoundary><DemoRequestsPage /></ErrorBoundary>} />
+
+      {/* Tenant-scoped routes — context-switched view for a specific tenant */}
+      <Route path="tenants/:tenantId" element={<ErrorBoundary><TenantScopedDashboard /></ErrorBoundary>}>
+        <Route index element={<ErrorBoundary><TenantAdminHomePage /></ErrorBoundary>} />
+        <Route path="users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+        <Route path="enrollment" element={<ErrorBoundary><EnrollmentPage /></ErrorBoundary>} />
+        <Route path="devices" element={<ErrorBoundary><DevicesPage /></ErrorBoundary>} />
+        <Route path="schedules" element={<ErrorBoundary><SchedulesPage /></ErrorBoundary>} />
+        <Route path="attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+        <Route path="status" element={<ErrorBoundary><DailyStatusPage /></ErrorBoundary>} />
+        <Route path="integration" element={<ErrorBoundary><IntegrationPage /></ErrorBoundary>} />
+        <Route path="billing" element={<ErrorBoundary><TenantBillingPage /></ErrorBoundary>} />
+        <Route path="trash" element={<ErrorBoundary><TrashPage /></ErrorBoundary>} />
+        <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+      </Route>
+    </Route>
+
+    {/* 404 */}
+    <Route path="*" element={<ErrorBoundary><NotFoundPage /></ErrorBoundary>} />
+    </Routes>
+    </RouteFade>
   )
 }
 

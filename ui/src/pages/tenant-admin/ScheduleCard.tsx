@@ -1,8 +1,8 @@
-import { Clock, Edit2, Star, Trash2 } from 'lucide-react'
+import { Edit2, Star, Trash2 } from 'lucide-react'
 import { useI18n } from '@/store/i18nStore'
 import type { ScheduleOut } from '@/api/adminApi'
 import { ActionMenu, type ActionMenuItem } from '@/components/ActionMenu'
-import { sessionDayLists, useScheduleFormat, weekCells } from './scheduleDays'
+import { sessionDayLists, useScheduleFormat, weekCells, type WeekCell } from './scheduleDays'
 
 export function ScheduleCard({ schedule: s, onEdit, onDelete, onMakeDefault }: {
   schedule: ScheduleOut
@@ -19,11 +19,16 @@ export function ScheduleCard({ schedule: s, onEdit, onDelete, onMakeDefault }: {
   const uniform = dayLists.every((l) => JSON.stringify(l) === JSON.stringify(dayLists[0]))
   const sessions = uniform ? dayLists[0] ?? [] : []
 
-  const summary = isSession
-    ? `${fmt.dayRange(cells)} · ${uniform
-      ? t('schedules.sessions_count', { count: sessions.length })
-      : t('schedules.sessions_vary')}`
-    : fmt.shiftSummary(cells)
+  const spans = new Set(cells.filter((c) => c.on).map((c) => `${c.start ?? '--:--'} – ${c.end ?? '--:--'}`))
+  const headline = isSession
+    ? (uniform ? t('schedules.sessions_per_day', { count: sessions.length }) : t('schedules.sessions_vary'))
+    : spans.size === 1 ? [...spans][0] : t('schedules.hours_vary')
+
+  const offCells: WeekCell[] = cells.map((c) => ({ ...c, on: !c.on }))
+  const hasOff = cells.some((c) => !c.on) && cells.some((c) => c.on)
+  const daysLine = hasOff
+    ? `${fmt.dayRange(cells)} · ${t('schedules.days_off', { days: fmt.dayRange(offCells) })}`
+    : fmt.dayRange(cells)
 
   const items: ActionMenuItem[] = [
     { key: 'edit', label: t('common.edit'), icon: <Edit2 size={15} />, onSelect: onEdit },
@@ -34,59 +39,38 @@ export function ScheduleCard({ schedule: s, onEdit, onDelete, onMakeDefault }: {
   items.push({ key: 'delete', label: t('common.delete'), icon: <Trash2 size={15} />, danger: true, separatorBefore: true, onSelect: onDelete })
 
   return (
-    <article className="sc-card" aria-labelledby={`sc-${s.id}`}>
+    <article className="ops-card sc-card" aria-labelledby={`sc-${s.id}`}>
       <div className="sc-head">
         <div className="sc-head-main">
           <div className="sc-title-row">
             <h3 id={`sc-${s.id}`} className="sc-name">{s.name}</h3>
-            <span className="sc-pill">{isSession ? t('schedules.type_session') : t('schedules.type_shift')}</span>
-            {s.is_default && <span className="sc-pill sc-pill--brand">{t('schedules.status_default')}</span>}
+            {s.is_default && <span className="ops-chip ops-chip--b">{t('schedules.status_default')}</span>}
           </div>
-          <div className="sc-summary">
-            <Clock size={14} aria-hidden="true" />
-            <span>{summary}</span>
-          </div>
+          <span className="sc-type">{isSession ? t('schedules.type_session_long') : t('schedules.type_shift_long')}</span>
         </div>
         <ActionMenu label={t('schedules.actions', { name: s.name })} items={items} />
       </div>
 
-      <ul className="sc-week" aria-label={t(isSession ? 'schedules.active_days' : 'schedules.day_hours_label')}>
-        {cells.map((c) => {
-          const dayName = t(`schedules.dayname_${c.iso}`)
-          return (
-            <li key={c.iso} className="sc-day">
-              <span className="sc-day-label" aria-hidden="true">{t(`schedules.day_${c.iso}`)}</span>
-              {c.on ? (
-                <span className="sc-day-cell sc-day-cell--on" aria-label={`${dayName} ${c.start ?? '--:--'} – ${c.end ?? '--:--'}`}>
-                  <span>{c.start ?? '--:--'}</span>
-                  <span className="sc-day-end">{c.end ?? '--:--'}</span>
-                </span>
-              ) : (
-                <span className="sc-day-cell sc-day-cell--off" aria-label={`${dayName} ${t('schedules.day_off')}`}>
-                  {t('schedules.day_off')}
-                </span>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-
-      {isSession && sessions.length > 0 && (
-        <ol className="sc-sessions">
-          {sessions.map((x, i) => (
-            <li key={i} className="sc-session">
-              <span className="sc-session-no" aria-hidden="true">{i + 1}</span>
-              <span className="sc-session-name">{x.name}</span>
-              <span className="sc-session-time">{x.start} – {x.end}</span>
-            </li>
-          ))}
-        </ol>
-      )}
+      <button type="button" className="sc-body" onClick={onEdit} aria-label={`${t('common.edit')} ${s.name}`}>
+        <span className="sc-hours">{headline}</span>
+        <span className="sc-days">{daysLine}</span>
+      </button>
 
       <div className="sc-foot">
-        <span>{t('schedules.tolerance_label')} <strong>{t('schedules.minutes', { count: s.grace_minutes })}</strong></span>
-        <span className="sc-dot" aria-hidden="true" />
-        <span>{fmt.weekly(cells)}</span>
+        <ul className="sc-strip" aria-label={t(isSession ? 'schedules.active_days' : 'schedules.day_hours_label')}>
+          {cells.map((c) => {
+            const dayName = t(`schedules.dayname_${c.iso}`)
+            const label = c.on ? `${dayName} ${c.start ?? '--:--'} – ${c.end ?? '--:--'}` : `${dayName} ${t('schedules.day_off')}`
+            return (
+              <li key={c.iso} className={`sc-strip-day${c.on ? ' sc-strip-day--on' : ''}`} title={label} aria-label={label}>
+                <span aria-hidden="true">{t(`schedules.day_${c.iso}`).charAt(0)}</span>
+              </li>
+            )
+          })}
+        </ul>
+        <span className="sc-tol">
+          {t('schedules.tolerance_label')} {t('schedules.minutes', { count: s.grace_minutes })}
+        </span>
       </div>
     </article>
   )

@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2 } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown } from 'lucide-react'
 import { useTenants } from '@/hooks/useApiQueries'
 import { useRef, useState, useEffect } from 'react'
 import { useI18n } from '@/store/i18nStore'
+import { Avatar, Chip } from '@/pages/super-admin/saShared'
 
 interface TenantContextBannerProps {
   tenantId: string
@@ -10,10 +11,13 @@ interface TenantContextBannerProps {
   onSwitch: (tenantId: string) => void
 }
 
+/** Show a search box in the switcher once the list gets long. */
+const SEARCH_FROM = 6
+
 /**
  * Banner shown at the top of every tenant-scoped page.
- * Compact: [Back] [icon] [tenant name (clickable)] [status badge]
- * Clicking the tenant name opens a quick-switch dropdown.
+ * Compact: [Back] [avatar] [tenant name ▾ (switcher)] [status chip]
+ * The switcher lists active tenants, filterable when there are many.
  */
 export function TenantContextBanner({ tenantId, onSwitch }: TenantContextBannerProps) {
   const navigate = useNavigate()
@@ -23,7 +27,9 @@ export function TenantContextBanner({ tenantId, onSwitch }: TenantContextBannerP
   const current = tenants.find((t$) => t$.id === tenantId)
 
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -31,7 +37,10 @@ export function TenantContextBanner({ tenantId, onSwitch }: TenantContextBannerP
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') {
+        setOpen(false)
+        triggerRef.current?.focus()
+      }
     }
     document.addEventListener('mousedown', onClick)
     document.addEventListener('keydown', onKey)
@@ -40,6 +49,18 @@ export function TenantContextBanner({ tenantId, onSwitch }: TenantContextBannerP
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
+
+  const [wasOpen, setWasOpen] = useState(open)
+  if (wasOpen !== open) {
+    setWasOpen(open)
+    if (!open) setQuery('')
+  }
+
+  const canSwitch = tenants.length > 1
+  const needle = query.trim().toLowerCase()
+  const options = tenants
+    .filter((t$) => t$.status === 'active')
+    .filter((t$) => !needle || t$.name.toLowerCase().includes(needle) || t$.slug.toLowerCase().includes(needle))
 
   return (
     <div className="tenant-context-banner" ref={rootRef}>
@@ -52,39 +73,55 @@ export function TenantContextBanner({ tenantId, onSwitch }: TenantContextBannerP
         <ArrowLeft size={16} />
       </button>
 
-      <Building2 size={16} className="tenant-context-icon" />
+      <Avatar name={current?.name ?? '?'} className="tcb-av" />
 
       <button
+        ref={triggerRef}
         className="tenant-context-name"
-        onClick={() => tenants.length > 1 && setOpen((v) => !v)}
-        title={tenants.length > 1 ? t('banner.switch_tooltip') : undefined}
+        onClick={() => canSwitch && setOpen((v) => !v)}
+        title={canSwitch ? t('banner.switch_tooltip') : undefined}
+        aria-haspopup={canSwitch ? 'listbox' : undefined}
+        aria-expanded={canSwitch ? open : undefined}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}
       >
-        {current ? current.name : t('banner.loading')}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {current ? current.name : t('banner.loading')}
+        </span>
+        {canSwitch && <ChevronDown size={14} aria-hidden="true" />}
       </button>
 
-      {current && (
-        <span className={`tenant-context-badge badge-${current.status}`}>
-          {current.status === 'active' ? t('active') : t('suspended')}
-        </span>
-      )}
+      {current && (current.status === 'active' ? <Chip tone="g">{t('active')}</Chip> : <Chip tone="m">{t('suspended')}</Chip>)}
 
-      {open && tenants.length > 1 && (
-        <div className="tenant-context-switcher-menu" role="listbox">
-          <div className="tenant-context-switcher-list">
-            {tenants
-              .filter((t$) => t$.status === 'active')
-              .map((t$) => (
-                <button
-                  key={t$.id}
-                  type="button"
-                  role="option"
-                  aria-selected={t$.id === tenantId}
-                  className={`tenant-context-switcher-item${t$.id === tenantId ? ' active' : ''}`}
-                  onClick={() => { onSwitch(t$.id); setOpen(false) }}
-                >
-                  {t$.name}
-                </button>
-              ))}
+      {open && canSwitch && (
+        <div className="tenant-context-switcher-menu">
+          {tenants.length >= SEARCH_FROM && (
+            <div className="tcb-search">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('tenants.search_placeholder')}
+                aria-label={t('tenants.search_placeholder')}
+              />
+            </div>
+          )}
+          <div className="tenant-context-switcher-list" role="listbox" aria-label={t('banner.switch_tooltip')}>
+            {options.length === 0 && <div className="tcb-empty">{t('tenant.empty_search')}</div>}
+            {options.map((t$) => (
+              <button
+                key={t$.id}
+                type="button"
+                role="option"
+                aria-selected={t$.id === tenantId}
+                className={`tenant-context-switcher-item${t$.id === tenantId ? ' active' : ''}`}
+                onClick={() => { onSwitch(t$.id); setOpen(false) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <Avatar name={t$.name} className="tcb-av" />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t$.name}</span>
+                {t$.id === tenantId && <Check size={14} aria-hidden="true" />}
+              </button>
+            ))}
           </div>
         </div>
       )}

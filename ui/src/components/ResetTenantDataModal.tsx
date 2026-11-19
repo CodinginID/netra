@@ -4,10 +4,14 @@ import { useModalA11y } from '@/hooks/useModalA11y'
 import { useResetTenantData } from '@/hooks/useApiMutations'
 import { useToast } from '@/components/Toast'
 import { useI18n } from '@/store/i18nStore'
+import '@/styles/pages/super-admin.css'
 
 const CATEGORIES: TenantResetCategory[] = ['attendance', 'faces', 'users', 'devices']
 
-/** Super admin: permanently wipe chosen data of one tenant (tenant + admins stay). */
+/**
+ * Super admin: permanently wipe chosen data of one tenant (tenant + admins stay).
+ * Mockup c5a2747e — one checkable card per category, slug typed to confirm.
+ */
 export function ResetTenantDataModal({ tenant, onClose }: { tenant: TenantOut; onClose: () => void }) {
   const { t } = useI18n()
   const { show } = useToast()
@@ -35,37 +39,61 @@ export function ResetTenantDataModal({ tenant, onClose }: { tenant: TenantOut; o
 
   return (
     <div className="modal-backdrop" onKeyDown={handleBackdropKeyDown} onClick={onClose}>
-      <div ref={modalRef} className="modal-card" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">{t('tenant.reset_title', { name: tenant.name })}</h3>
-        <p className="confirm-text">{t('tenant.reset_intro')}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0' }}>
-          {CATEGORIES.map((cat) => (
-            <label key={cat} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <input type="checkbox" checked={selected.has(cat)} onChange={() => toggle(cat)} />
-              <span>
-                <strong>{t(`tenant.reset_cat_${cat}`)}</strong>
-                <br />
-                <small>{t(`tenant.reset_cat_${cat}_hint`)}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-        <p className="confirm-text"><strong>{t('tenant.reset_warning')}</strong></p>
-        <div className="field">
-          <label htmlFor="reset-confirm-slug">{t('tenant.reset_confirm_label', { slug: tenant.slug })}</label>
-          <input
-            id="reset-confirm-slug"
-            className="field-input"
-            value={confirmSlug}
-            onChange={(e) => setConfirmSlug(e.target.value)}
-            autoComplete="off"
-            placeholder={tenant.slug}
-          />
-        </div>
+      <div
+        ref={modalRef}
+        className="modal-card"
+        style={{ maxWidth: 440 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-tenant-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="reset-tenant-title" className="modal-title" style={{ marginBottom: 0 }}>
+          {t('tenants.reset_dialog_title')}
+        </h3>
+        <p className="tn-dialog-sub">
+          <strong>{tenant.name}</strong> · {t('tenants.reset_dialog_sub')}
+        </p>
+
+        <fieldset style={{ border: 'none', padding: 0, margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <legend className="sa-sr-only">{t('tenant.reset_intro')}</legend>
+          {CATEGORIES.map((cat) => {
+            const on = selected.has(cat)
+            return (
+              <label key={cat} className={`tn-check${on ? ' is-on' : ''}`}>
+                <input type="checkbox" checked={on} onChange={() => toggle(cat)} />
+                <span>
+                  <span className="tn-check-title" style={{ display: 'block' }}>{t(`tenant.reset_cat_${cat}`)}</span>
+                  <span className="tn-check-hint">{t(`tenant.reset_cat_${cat}_hint`)}</span>
+                </span>
+              </label>
+            )
+          })}
+        </fieldset>
+        <p className="tn-dialog-sub" style={{ marginTop: 10 }}>{t('tenant.reset_intro')}</p>
+
+        <label htmlFor="reset-confirm-slug" className="tn-confirm-label">
+          {t('tenants.type_slug_before')} <b className="sa-mono">{tenant.slug}</b> {t('tenants.type_slug_after')}
+        </label>
+        <input
+          id="reset-confirm-slug"
+          className="field-input tn-confirm-input"
+          value={confirmSlug}
+          onChange={(e) => setConfirmSlug(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && canSubmit) submit() }}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={tenant.slug}
+        />
+
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={reset.isPending}>{t('common.cancel')}</button>
           <button className="btn btn-danger" onClick={submit} disabled={!canSubmit}>
-            {reset.isPending ? '...' : t('tenant.reset')}
+            {reset.isPending
+              ? '...'
+              : selected.size > 0
+                ? t('tenants.reset_n_categories', { count: selected.size })
+                : t('tenant.reset')}
           </button>
         </div>
       </div>

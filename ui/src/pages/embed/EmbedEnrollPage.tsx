@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, Check, Loader2 } from 'lucide-react'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
-import { GUIDED_CAPTURE_PHASE_ORDER, useGuidedCapture, type CapturePhaseConfig } from '@/hooks/useGuidedCapture'
-import '@/styles/kiosk.css'
+import { useGuidedCapture, type CapturePhaseConfig } from '@/hooks/useGuidedCapture'
+import { useI18n } from '@/store/i18nStore'
+import { AngleChips, EnrollCamera, EnrollPreviews, EnrollResult } from '@/pages/kiosk/EnrollParts'
 import '@/styles/selfenroll.css'
 
 /**
@@ -15,13 +17,6 @@ import '@/styles/selfenroll.css'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1'
 
-const PHASE_CONFIG: Record<'front' | 'left' | 'right', CapturePhaseConfig> = {
-  front: { label: 'Hadapkan wajah lurus ke kamera', hint: 'Pastikan wajah terlihat jelas dan pencahayaan cukup', duration: 3 },
-  left: { label: 'Putar wajah ke kiri', hint: 'Tahan posisi hingga hitungan selesai', arrow: '←', duration: 4 },
-  right: { label: 'Putar wajah ke kanan', hint: 'Tahan posisi hingga hitungan selesai', arrow: '→', duration: 4 },
-}
-
-const PREVIEW_LABELS = ['Depan', 'Kiri', 'Kanan']
 
 interface SessionInfo {
   purpose: string
@@ -43,7 +38,17 @@ function notifyParent(returnOrigin: string | undefined, msg: Record<string, unkn
 }
 
 export function EmbedEnrollPage() {
+  const { t, locale } = useI18n()
   const token = new URLSearchParams(window.location.search).get('token') ?? ''
+  // Rebuilt only when the language changes, so the capture hook's sequence stays stable.
+  const PHASE_CONFIG = useMemo<Record<'front' | 'left' | 'right', CapturePhaseConfig>>(() => ({
+    front: { label: t('embed.phase_front'), hint: t('embed.phase_front_hint'), duration: 3 },
+    left: { label: t('embed.phase_left'), hint: t('embed.phase_hold_hint'), arrow: '←', duration: 4 },
+    right: { label: t('embed.phase_right'), hint: t('embed.phase_hold_hint'), arrow: '→', duration: 4 },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [locale])
+  const angleLabels = { front: t('selfenroll.front'), left: t('selfenroll.left'), right: t('selfenroll.right') }
+  const PREVIEW_LABELS = [angleLabels.front, angleLabels.left, angleLabels.right]
   const [phase, setPhase] = useState<Phase>('loading')
   const [info, setInfo] = useState<SessionInfo | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -60,7 +65,7 @@ export function EmbedEnrollPage() {
   useEffect(() => {
     if (!token) {
       setPhase('invalid')
-      setErrorMsg('Token tidak ditemukan')
+      setErrorMsg(t('embed.token_missing'))
       return
     }
     void (async () => {
@@ -70,7 +75,7 @@ export function EmbedEnrollPage() {
         })
         if (!res.ok) {
           setPhase('invalid')
-          setErrorMsg(res.status === 401 ? 'Sesi tidak valid atau kedaluwarsa' : `Gagal memuat sesi (${res.status})`)
+          setErrorMsg(res.status === 401 ? t('embed.session_invalid') : t('embed.session_load_failed', { status: res.status }))
           return
         }
         const json = await res.json()
@@ -78,9 +83,10 @@ export function EmbedEnrollPage() {
         setPhase('consent')
       } catch {
         setPhase('invalid')
-        setErrorMsg('Tidak dapat terhubung ke server')
+        setErrorMsg(t('embed.network_error'))
       }
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   const stopCamera = useCallback(() => {
@@ -107,7 +113,7 @@ export function EmbedEnrollPage() {
       setCameraReady(true)
     } catch {
       setPhase('error')
-      setErrorMsg('Kamera tidak dapat diakses. Pastikan izin kamera diberikan.')
+      setErrorMsg(t('embed.camera_error'))
     }
   }
 
@@ -137,7 +143,7 @@ export function EmbedEnrollPage() {
   async function submit() {
     if (capturedBlobs.length === 0) {
       setPhase('error')
-      setErrorMsg('Gagal mengambil gambar')
+      setErrorMsg(t('embed.capture_failed'))
       return
     }
     stopCamera()
@@ -155,7 +161,7 @@ export function EmbedEnrollPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const msg = json.detail ?? json.error ?? `Enrollment gagal (${res.status})`
+        const msg = json.detail ?? json.error ?? t('embed.enroll_failed', { status: res.status })
         setPhase('error')
         setErrorMsg(msg)
         notifyParent(info?.return_origin, { type: 'enroll:error', message: msg })
@@ -169,7 +175,7 @@ export function EmbedEnrollPage() {
       })
     } catch {
       setPhase('error')
-      setErrorMsg('Tidak dapat terhubung ke server')
+      setErrorMsg(t('embed.network_error'))
       notifyParent(info?.return_origin, { type: 'enroll:error', message: 'network' })
     }
   }
@@ -179,162 +185,97 @@ export function EmbedEnrollPage() {
     setPhase(info ? 'consent' : 'invalid')
   }
 
+  const live = phase === 'camera' || phase === 'submitting'
+  const showCard = phase === 'consent' || live
+  const isPreview = capturePhase === 'preview'
+
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        {phase === 'loading' && <p style={styles.muted}>Memuat…</p>}
+    <div className="se-embed">
+      <section className="se-embed-card" aria-label={t('embed.title')}>
+        <header className="se-embed-head">
+          <span className="se-embed-title">{t('embed.title')}</span>
+          <span className="se-embed-by">{t('embed.by_netra')}</span>
+        </header>
+
+        {phase === 'loading' && (
+          <p className="se-muted se-center"><Loader2 size={16} className="se-spin" aria-hidden="true" /> {t('embed.loading')}</p>
+        )}
 
         {phase === 'invalid' && (
+          <EnrollResult tone="bad" icon={<AlertTriangle size={30} />} title={t('embed.unavailable_title')} text={errorMsg} />
+        )}
+
+        {showCard && info && (
           <>
-            <h2 style={styles.title}>Sesi tidak tersedia</h2>
-            <p style={styles.muted}>{errorMsg}</p>
+            {info.full_name && <p className="se-muted">{t('embed.for_name')} <strong>{info.full_name}</strong></p>}
+            <EnrollCamera
+              compact
+              videoRef={videoRef}
+              overlayRef={overlayRef}
+              showVideo={live}
+              guiding={live && cameraReady && !isPreview}
+              hasFace={hasFace}
+              instruction={phaseConfig
+                ? <>{phaseConfig.arrow && <span className="se-arrow" aria-hidden="true">{phaseConfig.arrow}</span>}{phaseConfig.label}</>
+                : live && cameraReady && !capturePhase ? t('embed.preparing') : undefined}
+              hint={phaseConfig ? phaseConfig.hint : live && cameraReady && !capturePhase ? t('embed.position_face') : undefined}
+              countdown={phaseConfig ? countdown : undefined}
+              progressPct={phaseConfig ? progressPct : undefined}
+            />
+            <AngleChips labels={angleLabels} phaseIdx={phaseIdx} allDone={isPreview} />
           </>
         )}
 
         {phase === 'consent' && info && (
           <>
-            <h2 style={styles.title}>Daftar Wajah</h2>
-            {info.full_name && <p style={styles.muted}>Untuk: <strong>{info.full_name}</strong></p>}
-            <label style={styles.consentRow}>
+            <label className="se-check">
               <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
-              <span>Saya menyetujui perekaman & pemrosesan data biometrik wajah untuk keperluan absensi.</span>
+              <span>{t('embed.consent')}</span>
             </label>
             {info.is_minor && (
-              <div style={styles.field}>
-                <label style={styles.label}>Nama Wali / Orang Tua (wajib untuk di bawah umur)</label>
-                <input
-                  style={styles.input}
-                  value={guardian}
-                  onChange={(e) => setGuardian(e.target.value)}
-                  placeholder="Nama wali"
-                />
-              </div>
+              <label className="se-field">
+                <span>{t('embed.guardian_label')}</span>
+                <input className="se-input" value={guardian} onChange={(e) => setGuardian(e.target.value)}
+                  placeholder={t('embed.guardian_placeholder')} />
+              </label>
             )}
-            <button
-              style={{ ...styles.btn, ...(canProceed(consentChecked, info, guardian) ? {} : styles.btnDisabled) }}
-              disabled={!canProceed(consentChecked, info, guardian)}
-              onClick={() => void startCamera()}
-            >
-              Lanjut ke Kamera
+            <button type="button" className="se-btn se-btn--primary se-btn--block"
+              disabled={!canProceed(consentChecked, info, guardian)} onClick={() => void startCamera()}>
+              {t('embed.start')}
             </button>
           </>
         )}
 
-        {(phase === 'camera' || phase === 'submitting') && (
-          <>
-            <h2 style={styles.title}>
-              {capturePhase === 'preview' ? 'Periksa hasil foto' : 'Rekam Wajah'}
-            </h2>
-            <p style={styles.muted}>
-              {capturePhase === 'preview'
-                ? 'Pastikan ketiga foto jelas sebelum melanjutkan.'
-                : 'Ikuti instruksi di bawah kamera. Foto diambil otomatis.'}
-            </p>
-
-            {capturePhase && capturePhase !== 'preview' && (
-              <div className="selfenroll-phase-dots">
-                {GUIDED_CAPTURE_PHASE_ORDER.map((p, i) => (
-                  <div
-                    key={p}
-                    className={`selfenroll-phase-dot ${phaseIdx > i ? 'done' : capturePhase === p ? 'active' : ''}`}
-                  />
-                ))}
+        {live && (
+          isPreview && previewUrls.length > 0 ? (
+            <>
+              <EnrollPreviews urls={previewUrls} labels={PREVIEW_LABELS} />
+              <p className="se-caption">{t('embed.preview_hint')}</p>
+              <div className="se-actions">
+                <button type="button" className="se-btn" disabled={phase === 'submitting'} onClick={retake}>{t('selfenroll.retake')}</button>
+                <button type="button" className="se-btn se-btn--primary" disabled={phase === 'submitting'} onClick={() => void submit()}>
+                  {phase === 'submitting' && <Loader2 size={16} className="se-spin" aria-hidden="true" />}
+                  {phase === 'submitting' ? t('selfenroll.processing') : t('selfenroll.continue')}
+                </button>
               </div>
-            )}
-
-            <div className="kiosk-camera-wrapper" style={styles.videoWrap}>
-              <video ref={videoRef} className="kiosk-video" autoPlay playsInline muted />
-
-              {cameraReady && capturePhase !== 'preview' && (
-                <canvas ref={overlayRef} className="kiosk-detection-canvas" />
-              )}
-
-              {cameraReady && capturePhase !== 'preview' && (
-                <div className="kiosk-hud" aria-hidden="true">
-                  <svg viewBox="0 0 560 420" className="kiosk-hud-svg">
-                    {!hasFace && (
-                      <ellipse cx="280" cy="210" rx="110" ry="135"
-                        fill="none" stroke="rgba(107,216,203,0.3)" strokeWidth="1.5" strokeDasharray="6 5" />
-                    )}
-                    <path d="M 80 130 L 80 90 L 120 90" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round" />
-                    <path d="M 480 130 L 480 90 L 440 90" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round" />
-                    <path d="M 80 290 L 80 330 L 120 330" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round" />
-                    <path d="M 480 290 L 480 330 L 440 330" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round" />
-                  </svg>
-                </div>
-              )}
-
-              {phaseConfig && (
-                <div className="selfenroll-phase-overlay">
-                  <div className="selfenroll-phase-label">
-                    {phaseConfig.arrow && <span className="selfenroll-arrow">{phaseConfig.arrow}</span>}
-                    {phaseConfig.label}
-                  </div>
-                  <div className="selfenroll-phase-hint">{phaseConfig.hint}</div>
-                  <div className="selfenroll-countdown-wrap">
-                    <div className="selfenroll-countdown-bar">
-                      <div className="selfenroll-countdown-fill" style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <span className="selfenroll-countdown-num">{countdown}s</span>
-                  </div>
-                  <div className="selfenroll-phase-num">{phaseIdx + 1} / 3</div>
-                </div>
-              )}
-
-              {cameraReady && !capturePhase && (
-                <div className="selfenroll-phase-overlay selfenroll-phase-overlay--dim">
-                  <div className="selfenroll-phase-label">Bersiap…</div>
-                  <div className="selfenroll-phase-hint">Posisikan wajah Anda di dalam oval</div>
-                </div>
-              )}
-            </div>
-
-            {capturePhase === 'preview' && previewUrls.length > 0 && (
-              <>
-                <div className="selfenroll-previews selfenroll-previews--sm">
-                  {previewUrls.map((url, i) => (
-                    <div key={i} className="selfenroll-preview-thumb">
-                      <img src={url} alt={PREVIEW_LABELS[i]} />
-                      <span>{PREVIEW_LABELS[i]}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={styles.actionsRow}>
-                  <button style={styles.btnSecondary} disabled={phase === 'submitting'} onClick={retake}>
-                    Ulangi
-                  </button>
-                  <button
-                    style={{ ...styles.btn, flex: 1, width: 'auto', ...(phase === 'submitting' ? styles.btnDisabled : {}) }}
-                    disabled={phase === 'submitting'}
-                    onClick={() => void submit()}
-                  >
-                    {phase === 'submitting' ? 'Memproses…' : 'Lanjut'}
-                  </button>
-                </div>
-              </>
-            )}
-          </>
+            </>
+          ) : (
+            <p className="se-caption">{t('selfenroll.auto_capture_hint')}</p>
+          )
         )}
 
         {phase === 'success' && (
-          <>
-            <div style={styles.bigIcon}>✅</div>
-            <h2 style={styles.title}>Wajah berhasil didaftarkan</h2>
-            <p style={styles.muted}>Anda dapat menutup jendela ini.</p>
-          </>
+          <EnrollResult tone="ok" icon={<Check size={34} strokeWidth={3} />} title={t('selfenroll.done_title')} text={t('embed.success_text')} />
         )}
 
         {phase === 'error' && (
-          <>
-            <div style={styles.bigIcon}>⚠️</div>
-            <h2 style={styles.title}>Gagal</h2>
-            <p style={styles.muted}>{errorMsg}</p>
-            <button style={styles.btn} onClick={retryFromError}>Coba lagi</button>
-          </>
+          <EnrollResult tone="bad" icon={<AlertTriangle size={30} />} title={t('embed.error_title')} text={errorMsg}>
+            <button type="button" className="se-btn se-btn--primary se-btn--block" onClick={retryFromError}>{t('kiosk.retry')}</button>
+          </EnrollResult>
         )}
 
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
-      </div>
+        <canvas ref={canvasRef} className="se-hidden" />
+      </section>
     </div>
   )
 }
@@ -343,37 +284,4 @@ function canProceed(consent: boolean, info: SessionInfo, guardian: string): bool
   if (!consent) return false
   if (info.is_minor && !guardian.trim()) return false
   return true
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#f1f5f9',
-    padding: 16,
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    background: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    boxShadow: '0 8px 30px rgba(15,23,42,0.12)',
-    textAlign: 'center',
-  },
-  title: { fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '4px 0 10px' },
-  muted: { fontSize: 14, color: '#64748b', margin: '4px 0' },
-  consentRow: { display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left', fontSize: 13, color: '#334155', margin: '14px 0' },
-  field: { textAlign: 'left', marginBottom: 14 },
-  label: { display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 },
-  input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14 },
-  videoWrap: { margin: '8px 0 16px' },
-  btn: { width: '100%', padding: '12px 16px', borderRadius: 10, border: 'none', background: '#0d9488', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  btnSecondary: { flex: 1, padding: '12px 16px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#fff', color: '#334155', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
-  bigIcon: { fontSize: 44, marginBottom: 8 },
-  actionsRow: { display: 'flex', gap: 10 },
 }

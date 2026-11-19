@@ -1,0 +1,69 @@
+/* ════════════════════════════════════════════════
+   Super admin billing + demo requests (mockups dd07def6, 0f2c0622).
+   Builds on super-admin.css primitives; prefix `bl-` / `dr-`.
+   ════════════════════════════════════════════════ */
+
+.bl-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.bl-scroll { overflow-x: auto; }
+.bl-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.bl-select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  max-width: 240px;
+}
+.bl-select:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 1px; }
+
+/* Usage meter: bar + "v/max" */
+.bl-meter { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.bl-meter-track { flex: 1; height: 6px; border-radius: 99px; background: var(--color-bg); border: 1px solid var(--color-border); overflow: hidden; }
+.bl-meter-fill { height: 100%; background: currentColor; }
+.bl-meter-text { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.bl-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+
+/* Plan cards */
+.bl-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bl-plan { padding: 16px; display: flex; flex-direction: column; gap: 2px; }
+.bl-plan.is-off { opacity: 0.65; }
+.bl-plan-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bl-plan-name { font-weight: 700; font-size: 15px; color: var(--color-text); }
+.bl-plan-code { font-size: 12px; color: var(--color-text-muted); }
+.bl-plan-meta { margin-top: 10px; font-size: 13px; color: var(--color-text-muted); }
+.bl-plan-actions { margin-top: 12px; display: flex; gap: 8px; }
+
+/* Phone cards for wide tables */
+.bl-cards { display: none; flex-direction: column; gap: 10px; }
+.bl-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.bl-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bl-card-meta { font-size: 12px; color: var(--color-text-muted); display: flex; gap: 10px; flex-wrap: wrap; }
+.bl-card-total { font-weight: 700; font-size: 15px; color: var(--color-text); }
+
+/* Demo requests */
+.dr-list { display: flex; flex-direction: column; gap: 12px; }
+.dr-card { padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+.dr-card.is-new { border-color: var(--color-brand); }
+.dr-body { flex: 1; min-width: 0; }
+.dr-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dr-name { font-weight: 700; font-size: 14px; color: var(--color-text); }
+.dr-time { font-size: 11.5px; color: var(--color-text-muted); white-space: nowrap; }
+.dr-contact { font-size: 12.5px; color: var(--color-text-muted); overflow-wrap: anywhere; }
+.dr-contact a { color: inherit; }
+.dr-msg { margin-top: 8px; font-size: 13px; line-height: 1.5; color: var(--color-text); white-space: pre-line; overflow-wrap: anywhere; }
+.dr-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.dr-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .bl-two, .bl-plans { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .bl-table { display: none; }
+  .bl-cards { display: flex; }
+  .bl-select { max-width: none; flex: 1; }
+  .dr-card { padding: 14px; }
+  .dr-card .sa-av { display: none; }
+}

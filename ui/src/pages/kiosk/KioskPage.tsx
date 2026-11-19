@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Eye, ScanLine, Settings } from 'lucide-react'
+import { KeyRound, Lock, ShieldOff, WifiOff } from 'lucide-react'
 import {
   postAutoAttendance,
   KioskError,
@@ -12,6 +12,17 @@ import { useFaceDetection } from '@/hooks/useFaceDetection'
 import { useVoiceGuide } from '@/hooks/useVoiceGuide'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useI18n } from '@/store/i18nStore'
+import {
+  KioskCameraPlaceholder,
+  KioskPills,
+  KioskRejectCard,
+  KioskSetupPanel,
+  KioskSuccessCard,
+  KioskTopBar,
+  ringToneFor,
+  useKioskClock,
+  type KioskErrorCode,
+} from './KioskParts'
 import '@/styles/kiosk.css'
 
 type CameraState = 'idle' | 'active' | 'denied' | 'unavailable'
@@ -29,29 +40,14 @@ const FAIL_VOICE_KEYS: Record<string, string> = {
 interface ResultState {
   status: KioskStatus
   result?: AttendanceResult
-  errorCode?: 'not_recognized' | 'liveness_failed' | 'duplicate' | 'server_error'
+  errorCode?: KioskErrorCode
   errorMsg?: string
-}
-
-function useClock() {
-  const fmt = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const [time, setTime] = useState(fmt)
-  const [date, setDate] = useState(() => new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = new Date()
-      setTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
-      setDate(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
-    }, 1000)
-    return () => clearInterval(id)
-  }, [])
-  return { time, date }
 }
 
 export function KioskPage() {
   const { t, locale } = useI18n()
   const { show } = useToast()
-  const { time, date } = useClock()
+  const { time, date } = useKioskClock()
 
   // Device token
   const [showSetup, setShowSetup] = useState(false)
@@ -321,212 +317,108 @@ export function KioskPage() {
     return () => clearInterval(id)
   }, [idleForCountdown])
 
+
   const isProcessing = resultState.status === 'processing'
-  const showResult =
-    resultState.status === 'success' || resultState.status === 'error'
+  const showResult = resultState.status === 'success' || resultState.status === 'error'
+  const tone = ringToneFor(resultState.result, resultState.status, hasFace)
+  const toggleVoice = () => setVoiceMuted((v) => !v)
 
   return (
-    <div className="kiosk-page">
-      <div className="kiosk-header">
-        <div className="kiosk-brand">
-          <Eye size={22} strokeWidth={2.5} className="kiosk-brand-icon" />
-          <span>netra</span>
-        </div>
-        <div className="kiosk-clock">
-          <div className="kiosk-clock-time">{time}</div>
-          <div className="kiosk-clock-date">{date}</div>
-        </div>
-        <button className="kiosk-setup-btn" onClick={() => setShowSetup((v) => !v)} aria-label={t('kiosk.setup')} title={t('kiosk.setup')}>
-          <Settings size={15} />
-        </button>
+    <div className={`kiosk-page kiosk-tone-${tone}`}>
+      <div className="kiosk-stage" aria-label={t('kiosk.camera_area')}>
+        {cameraState === 'active' ? (
+          <>
+            <video ref={videoRef} className="kiosk-video" autoPlay playsInline muted />
+            <canvas ref={canvasRef} className="kiosk-canvas" />
+            <canvas ref={overlayCanvasRef} className="kiosk-detection-canvas" />
+          </>
+        ) : (
+          <KioskCameraPlaceholder t={t} state={cameraState} />
+        )}
+        <div className="kiosk-vignette" aria-hidden="true" />
+        {cameraState === 'active' && <div className={`kiosk-ring kiosk-ring--${tone}`} aria-hidden="true" />}
       </div>
 
-      {/* Device token setup panel */}
+      <KioskTopBar time={time} date={date} onSetup={() => setShowSetup((v) => !v)} t={t} />
+
       {showSetup && (
-        <div className="kiosk-setup-panel">
-          <h3>{t('kiosk.setup_title')}</h3>
-          <p>
-            {t('kiosk.setup_desc')}
-          </p>
-          <div className="kiosk-token-row">
-            <input
-              type="text"
-              className="kiosk-token-input"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder={t('kiosk.token_placeholder')}
-              spellCheck={false}
-              aria-label={t('kiosk.setup')}
-            />
-            <button className="kiosk-token-save-btn" onClick={handleSaveToken}>
-              {t('kiosk.save_token')}
-            </button>
+        <KioskSetupPanel
+          t={t}
+          tokenInput={tokenInput}
+          setTokenInput={setTokenInput}
+          savedToken={savedToken}
+          onSave={handleSaveToken}
+          voiceMuted={voiceMuted}
+          toggleVoice={toggleVoice}
+        />
+      )}
+
+      <div className="kiosk-banners">
+        {revokedRemotely && (
+          <div className="kiosk-banner kiosk-banner--bad" role="alert" aria-live="assertive">
+            <ShieldOff size={18} aria-hidden="true" />
+            <span>{t('kiosk.revoked_msg')}</span>
           </div>
-          <p className={`kiosk-token-status ${savedToken ? 'ok' : 'missing'}`}>
-            {savedToken ? `${t('kiosk.token_active')}: ${savedToken.slice(0, 12)}…` : t('kiosk.no_token_stored')}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setVoiceMuted((v) => !v)} aria-label={voiceMuted ? t('kiosk.enable_voice') : t('kiosk.disable_voice')}>{voiceMuted ? `🔇 ${t('kiosk.voice_off')}` : `🔊 ${t('kiosk.voice_on')}`}</button>
+        )}
+        {!savedToken && !showSetup && !revokedRemotely && (
+          <div className="kiosk-banner kiosk-banner--bad" role="status">
+            <KeyRound size={18} aria-hidden="true" />
+            <span>{t('kiosk.no_token_msg')}</span>
           </div>
-        </div>
-      )}
-
-      {revokedRemotely && (
-        <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">
-          {t('kiosk.revoked_msg')}
-        </div>
-      )}
-
-      {!savedToken && !showSetup && !revokedRemotely && (
-        <div className="kiosk-no-token-warning">
-          {t('kiosk.no_token_msg')}
-        </div>
-      )}
-
-      {isOffline && (
-        <div className="kiosk-offline-banner" role="alert" aria-live="assertive">
-          {'\u26a0'} {t('kiosk.offline_msg')}
-          <button onClick={() => { setIsOffline(false); void autoScan() }}>{t('kiosk.retry')}</button>
-        </div>
-      )}
-
-      {locked && (
-        <div className="kiosk-lock-screen" onClick={() => { setLocked(false); lastActivityRef.current = Date.now() }}>
-          <div className="kiosk-lock-content"><div className="kiosk-lock-icon">{'🔒'}</div><div className="kiosk-lock-text">{t('kiosk.tap_to_start')}</div></div>
-        </div>
-      )}
-
-      <div className="kiosk-camera-area" aria-label={t('kiosk.camera_area')}>
-        {/* Camera / placeholder */}
-        <div className="kiosk-camera-wrapper">
-          {cameraState === 'active' ? (
-            <>
-              <video ref={videoRef} className="kiosk-video" autoPlay playsInline muted />
-              <canvas ref={canvasRef} className="kiosk-canvas" />
-              <canvas ref={overlayCanvasRef} className="kiosk-detection-canvas" />
-            </>
-          ) : (
-            <div className="kiosk-camera-placeholder">
-              <span className="kiosk-camera-placeholder-icon">
-                {cameraState === 'denied' ? '🚫' : cameraState === 'unavailable' ? '📵' : '📷'}
-              </span>
-              <p>
-                {cameraState === 'denied'
-                  ? t('kiosk.camera_denied')
-                  : cameraState === 'unavailable'
-                  ? t('kiosk.camera_unavailable')
-                  : t('kiosk.camera_loading')}
-              </p>
-            </div>
-          )}
-
-          {/* HUD face guide — oval + scan line saat belum ada wajah, brackets saja saat ada wajah */}
-          {cameraState === 'active' && !isProcessing && !showResult && (
-            <div className="kiosk-hud" aria-hidden="true">
-              <svg viewBox="0 0 560 420" className="kiosk-hud-svg">
-                {!hasFace && (
-                  <defs>
-                    <clipPath id="oval-clip">
-                      <ellipse cx="280" cy="210" rx="108" ry="133" />
-                    </clipPath>
-                  </defs>
-                )}
-                {/* Corner brackets — selalu tampil */}
-                <path className="kiosk-hud-bracket" d="M 80 130 L 80 90 L 120 90"  fill="none" stroke="rgba(107,216,203,0.8)" strokeWidth="3" strokeLinecap="round"/>
-                <path className="kiosk-hud-bracket" d="M 480 130 L 480 90 L 440 90" fill="none" stroke="rgba(107,216,203,0.8)" strokeWidth="3" strokeLinecap="round"/>
-                <path className="kiosk-hud-bracket" d="M 80 290 L 80 330 L 120 330" fill="none" stroke="rgba(107,216,203,0.8)" strokeWidth="3" strokeLinecap="round"/>
-                <path className="kiosk-hud-bracket" d="M 480 290 L 480 330 L 440 330" fill="none" stroke="rgba(107,216,203,0.8)" strokeWidth="3" strokeLinecap="round"/>
-                {/* Oval + scan line — hanya saat belum ada wajah */}
-                {!hasFace && (
-                  <>
-                    <ellipse cx="280" cy="210" rx="110" ry="135" fill="none" stroke="rgba(107,216,203,0.35)" strokeWidth="1.5" strokeDasharray="6 5"/>
-                    <line className="kiosk-scan-line" x1="172" y1="77" x2="388" y2="77" stroke="rgba(107,216,203,0.75)" strokeWidth="2" clipPath="url(#oval-clip)" />
-                  </>
-                )}
-                {/* Teks status bawah */}
-                <text x="280" y="405" textAnchor="middle" fill="rgba(107,216,203,0.55)" fontSize="11" fontFamily="system-ui" fontWeight="600" letterSpacing="1.5">
-                  {hasFace ? t('kiosk.face_detected') : savedToken ? t('kiosk.aim_face') : t('kiosk.setup_token_first')}
-                </text>
-              </svg>
-            </div>
-          )}
-
-          {/* Processing overlay */}
-          {isProcessing && (
-            <div className="kiosk-processing">
-              <ScanLine size={36} color="#0d9488" strokeWidth={1.5} className="kiosk-scan-icon" />
-              <p>{t('kiosk.recognizing')}</p>
-            </div>
-          )}
-
-          {/* Result overlay */}
-          {showResult && (
-            <div
-              className={`kiosk-result-overlay ${resultState.status === 'success' ? 'success' : 'error'}`}
-              role="alert"
-              aria-live="assertive"
-            >
-              {resultState.status === 'success' && resultState.result ? (
-                <>
-                  <div className="kiosk-result-type-badge">
-                    {resultState.result.attendance.type === 'check_in' ? '✓ CHECK IN' : '✓ CHECK OUT'}
-                  </div>
-                  <div className="kiosk-result-name">{resultState.result.full_name}</div>
-                  <div className="kiosk-result-time">
-                    {new Date(resultState.result.attendance.occurred_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                  <div className="kiosk-result-status">
-                    {resultState.result.attendance.status === 'on_time' ? t('kiosk.on_time')
-                      : resultState.result.attendance.status === 'late' ? t('kiosk.late')
-                      : resultState.result.attendance.status === 'early_leave' ? t('kiosk.early_leave')
-                      : resultState.result.attendance.status}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <span className="kiosk-result-icon">
-                    {resultState.errorCode === 'not_recognized' ? '❓'
-                      : resultState.errorCode === 'liveness_failed' ? '⚠️'
-                      : resultState.errorCode === 'duplicate' ? '🔁'
-                      : '❌'}
-                  </span>
-                  <div className="kiosk-result-error-msg">{resultState.errorMsg}</div>
-                </>
-              )}
-            </div>
-          )}
-
-        </div>
-
-
-        {/* Status bar */}
-        <div className="kiosk-status-bar">
-          <span>
-            <span className={`kiosk-status-dot ${cameraState === 'active' ? 'green' : 'red'}`} />
-            {cameraState === 'active' ? t('kiosk.camera_active') : cameraState === 'denied' ? t('kiosk.camera_denied_status') : cameraState === 'unavailable' ? t('kiosk.camera_unavailable_status') : t('kiosk.camera_inactive')}
-          </span>
-          <span>
-            <span className={`kiosk-status-dot ${cameraState === 'active' && savedToken ? 'green' : 'amber'}`} />
-            {cameraState === 'active' && savedToken ? t('kiosk.auto_scan') : t('kiosk.manual_mode')}
-          </span>
-          <span>
-            <span className={`kiosk-status-dot ${savedToken ? 'green' : 'red'}`} />
-            {savedToken ? t('kiosk.token_active_status') : t('kiosk.no_token_status')}
-          </span>
-        </div>
-
-        {/* Countdown to next auto-scan — idle only */}
-        {idleForCountdown && (
-          <div className="kiosk-countdown">
-            <div className="kiosk-countdown-bar">
-              <div className="kiosk-countdown-fill" style={{ width: `${scanProgress}%` }} />
-            </div>
-            <span className="kiosk-countdown-label">
-              {t('kiosk.scan_in', { seconds: Math.ceil((SCAN_INTERVAL_MS * (1 - scanProgress / 100)) / 1000) })}
-            </span>
+        )}
+        {isOffline && (
+          <div className="kiosk-banner kiosk-banner--warn" role="alert" aria-live="assertive">
+            <WifiOff size={18} aria-hidden="true" />
+            <span>{t('kiosk.offline_msg')}</span>
+            <button type="button" onClick={() => { setIsOffline(false); void autoScan() }}>{t('kiosk.retry')}</button>
           </div>
         )}
       </div>
+
+      {cameraState === 'active' && !showResult && (
+        <div className="kiosk-prompt" aria-live="polite">
+          <div className="kiosk-prompt-title">
+            {isProcessing ? t('kiosk.recognizing')
+              : hasFace ? t('kiosk.face_detected')
+              : savedToken ? t('kiosk.aim_face')
+              : t('kiosk.setup_token_first')}
+          </div>
+          <div className="kiosk-prompt-sub">{isOffline ? t('kiosk.offline_sub') : t('kiosk.auto_hint')}</div>
+          {idleForCountdown && (
+            <div className="kiosk-countdown">
+              <div className="kiosk-countdown-bar">
+                <div className="kiosk-countdown-fill" style={{ width: `${scanProgress}%` }} />
+              </div>
+              <span className="kiosk-countdown-label">
+                {t('kiosk.scan_in', { seconds: Math.ceil((SCAN_INTERVAL_MS * (1 - scanProgress / 100)) / 1000) })}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {resultState.status === 'success' && resultState.result && <KioskSuccessCard t={t} result={resultState.result} />}
+      {resultState.status === 'error' && <KioskRejectCard t={t} code={resultState.errorCode} msg={resultState.errorMsg} />}
+
+      <KioskPills
+        t={t}
+        autoScan={cameraState === 'active' && !!savedToken && !revokedRemotely}
+        tokenOk={!!savedToken && !revokedRemotely}
+        offline={isOffline}
+        voiceMuted={voiceMuted}
+        toggleVoice={toggleVoice}
+      />
+
+      {locked && (
+        <button
+          type="button"
+          className="kiosk-lock-screen"
+          onClick={() => { setLocked(false); lastActivityRef.current = Date.now() }}
+        >
+          <Lock size={44} strokeWidth={1.6} aria-hidden="true" />
+          <span className="kiosk-lock-text">{t('kiosk.tap_to_start')}</span>
+        </button>
+      )}
     </div>
   )
 }

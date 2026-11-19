@@ -1,0 +1,202 @@
+/* Shared building blocks for the tenant "operational/account" pages
+   (Perangkat, Jadwal, Integrasi, Billing, Tempat sampah, Pengaturan). */
+
+.ops-page { display: flex; flex-direction: column; gap: 16px; }
+
+.ops-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.ops-head h2 { margin: 0; font-size: 1.375rem; font-weight: 700; letter-spacing: -0.3px; color: var(--color-text); }
+.ops-head p { margin: 4px 0 0; font-size: 13px; color: var(--color-text-muted); }
+.ops-head-actions { display: flex; align-items: center; gap: 8px; }
+
+.ops-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
+}
+.ops-card-pad { padding: 16px; }
+.ops-card-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--color-text); }
+.ops-card-sub { margin: 3px 0 0; font-size: 12px; color: var(--color-text-muted); }
+.ops-section-label { margin: 4px 0 0; font-size: 15px; font-weight: 700; color: var(--color-text); }
+
+/* Status chips */
+.ops-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+.ops-chip--g { background: var(--color-success-bg); color: var(--color-success); }
+.ops-chip--w { background: var(--color-warning-bg); color: var(--color-warning-text); }
+.ops-chip--r { background: var(--color-danger-bg); color: var(--color-danger); }
+.ops-chip--b { background: var(--color-brand-light); color: var(--color-brand-text); }
+.ops-chip--mono { font-family: ui-monospace, monospace; font-weight: 500; }
+
+/* Filter pills */
+.ops-pills { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ops-pills::-webkit-scrollbar { display: none; }
+.ops-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ops-pill:hover { border-color: var(--color-border-strong); }
+.ops-pill--on { background: var(--color-brand-light); color: var(--color-brand-text); border-color: var(--color-brand); }
+.ops-pill:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+.ops-pill-count { color: var(--color-text-muted); font-weight: 500; }
+.ops-pill--on .ops-pill-count { color: inherit; }
+
+/* Dashed "add new" tile at the end of a card grid */
+.ops-add-tile {
+  min-height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-brand-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ops-add-tile:hover { background: var(--color-brand-light); border-color: var(--color-brand); }
+.ops-add-tile:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+
+/* Grid table (header row + rows) */
+.ops-table { overflow: hidden; }
+.ops-table-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text);
+}
+.ops-table-row > * { min-width: 0; }
+.ops-table-head {
+  border-top: 0;
+  background: var(--color-bg);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.ops-muted { color: var(--color-text-muted); }
+.ops-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--color-text-muted); }
+.ops-strong { font-weight: 600; }
+
+/* Outline danger button (white with red text, like the mockup) */
+.btn.ops-btn-danger {
+  background: var(--color-surface);
+  color: var(--color-danger);
+  border: 1px solid var(--color-border);
+}
+.btn.ops-btn-danger:hover { background: var(--color-danger-bg); border-color: var(--color-danger-border); }
+.btn.ops-btn-outline {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.btn.ops-btn-outline:hover { border-color: var(--color-border-strong); }
+
+/* Round tinted icon */
+.ops-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+.ops-ico--g { background: var(--color-success-bg); color: var(--color-success); }
+.ops-ico--w { background: var(--color-warning-bg); color: var(--color-warning-text); }
+.ops-ico--b { background: var(--color-brand-light); color: var(--color-brand-text); }
+
+.ops-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--color-brand-light);
+  color: var(--color-brand-text);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Segmented switch (Pakai AI / Manual API) */
+.ops-seg { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--color-bg); }
+.ops-seg-btn {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ops-seg-btn--on { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+.ops-seg-btn:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 1px; }
+
+/* Only on desktop / only on phone */
+.ops-phone-only { display: none; }
+
+@media (max-width: 768px) {
+  .ops-page { gap: 12px; }
+  .ops-head h2 { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.4px; }
+  .ops-desktop-only { display: none !important; }
+  .ops-phone-only { display: flex; }
+}
+
+/* Compact small buttons on desktop (touch-size stays on phones via mobile.css). */
+@media (min-width: 769px) {
+  .ops-page .btn-sm { min-height: 32px; height: 32px; }
+}
+
+.ops-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

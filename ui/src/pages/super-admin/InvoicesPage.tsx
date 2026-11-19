@@ -1,53 +1,32 @@
 import { useState } from 'react'
-import { Search, CheckCircle2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/components/Toast'
 import { useI18n } from '@/store/i18nStore'
 import { useInvoices } from '@/hooks/useApiQueries'
 import { useUpdateInvoice } from '@/hooks/useApiMutations'
 import { type InvoiceOut } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
-import { BillingTabs } from './BillingTabs'
-import '@/styles/layout.css'
+import { FilterPills, PageHead, formatCurrency, formatNumber } from './saShared'
+import { InvoiceStatusChip, currentMonth, monthLabel, useTenantNames } from './billingShared'
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+type StatusFilter = InvoiceOut['status'] | ''
+
+function initialStatus(v: string | null): StatusFilter {
+  return v === 'draft' || v === 'issued' || v === 'paid' || v === 'void' ? v : ''
 }
 
-function formatCurrency(amount: number, currency: string = 'IDR'): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-function StatusBadge({ status }: { status: InvoiceOut['status'] }) {
-  const { t } = useI18n()
-  const statusClass: Record<InvoiceOut['status'], string> = {
-    draft: 'badge-gray',
-    issued: 'badge-blue',
-    paid: 'badge-green',
-    void: 'badge-red',
-  }
-
-  return (
-    <span className={`badge ${statusClass[status] ?? 'badge-gray'}`}>
-      {t(`invoice.status.${status}`)}
-    </span>
-  )
-}
-
+/** Billing → Faktur (mockup dd07def6). `?status=` preselects a filter. */
 export function InvoicesPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { show } = useToast()
+  const [params] = useSearchParams()
   const updateInvoice = useUpdateInvoice()
+  const { tenants, name } = useTenantNames()
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [tenantId, setTenantId] = useState('')
-  const [statusFilter, setStatusFilter] = useState<InvoiceOut['status'] | ''>('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => initialStatus(params.get('status')))
 
   const { data: invoicesData, isLoading, refetch } = useInvoices({
     page,
@@ -73,128 +52,127 @@ export function InvoicesPage() {
     }
   }
 
+  const markPaid = (invoice: InvoiceOut) =>
+    invoice.status === 'issued' && (
+      <button
+        className="btn btn-sm btn-ghost"
+        onClick={() => handleMarkPaid(invoice)}
+        disabled={updateInvoice.isPending}
+        title={t('invoice.mark_paid')}
+      >
+        <CheckCircle2 size={14} />
+        {t('invoice.mark_paid')}
+      </button>
+    )
+
+  const empty = <div className="sa-empty">{t('billing.no_invoices')}</div>
+
   return (
-    <div>
-      <div className="page-toolbar">
-        <div>
-          <h2 className="page-title">{t('billing.invoice_management')}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            {t('billing.invoice_management_desc')}
-          </p>
-        </div>
-      </div>
+    <div className="sa-page">
+      <PageHead title={t('billing.invoice_management')} sub={currentMonth(locale)} />
 
-      <BillingTabs />
-
-      <div className="filter-row">
-        <div className="search-input-wrap" style={{ flex: '1 1 240px', minWidth: 200 }}>
-          <Search size={16} />
-          <input
-            className="search-input"
-            value={tenantId}
-            onChange={(e) => {
-              setTenantId(e.target.value)
-              setPage(1)
-            }}
-            placeholder={t('search.placeholder')}
-            aria-label={t('search.placeholder')}
-          />
-        </div>
-        <select
-          className="field-input"
-          style={{ maxWidth: 200 }}
+      <div className="bl-toolbar">
+        <FilterPills<StatusFilter>
+          ariaLabel={t('invoice.status')}
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as InvoiceOut['status'] | '')
+          onChange={(v) => {
+            setStatusFilter(v)
             setPage(1)
           }}
+          options={[
+            { value: '', label: t('all_statuses') },
+            { value: 'draft', label: t('invoice.status.draft') },
+            { value: 'issued', label: t('invoice.status.issued') },
+            { value: 'paid', label: t('invoice.status.paid') },
+            { value: 'void', label: t('invoice.status.void') },
+          ]}
+        />
+        <select
+          className="bl-select"
+          value={tenantId}
+          onChange={(e) => {
+            setTenantId(e.target.value)
+            setPage(1)
+          }}
+          aria-label={t('billing_page.filter_tenant')}
         >
-          <option value="">{t('all_statuses')}</option>
-          <option value="draft">{t('invoice.status.draft')}</option>
-          <option value="issued">{t('invoice.status.issued')}</option>
-          <option value="paid">{t('invoice.status.paid')}</option>
-          <option value="void">{t('invoice.status.void')}</option>
+          <option value="">{t('billing_page.all_tenants')}</option>
+          {tenants.map((tn) => (
+            <option key={tn.id} value={tn.id}>{tn.name}</option>
+          ))}
         </select>
       </div>
 
-      <div className="data-card">
-        <table className="data-table">
+      <div className="sa-card sa-table-card bl-table">
+        <table className="sa-table">
           <thead>
             <tr>
               <th>{t('invoice.invoice_number')}</th>
-              <th>{t('subscription.tenant_id')}</th>
-              <th>{t('invoice.period_start')}</th>
-              <th>{t('invoice.period_end')}</th>
+              <th>{t('billing.usage.tenant')}</th>
+              <th>{t('billing_page.period')}</th>
               <th>{t('invoice.billed_users')}</th>
               <th>{t('invoice.total')}</th>
               <th>{t('invoice.status')}</th>
-              <th style={{ textAlign: 'right' }}>{t('common.actions')}</th>
+              <th className="sa-right"><span className="sa-sr-only">{t('common.actions')}</span></th>
             </tr>
           </thead>
           <tbody>
-            {isLoading &&
-              [0, 1, 2].map((i) => (
-                <tr key={`sk-${i}`}>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-text sm" /></td>
-                  <td><div className="skeleton skeleton-badge" /></td>
-                  <td><div className="skeleton skeleton-text" style={{ width: 90, marginLeft: 'auto' }} /></td>
-                </tr>
-              ))}
-
-            {!isLoading && invoices.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  <div className="empty-state">{t('billing.no_invoices')}</div>
-                </td>
-              </tr>
+            {isLoading && (
+              <tr><td colSpan={7}><div className="skeleton skeleton-text sm" /></td></tr>
             )}
-
+            {!isLoading && invoices.length === 0 && (
+              <tr><td colSpan={7}>{empty}</td></tr>
+            )}
             {!isLoading &&
               invoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <td style={{ fontWeight: 600 }}>{invoice.invoice_number}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{invoice.tenant_id}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(invoice.period_start)}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{formatDate(invoice.period_end)}</td>
-                  <td>{invoice.billed_users}</td>
-                  <td style={{ fontWeight: 600 }}>{formatCurrency(invoice.total, invoice.currency)}</td>
-                  <td><StatusBadge status={invoice.status} /></td>
-                  <td style={{ textAlign: 'right' }}>
-                    {invoice.status === 'issued' && (
-                      <button
-                        className="btn btn-sm btn-success"
-                        onClick={() => handleMarkPaid(invoice)}
-                        disabled={updateInvoice.isPending}
-                        title={t('invoice.mark_paid')}
-                      >
-                        <CheckCircle2 size={14} />
-                        {t('invoice.mark_paid')}
-                      </button>
-                    )}
-                  </td>
+                  <td className="sa-mono" style={{ fontWeight: 600, fontSize: 12 }}>{invoice.invoice_number}</td>
+                  <td>{name(invoice.tenant_id)}</td>
+                  <td className="sa-muted">{monthLabel(invoice.period_start, locale)}</td>
+                  <td className="sa-num">{formatNumber(invoice.billed_users)}</td>
+                  <td className="sa-num" style={{ fontWeight: 600 }}>{formatCurrency(invoice.total, invoice.currency)}</td>
+                  <td><InvoiceStatusChip invoice={invoice} /></td>
+                  <td className="sa-right">{markPaid(invoice)}</td>
                 </tr>
               ))}
           </tbody>
         </table>
-        {!isLoading && (
-          <Pagination
-            page={page}
-            limit={limit}
-            total={total}
-            pages={pages}
-            onPageChange={setPage}
-            onLimitChange={(newLimit) => {
-              setLimit(newLimit)
-              setPage(1)
-            }}
-          />
-        )}
       </div>
+
+      <div className="bl-cards">
+        {!isLoading && invoices.length === 0 && <div className="sa-card">{empty}</div>}
+        {invoices.map((invoice) => (
+          <div key={invoice.id} className="sa-card bl-card">
+            <div className="bl-card-top">
+              <span className="sa-mono" style={{ fontWeight: 600, fontSize: 12 }}>{invoice.invoice_number}</span>
+              <InvoiceStatusChip invoice={invoice} />
+            </div>
+            <div className="bl-card-top">
+              <span className="sa-who-name">{name(invoice.tenant_id)}</span>
+              <span className="bl-card-total">{formatCurrency(invoice.total, invoice.currency)}</span>
+            </div>
+            <div className="bl-card-meta">
+              <span>{monthLabel(invoice.period_start, locale)}</span>
+              <span>{t('billing_page.billed_users_n', { count: formatNumber(invoice.billed_users) })}</span>
+            </div>
+            {invoice.status === 'issued' && <div>{markPaid(invoice)}</div>}
+          </div>
+        ))}
+      </div>
+
+      {!isLoading && (
+        <Pagination
+          page={page}
+          limit={limit}
+          total={total}
+          pages={pages}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit)
+            setPage(1)
+          }}
+        />
+      )}
     </div>
   )
 }

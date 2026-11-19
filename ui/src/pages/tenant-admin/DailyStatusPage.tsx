@@ -1,11 +1,16 @@
-import { useState } from 'react'
-import { CheckCircle2, Clock, LogOut, UserX, Users, Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Download } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
-import { DonutChart } from '@/components/charts/DonutChart'
 import { useI18n } from '@/store/i18nStore'
 import { useDailyStatus } from '@/hooks/useApiQueries'
-import type { DailyStatusValue } from '@/api/adminApi'
+import type { DailyStatus, DailyStatusValue } from '@/api/adminApi'
+import {
+  Chip, DateButton, PageHead, Pills, SearchBox, StatCard, StatRow, Who,
+  downloadCsv, localeTag, type Tone,
+} from './PeopleUi'
 import '@/styles/layout.css'
+
+type Filter = 'all' | DailyStatusValue
 
 function todayLocal(): string {
   return new Date().toLocaleDateString('en-CA')
@@ -18,160 +23,166 @@ function formatTime(iso: string | null): string {
   return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-const STATUS_META: Record<DailyStatusValue, { labelKey: string; cls: string; Icon: typeof CheckCircle2 }> = {
-  present: { labelKey: 'daily_status.status_present', cls: 'badge-green', Icon: CheckCircle2 },
-  late: { labelKey: 'daily_status.status_late', cls: 'badge-orange', Icon: Clock },
-  checked_out: { labelKey: 'daily_status.status_checked_out', cls: 'badge-gray', Icon: LogOut },
-  absent: { labelKey: 'daily_status.status_absent', cls: 'badge-red', Icon: UserX },
+function formatDate(ymd: string, tag: string, long: boolean): string {
+  const d = new Date(`${ymd}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ymd
+  return long
+    ? d.toLocaleDateString(tag, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
+    : d.toLocaleDateString(tag, { day: 'numeric', month: 'short' })
 }
 
-function StatusBadge({ status }: { status: DailyStatusValue }) {
+const STATUS_META: Record<DailyStatusValue, { labelKey: string; tone: Tone }> = {
+  present: { labelKey: 'daily_status.status_present', tone: 'g' },
+  late: { labelKey: 'daily_status.status_late', tone: 'w' },
+  checked_out: { labelKey: 'daily_status.status_checked_out', tone: 'b' },
+  absent: { labelKey: 'daily_status.status_absent', tone: 'r' },
+}
+
+const ORDER: DailyStatusValue[] = ['present', 'late', 'checked_out', 'absent']
+
+function StatusChip({ status }: { status: DailyStatusValue }) {
   const { t } = useI18n()
-  const { labelKey, cls, Icon } = STATUS_META[status]
-  return (
-    <span className={`badge ${cls}`}>
-      <Icon size={13} />
-      {t(labelKey)}
-    </span>
-  )
+  const { labelKey, tone } = STATUS_META[status]
+  return <Chip tone={tone}>{t(labelKey)}</Chip>
 }
 
 export function DailyStatusPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const tag = localeTag(locale)
   const [date, setDate] = useState(todayLocal())
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
   const { data, isLoading, error } = useDailyStatus(date)
-  const rows = data ?? []
+  const rows = useMemo(() => data ?? [], [data])
 
-  const counts = {
-    total: rows.length,
-    present: rows.filter((r) => r.status === 'present').length,
-    late: rows.filter((r) => r.status === 'late').length,
-    checked_out: rows.filter((r) => r.status === 'checked_out').length,
-    absent: rows.filter((r) => r.status === 'absent').length,
-  }
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: rows.length, present: 0, late: 0, checked_out: 0, absent: 0 }
+    rows.forEach((r) => { c[r.status] += 1 })
+    return c
+  }, [rows])
 
-  const filtered = query
-    ? rows.filter(
-        (r) =>
-          r.full_name.toLowerCase().includes(query.toLowerCase()) ||
-          (r.external_id ?? '').toLowerCase().includes(query.toLowerCase()),
-      )
-    : rows
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return rows.filter((r) =>
+      (filter === 'all' || r.status === filter) &&
+      (!q || r.full_name.toLowerCase().includes(q) || (r.external_id ?? '').toLowerCase().includes(q)),
+    )
+  }, [rows, filter, query])
 
-  const stats = [
-    { label: t('daily_status.stat_total'), value: counts.total, color: 'var(--color-brand)', icon: Users },
-    { label: t('daily_status.stat_present'), value: counts.present, color: '#16a34a', icon: CheckCircle2 },
-    { label: t('daily_status.stat_late'), value: counts.late, color: '#ca8a04', icon: Clock },
-    { label: t('daily_status.stat_checked_out'), value: counts.checked_out, color: '#64748b', icon: LogOut },
-    { label: t('daily_status.stat_absent'), value: counts.absent, color: '#dc2626', icon: UserX },
+  const statLabel = (k: Filter) => (k === 'all' ? t('daily_status.stat_total') : t(`daily_status.stat_${k}`))
+  const pillItems = [
+    { key: 'all' as Filter, label: t('daily_status.filter_all'), count: counts.all },
+    { key: 'absent' as Filter, label: t('daily_status.stat_absent'), count: counts.absent },
+    { key: 'late' as Filter, label: t('daily_status.stat_late'), count: counts.late },
+    { key: 'present' as Filter, label: t('daily_status.stat_present'), count: counts.present },
+    { key: 'checked_out' as Filter, label: t('daily_status.stat_checked_out'), count: counts.checked_out },
   ]
 
+  function handleExport() {
+    downloadCsv(
+      `daily_status_${date}.csv`,
+      [t('daily_status.th_name'), t('daily_status.th_id'), t('daily_status.th_status'), t('daily_status.th_check_in'), t('daily_status.th_check_out')],
+      filtered.map((r) => [r.full_name, r.external_id ?? '', t(STATUS_META[r.status].labelKey), formatTime(r.check_in_at), formatTime(r.check_out_at)]),
+    )
+  }
+
+  const phoneSub = (r: DailyStatus) => {
+    const id = r.external_id ?? '—'
+    return r.check_in_at
+      ? `${id} · ${t('daily_status.sub_in', { time: formatTime(r.check_in_at) })}`
+      : `${id} · ${t('daily_status.sub_not_in')}`
+  }
+
+  const empty = (
+    <EmptyState icon="clipboard" title={t('daily_status.empty')} description={t('daily_status.empty_desc')} />
+  )
+
   return (
-    <div>
-      <div className="page-toolbar">
-        <div>
-          <h2 className="page-title">{t('daily_status.title')}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            {t('daily_status.subtitle')}
-          </p>
-        </div>
+    <div className="tp-page">
+      <PageHead
+        title={t('daily_status.title')}
+        subtitle={<span className="tp-desktop-only">{t('daily_status.subtitle')}</span>}
+        actions={
+          <>
+            <span className="tp-desktop-only">
+              <DateButton value={date} onChange={setDate} label={t('daily_status.date_label')} text={formatDate(date, tag, true)} />
+            </span>
+            <span className="tp-phone-only">
+              <DateButton small value={date} onChange={setDate} label={t('daily_status.date_label')} text={formatDate(date, tag, false)} />
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary tp-desktop-only"
+              onClick={handleExport}
+              disabled={isLoading || filtered.length === 0}
+            >
+              <Download size={15} /> {t('daily_status.export')}
+            </button>
+          </>
+        }
+      />
+
+      <div className="tp-desktop-only">
+        {isLoading ? (
+          <StatRow skeleton={5} />
+        ) : (
+          <StatRow>
+            {(['all', ...ORDER] as Filter[]).map((k) => (
+              <StatCard
+                key={k}
+                label={statLabel(k)}
+                value={counts[k]}
+                tone={k === 'all' ? 'm' : STATUS_META[k].tone}
+                active={filter === k}
+                onClick={() => setFilter(k)}
+              />
+            ))}
+          </StatRow>
+        )}
       </div>
 
-      <div
-        className="stat-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        {stats.map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="stat-card">
-            <div className="stat-icon" style={{ background: `${color}14` }}>
-              <Icon size={20} color={color} />
-            </div>
-            <div>
-              <div className="stat-value">{value}</div>
-              <div className="stat-label">{label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {counts.total > 0 && (
-        <div className="data-card" style={{ padding: 20, marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16 }}>
-            {t('daily_status.detail_title')}
-          </div>
-          <DonutChart
-            centerLabel={t('daily_status.stat_total')}
-            centerValue={counts.total}
-            data={[
-              { label: t('daily_status.stat_present'), value: counts.present, color: '#16a34a' },
-              { label: t('daily_status.stat_late'), value: counts.late, color: '#ca8a04' },
-              { label: t('daily_status.stat_checked_out'), value: counts.checked_out, color: '#64748b' },
-              { label: t('daily_status.stat_absent'), value: counts.absent, color: '#dc2626' },
-            ]}
-          />
-        </div>
-      )}
-
-      <div className="filter-row">
-        <div className="search-input-wrap" style={{ flex: '1 1 240px', minWidth: 200 }}>
-          <Search size={16} />
-          <input
-            className="search-input"
-            type="text"
-            placeholder={t('daily_status.search_placeholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label={t('daily_status.search_label')}
-          />
-        </div>
-        <span className="filter-label" id="status-date-label">{t('daily_status.date_label')}:</span>
-        <input
-          type="date"
-          className="date-input"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          aria-labelledby="status-date-label"
+      <div className="tp-toolbar">
+        <Pills items={pillItems} value={filter} onChange={setFilter} label={t('daily_status.filter_label')} />
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          placeholder={t('daily_status.search_placeholder')}
+          label={t('daily_status.search_label')}
         />
       </div>
 
       {error && <div className="error-banner">{error instanceof Error ? error.message : t('daily_status.load_error')}</div>}
 
-      <div className="data-card responsive-table">
-        <table className="data-table">
+      {/* Desktop table */}
+      <div className="tp-card tp-desktop-only">
+        <table className="tp-table">
           <thead>
             <tr>
-              {[t('daily_status.th_name'), t('daily_status.th_id'), t('daily_status.th_status'), t('daily_status.th_check_in'), t('daily_status.th_check_out')].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
+              <th style={{ width: '44%' }}>{t('daily_status.th_name')}</th>
+              <th>{t('daily_status.th_status')}</th>
+              <th>{t('daily_status.th_check_in')}</th>
+              <th>{t('daily_status.th_check_out')}</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5}><div className="empty-state">{t('daily_status.loading')}</div></td></tr>
+              [0, 1, 2, 3, 4].map((i) => (
+                <tr key={i}>
+                  <td><div className="skeleton skeleton-text" style={{ width: '55%' }} /></td>
+                  <td><div className="skeleton skeleton-badge" /></td>
+                  <td><div className="skeleton skeleton-text sm" /></td>
+                  <td><div className="skeleton skeleton-text sm" /></td>
+                </tr>
+              ))
             ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5}>
-                  <EmptyState
-                    icon="clipboard"
-                    title={t('daily_status.empty')}
-                    description={t('daily_status.empty_desc')}
-                  />
-                </td>
-              </tr>
+              <tr><td colSpan={4}>{empty}</td></tr>
             ) : (
               filtered.map((r) => (
                 <tr key={r.user_id}>
-                  <td style={{ fontWeight: 500 }}>{r.full_name}</td>
-                  <td>{r.external_id ?? '—'}</td>
-                  <td><StatusBadge status={r.status} /></td>
-                  <td>{formatTime(r.check_in_at)}</td>
-                  <td>{formatTime(r.check_out_at)}</td>
+                  <td><Who name={r.full_name} sub={r.external_id ?? undefined} /></td>
+                  <td><StatusChip status={r.status} /></td>
+                  <td className="tp-time">{formatTime(r.check_in_at)}</td>
+                  <td className="tp-time">{formatTime(r.check_out_at)}</td>
                 </tr>
               ))
             )}
@@ -179,40 +190,31 @@ export function DailyStatusPage() {
         </table>
       </div>
 
-      <div className="responsive-cards">
+      {/* Phone list */}
+      <div className="tp-phone-only">
         {isLoading ? (
           <div className="empty-state">{t('daily_status.loading')}</div>
         ) : filtered.length === 0 ? (
-          <div className="data-card">
-            <EmptyState
-              icon="clipboard"
-              title={t('daily_status.empty')}
-              description={t('daily_status.empty_desc')}
-            />
-          </div>
+          <div className="tp-card">{empty}</div>
         ) : (
-          filtered.map((r) => (
-            <div key={r.user_id} className="record-card">
-              <div className="record-card-top">
-                <span className="record-card-name">{r.full_name}</span>
-                <StatusBadge status={r.status} />
+          <div className="tp-card tp-list">
+            {filtered.map((r) => (
+              <div key={r.user_id} className="tp-list-row">
+                <Who name={r.full_name} sub={phoneSub(r)} />
+                <StatusChip status={r.status} />
               </div>
-              <div className="record-card-row">
-                <span className="label">{t('daily_status.card_id')}</span>
-                <span className="value">{r.external_id ?? '—'}</span>
-              </div>
-              <div className="record-card-row">
-                <span className="label">{t('daily_status.card_check_in')}</span>
-                <span className="value">{formatTime(r.check_in_at)}</span>
-              </div>
-              <div className="record-card-row">
-                <span className="label">{t('daily_status.card_check_out')}</span>
-                <span className="value">{formatTime(r.check_out_at)}</span>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
+
+      {!isLoading && rows.length > 0 && (
+        <div className="tp-foot">
+          {filter === 'all' && !query
+            ? t('daily_status.showing_all', { count: filtered.length })
+            : t('daily_status.showing', { count: filtered.length, total: rows.length })}
+        </div>
+      )}
     </div>
   )
 }

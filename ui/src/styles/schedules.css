@@ -1,34 +1,12 @@
-/* ── Schedules page (Jadwal Kerja) ── */
-
-.sp-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.sp-subtitle { margin: 6px 0 0; font-size: 14px; color: var(--color-text-secondary); }
-
-.sp-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 16px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.sp-legend { display: flex; gap: 16px; font-size: 13px; color: var(--color-text-secondary); }
-.sp-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.sp-legend i { width: 10px; height: 10px; border-radius: 3px; box-sizing: border-box; }
-.sp-legend-on { background: var(--color-brand); }
-.sp-legend-off { border: 1.5px dashed var(--color-border-strong); }
+/* ── Schedules page (Jadwal) ── */
 
 .sp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
 }
+.sp-grid .ops-add-tile { min-height: 168px; }
 .sp-empty-filter { padding: 32px 0; text-align: center; font-size: 14px; color: var(--color-text-muted); }
 
 /* Segmented control (filter + schedule type) */
@@ -65,99 +43,62 @@
 /* ── Schedule card ── */
 .sc-card {
   height: 100%;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  gap: 12px;
+  padding: 16px;
 }
-.sc-head { display: flex; align-items: flex-start; gap: 12px; }
-.sc-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sc-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .sc-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.sc-name { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text); overflow-wrap: anywhere; }
-.sc-pill {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.sc-pill--brand { background: var(--color-brand-light); color: var(--color-brand-text); }
-.sc-summary { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
-.sc-summary svg { flex-shrink: 0; }
+.sc-name { margin: 0; font-size: 15px; font-weight: 700; color: var(--color-text); overflow-wrap: anywhere; }
+.sc-type { font-size: 12px; color: var(--color-text-muted); }
 
-.sc-week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.sc-day { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.sc-day-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); text-align: center; }
-.sc-day-cell {
-  height: 52px;
-  box-sizing: border-box;
-  border-radius: 8px;
+.sc-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 2px;
-  font-size: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.sc-body:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+.sc-hours {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
-.sc-day-cell--on { background: var(--color-brand-light); color: var(--color-brand-text); font-weight: 600; }
-.sc-day-end { font-weight: 500; opacity: 0.8; }
-.sc-day-cell--off { border: 1.5px dashed var(--color-border-strong); color: var(--color-text-muted); }
-
-.sc-sessions { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.sc-session {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 40px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: var(--color-bg);
-  font-size: 13px;
-}
-.sc-session-no {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  background: var(--color-info-bg);
-  color: var(--color-info);
-  font-size: 12px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.sc-session-name { flex: 1; min-width: 0; font-weight: 500; color: var(--color-text); }
-.sc-session-time { font-weight: 600; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.sc-days { font-size: 12px; color: var(--color-text-muted); }
 
 .sc-foot {
   margin-top: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 8px 12px;
   flex-wrap: wrap;
-  padding-top: 14px;
-  border-top: 1px solid var(--color-border);
-  font-size: 13px;
-  color: var(--color-text-secondary);
 }
-.sc-foot strong { color: var(--color-text); font-weight: 600; }
-.sc-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--color-border-strong); }
+.sc-strip { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.sc-strip-day {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+.sc-strip-day--on { background: var(--color-brand-light); color: var(--color-brand-text); }
+.sc-tol { font-size: 12px; color: var(--color-text-muted); }
 
 /* ── Form modal ── */
 .modal-card.sf-modal {
@@ -330,14 +271,23 @@
 .ss-add { align-self: flex-start; }
 
 @media (max-width: 768px) {
-  .sp-header { margin-bottom: 12px; }
-  .sp-legend { display: none; }
-  .sp-toolbar .seg--inline { width: 100%; grid-auto-columns: minmax(0, 1fr); }
-  .sc-card { padding: 16px; gap: 12px; }
-  .sc-week { gap: 4px; }
-  .sc-day-cell { height: 46px; font-size: 11px; }
+  .sp .ops-head { flex-wrap: nowrap; align-items: center; }
+  .sp .ops-head p { display: none; }
+  .sp-add.btn { height: 34px; min-height: 34px; padding: 0 12px; font-size: 13px; }
+  .sp-add .ops-phone-only { display: inline; }
+  .sp-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 
-  .modal-card.sf-modal { max-height: 100dvh; border-radius: 16px 16px 0 0; }
+  /* The editor opens as a full page on phones, not a small sheet. */
+  .modal-backdrop:has(> .sf-modal) { padding: 0; align-items: stretch; }
+  .modal-card.sf-modal {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+  }
+  .modal-card.sf-modal::before { display: none; }
   .sf-header, .sf-footer { padding-left: 16px; padding-right: 16px; }
   .sf-body { padding: 16px; gap: 22px; }
   .sf-grid { grid-template-columns: minmax(0, 1fr); }

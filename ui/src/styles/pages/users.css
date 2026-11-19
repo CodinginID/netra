@@ -1,0 +1,87 @@
+/* Pengguna page — builds on styles/pages/people.css (tp-*). Prefix: users- */
+
+.users-table td:last-child { width: 1%; white-space: nowrap; }
+.users-id { font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.users-row-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.users-row-actions .btn-sm { height: 28px; padding: 0 10px; border-radius: 10px; font-size: 12px; }
+.users-row-actions .action-menu-trigger { height: 28px; width: 28px; padding: 0; border-radius: 8px; border: 1px solid var(--color-border); }
+.users-row-inactive .tp-who-name, .users-row-inactive .tp-avatar { opacity: 0.6; }
+.users-count { font-size: 12px; white-space: nowrap; }
+
+/* Phone list */
+.users-list { padding: 0 12px; }
+.users-list .swipe-card + .swipe-card .tp-list-row { border-top: 1px solid var(--color-border); }
+.users-list-row { background: var(--color-surface); }
+.users-dots {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted);
+}
+.users-dots:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+.users-phone-pagination { margin-top: 8px; }
+
+/* Extended FAB — phone only, above the bottom nav */
+.users-fab { display: none; }
+
+/* Bottom sheet */
+.users-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: users-fade 0.18s ease-out;
+}
+.users-sheet {
+  width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto;
+  background: var(--color-surface); color: var(--color-text);
+  border-radius: 20px 20px 0 0; border: 1px solid var(--color-border); border-bottom: 0;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.18);
+  animation: users-slide-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.users-sheet-handle { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--color-border-strong); margin: 2px auto 12px; }
+.users-sheet-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); }
+.users-sheet-list { display: flex; flex-direction: column; padding: 6px 0; }
+.users-sheet-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 8px 4px;
+  border: 0; background: none; border-radius: 10px; cursor: pointer; text-align: left;
+  font: inherit; font-size: 14px; color: var(--color-text);
+}
+.users-sheet-item:hover, .users-sheet-item:focus-visible { background: var(--color-bg); outline: none; }
+.users-sheet-icon {
+  width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-bg); color: var(--color-text-muted);
+}
+.users-sheet-item.is-primary .users-sheet-icon { background: var(--color-brand-light); color: var(--color-brand-text); }
+.users-sheet-item.is-primary .users-sheet-label { font-weight: 600; }
+.users-sheet-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.users-sheet-text small, .users-sheet-aside { font-size: 11px; color: var(--color-text-muted); }
+.users-sheet-item.is-danger { color: var(--color-danger); }
+.users-sheet-item.is-danger .users-sheet-label { font-weight: 600; }
+.users-sheet-item.is-danger .users-sheet-icon { background: var(--color-danger-bg); color: var(--color-danger); }
+.users-sheet-divider { height: 1px; background: var(--color-border); margin: 6px 0; }
+.users-sheet-cancel { width: 100%; margin-top: 4px; }
+
+@keyframes users-slide-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes users-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 768px) {
+  .users-toolbar { flex-direction: column-reverse; }
+  .users-fab {
+    position: fixed; right: 16px; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 55;
+    display: inline-flex; align-items: center; gap: 6px; height: 46px; padding: 0 18px;
+    border: 0; border-radius: 16px; cursor: pointer;
+    background: var(--color-brand); color: var(--color-text-inverse);
+    font: inherit; font-size: 14px; font-weight: 700;
+    box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35);
+  }
+  .users-fab:active { transform: scale(0.97); }
+  .users-fab:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+  /* Leave room so the last card is not hidden behind the FAB. */
+  .users-phone-pagination { padding-bottom: 56px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .users-sheet, .users-sheet-backdrop { animation: none; }
+  .users-fab:active { transform: none; }
+}

@@ -8,13 +8,13 @@ import type { ScheduleCreate, ScheduleOut } from '@/api/adminApi'
 import { Pagination } from '@/components/Pagination'
 import { SwipeCard } from '@/components/SwipeCard'
 import { PullToRefresh } from '@/components/PullToRefresh'
-import { MobileFab } from '@/components/MobileFab'
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack'
 import { useSchedules } from '@/hooks/useApiQueries'
 import { useCreateSchedule, useUpdateSchedule, useDeleteSchedule, useRestoreSchedule } from '@/hooks/useApiMutations'
 import { ScheduleCard } from './ScheduleCard'
 import { ScheduleFormModal } from './ScheduleFormModal'
 import '@/styles/layout.css'
+import '@/styles/pages/ops-common.css'
 import '@/styles/schedules.css'
 
 type Filter = 'all' | 'shift' | 'session'
@@ -115,43 +115,38 @@ export function SchedulesPage() {
   }
 
   return (
-    <div className="sp">
-      <div className="sp-header">
+    <div className="ops-page sp">
+      <div className="ops-head">
         <div>
-          <h2 className="page-title" style={{ margin: 0 }}>{t('schedules.title')}</h2>
-          <p className="sp-subtitle">{t('schedules.subtitle')}</p>
+          <h2>{t('schedules.title')}</h2>
+          <p>{t('schedules.subtitle')}</p>
         </div>
-        <button className="btn btn-primary add-fab-twin" onClick={() => setShowCreate(true)}>
-          <Plus size={16} /> {t('schedules.add')}
+        <button className="btn btn-primary sp-add" onClick={() => setShowCreate(true)}>
+          <Plus size={16} /> <span className="ops-desktop-only">{t('schedules.add')}</span>
+          <span className="ops-phone-only">{t('schedules.add_short')}</span>
         </button>
       </div>
 
       {error && <div className="error-banner">{error.message}</div>}
 
       {!isLoading && hasAny && (
-        <div className="sp-toolbar">
-          <div className="seg seg--inline" role="group" aria-label={t('schedules.filter_label')}>
-            {(['all', 'shift', 'session'] as const).map((f) => (
-              <button key={f} type="button" className={`seg-btn${filter === f ? ' seg-btn--active' : ''}`}
-                aria-pressed={filter === f} onClick={() => changeFilter(f)}>
-                {t(`schedules.filter_${f}`)} · {counts[f]}
-              </button>
-            ))}
-          </div>
-          <div className="sp-legend" aria-hidden="true">
-            <span><i className="sp-legend-on" />{t('schedules.legend_workday')}</span>
-            <span><i className="sp-legend-off" />{t('schedules.day_off')}</span>
-          </div>
+        <div className="ops-pills" role="group" aria-label={t('schedules.filter_label')}>
+          {(['all', 'shift', 'session'] as const).map((f) => (
+            <button key={f} type="button" className={`ops-pill${filter === f ? ' ops-pill--on' : ''}`}
+              aria-pressed={filter === f} onClick={() => changeFilter(f)}>
+              {t(`schedules.filter_${f}`)} <span className="ops-pill-count">{counts[f]}</span>
+            </button>
+          ))}
         </div>
       )}
 
       {isLoading && (
         <div className="sp-grid">
           {[1, 2].map((i) => (
-            <div key={i} className="sc-card">
+            <div key={i} className="ops-card sc-card">
               <div className="skeleton skeleton-text" style={{ width: '45%' }} />
+              <div className="skeleton" style={{ height: 24, width: '55%', borderRadius: 6 }} />
               <div className="skeleton skeleton-text sm" style={{ width: '65%' }} />
-              <div className="skeleton" style={{ height: 72, borderRadius: 8 }} />
             </div>
           ))}
         </div>
@@ -188,15 +183,14 @@ export function SchedulesPage() {
                   />
                 </SwipeCard>
               ))}
+              <button type="button" className="ops-add-tile ops-desktop-only" onClick={() => setShowCreate(true)}>
+                <Plus size={16} /> {t('schedules.create_new')}
+              </button>
             </div>
           )}
           <Pagination page={page} limit={limit} total={total} pages={pages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} />
         </PullToRefresh>
       )}
-
-      <MobileFab onClick={() => setShowCreate(true)} label={t('schedules.add')}>
-        <Plus size={24} />
-      </MobileFab>
 
       {showCreate && (
         <ScheduleFormModal onSubmit={handleCreate} onClose={() => setShowCreate(false)} submitting={createMutation.isPending} />

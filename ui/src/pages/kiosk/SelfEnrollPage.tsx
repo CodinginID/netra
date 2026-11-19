@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect, useCallback, type FormEvent } from 'react'
-import { Eye } from 'lucide-react'
+import { CameraOff, Check, Loader2 } from 'lucide-react'
 import { loginApi } from '@/api/authApi'
 import { grantConsent, selfEnrollMultiAngle } from '@/api/enrollmentApi'
 import { useFaceDetection } from '@/hooks/useFaceDetection'
 import { useI18n } from '@/store/i18nStore'
-import '@/styles/kiosk.css'
+import { AngleChips, EnrollBrand, EnrollCamera, EnrollPreviews, EnrollResult, EnrollSteps } from './EnrollParts'
 import '@/styles/selfenroll.css'
 
 type Step = 'login' | 'capture' | 'consent'
@@ -203,137 +203,84 @@ export function SelfEnrollPage() {
   const phaseIdx = capturePhase && capturePhase !== 'preview' ? PHASE_ORDER.indexOf(capturePhase) : -1
   const phaseConfig = capturePhase && capturePhase !== 'preview' ? PHASE_CONFIG[capturePhase] : null
   const progressPct = phaseConfig ? (1 - countdown / phaseConfig.duration) * 100 : 0
+  const stepIdx = done ? 2 : step === 'login' ? 0 : step === 'capture' ? 1 : 2
+  const angleLabels = { front: t('selfenroll.front'), left: t('selfenroll.left'), right: t('selfenroll.right') }
+  const previewLabels = [angleLabels.front, angleLabels.left, angleLabels.right]
+  const heading = step === 'login' ? t('selfenroll.login_heading')
+    : step === 'capture' ? (capturePhase === 'preview' ? t('selfenroll.check_heading') : t('selfenroll.capture_heading'))
+    : t('selfenroll.consent_heading')
 
   return (
-    <div className="kiosk-page">
-      <div className="kiosk-header">
-        <div className="kiosk-brand">
-          <Eye size={24} strokeWidth={2.5} className="kiosk-brand-icon" />
-          <span>netra</span>
-        </div>
-        <span className="selfenroll-title">{t('selfenroll.title')}</span>
-      </div>
+    <div className="se-page">
+      <main className="se-shell">
+        <EnrollBrand title={t('selfenroll.title')} />
+        <EnrollSteps
+          labels={[t('selfenroll.step_login'), t('selfenroll.step_capture'), t('selfenroll.step_consent')]}
+          current={stepIdx}
+        />
 
-      <div className="kiosk-camera-area" aria-label={t('kiosk.camera_area')}>
-        {/* Step indicator */}
-        <div className="selfenroll-steps">
-          <span className={`selfenroll-step ${step === 'login' ? 'active' : 'done'}`}>{t('selfenroll.step_login')}</span>
-          <span className={`selfenroll-step ${step === 'capture' ? 'active' : step === 'consent' ? 'done' : ''}`}>{t('selfenroll.step_capture')}</span>
-          <span className={`selfenroll-step ${step === 'consent' ? 'active' : ''}`}>{t('selfenroll.step_consent')}</span>
-        </div>
+        {!done && <h1 className="se-heading">{heading}</h1>}
 
-        {error && <div className="kiosk-no-token-warning" role="alert" aria-live="assertive">{error}</div>}
+        {error && <div className="se-error" role="alert" aria-live="assertive">{error}</div>}
 
         {/* ── Step 1: Login ── */}
         {step === 'login' && (
-          <form className="selfenroll-form" onSubmit={handleLogin}>
-            <p className="selfenroll-hint">{t('selfenroll.hint')}</p>
-            <input className="kiosk-token-input" type="email" placeholder={t('login.email')} value={email}
-              onChange={(e) => setEmail(e.target.value)} autoComplete="email" required aria-label={t('login.email')} />
-            <input className="kiosk-token-input" type="password" placeholder={t('login.password')} value={password}
-              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required aria-label={t('login.password')} />
-            <button className="kiosk-btn kiosk-btn-checkin" type="submit" disabled={busy}>
+          <form className="se-card se-form" onSubmit={handleLogin} aria-label={t('selfenroll.login_heading')}>
+            <p className="se-muted">{t('selfenroll.hint')}</p>
+            <label className="se-field">
+              <span>{t('login.email')}</span>
+              <input className="se-input" type="email" value={email}
+                onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+            </label>
+            <label className="se-field">
+              <span>{t('login.password')}</span>
+              <input className="se-input" type="password" value={password}
+                onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            </label>
+            <button className="se-btn se-btn--primary" type="submit" disabled={busy}>
+              {busy && <Loader2 size={16} className="se-spin" aria-hidden="true" />}
               {busy ? t('selfenroll.processing') : t('selfenroll.login')}
             </button>
           </form>
         )}
 
-        {/* ── Step 2: Active Capture ── */}
+        {/* ── Step 2: Active capture ── */}
         {step === 'capture' && (
           <>
-            {/* Phase progress dots */}
-            {capturePhase && (
-              <div className="selfenroll-phase-dots">
-                {(['front', 'left', 'right'] as const).map((p, i) => (
-                  <div key={p} className={`selfenroll-phase-dot ${
-                    capturePhase === 'preview' || PHASE_ORDER.indexOf(capturePhase) > i
-                      ? 'done'
-                      : capturePhase === p ? 'active' : ''
-                  }`} />
-                ))}
-              </div>
-            )}
-
-            {/* Camera + overlay */}
-            <div className="kiosk-camera-wrapper">
-              {cameraState === 'active' ? (
+            <EnrollCamera
+              videoRef={videoRef}
+              overlayRef={overlayRef}
+              showVideo={cameraState === 'active'}
+              guiding={cameraState === 'active' && capturePhase !== 'preview'}
+              hasFace={hasFace}
+              instruction={phaseConfig
+                ? <>{phaseConfig.arrow && <span className="se-arrow" aria-hidden="true">{phaseConfig.arrow}</span>}{t(phaseConfig.labelKey)}</>
+                : cameraState === 'active' && !capturePhase ? t('selfenroll.preparing') : undefined}
+              hint={phaseConfig ? t(phaseConfig.hintKey) : cameraState === 'active' && !capturePhase ? t('selfenroll.position_face') : undefined}
+              countdown={phaseConfig ? countdown : undefined}
+              progressPct={phaseConfig ? progressPct : undefined}
+              placeholder={
                 <>
-                  <video ref={videoRef} className="kiosk-video" autoPlay playsInline muted />
-                  <canvas ref={canvasRef} className="kiosk-canvas" />
-                  {capturePhase !== 'preview' && (
-                    <canvas ref={overlayRef} className="kiosk-detection-canvas" />
-                  )}
-                </>
-              ) : (
-                <div className="kiosk-camera-placeholder">
-                  <span className="kiosk-camera-placeholder-icon">
-                    {cameraState === 'denied' ? '🚫' : cameraState === 'unavailable' ? '📵' : '📷'}
-                  </span>
+                  <CameraOff size={34} strokeWidth={1.6} aria-hidden="true" />
                   <p>{cameraState === 'denied' ? t('selfenroll.camera_denied') : cameraState === 'unavailable' ? t('selfenroll.camera_unavailable') : t('selfenroll.camera_loading')}</p>
-                </div>
-              )}
+                </>
+              }
+            />
+            <canvas ref={canvasRef} className="se-hidden" />
+            <AngleChips labels={angleLabels} phaseIdx={phaseIdx} allDone={capturePhase === 'preview'} />
 
-              {/* Static oval guide (saat belum ada fase / belum ada wajah) */}
-              {cameraState === 'active' && capturePhase !== 'preview' && (
-                <div className="kiosk-hud" aria-hidden="true">
-                  <svg viewBox="0 0 560 420" className="kiosk-hud-svg">
-                    {!hasFace && (
-                      <ellipse cx="280" cy="210" rx="110" ry="135"
-                        fill="none" stroke="rgba(107,216,203,0.3)" strokeWidth="1.5" strokeDasharray="6 5"/>
-                    )}
-                    <path d="M 80 130 L 80 90 L 120 90"  fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round"/>
-                    <path d="M 480 130 L 480 90 L 440 90" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round"/>
-                    <path d="M 80 290 L 80 330 L 120 330" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round"/>
-                    <path d="M 480 290 L 480 330 L 440 330" fill="none" stroke="rgba(107,216,203,0.7)" strokeWidth="3" strokeLinecap="round"/>
-                  </svg>
-                </div>
-              )}
-
-              {/* Phase instruction overlay */}
-              {phaseConfig && (
-                <div className="selfenroll-phase-overlay">
-                  <div className="selfenroll-phase-label">
-                    {phaseConfig.arrow && <span className="selfenroll-arrow">{phaseConfig.arrow}</span>}
-                    {t(phaseConfig.labelKey)}
-                  </div>
-                  <div className="selfenroll-phase-hint">{t(phaseConfig.hintKey)}</div>
-                  <div className="selfenroll-countdown-wrap">
-                    <div className="selfenroll-countdown-bar">
-                      <div className="selfenroll-countdown-fill" style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <span className="selfenroll-countdown-num">{countdown}s</span>
-                  </div>
-                  <div className="selfenroll-phase-num">{phaseIdx + 1} / 3</div>
-                </div>
-              )}
-
-              {/* Waiting for camera */}
-              {!capturePhase && cameraState === 'active' && (
-                <div className="selfenroll-phase-overlay selfenroll-phase-overlay--dim">
-                  <div className="selfenroll-phase-label">{t('selfenroll.preparing')}</div>
-                  <div className="selfenroll-phase-hint">{t('selfenroll.position_face')}</div>
-                </div>
-              )}
-            </div>
-
-            {/* Preview thumbnails setelah 3 angle berhasil */}
-            {capturePhase === 'preview' && previewUrls.length > 0 && (
+            {capturePhase === 'preview' && previewUrls.length > 0 ? (
               <>
-                <div className="selfenroll-previews">
-                  {previewUrls.map((url, i) => (
-                    <div key={i} className="selfenroll-preview-thumb">
-                      <img src={url} alt={t('selfenroll.angle', { num: i + 1 })} />
-                      <span>{i === 0 ? t('selfenroll.front') : i === 1 ? t('selfenroll.left') : t('selfenroll.right')}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="kiosk-actions">
-                  <button className="kiosk-btn kiosk-btn-checkout" onClick={retake}>{t('selfenroll.retake')}</button>
-                  <button className="kiosk-btn kiosk-btn-checkin" onClick={() => { stopCamera(); setStep('consent') }}>
+                <EnrollPreviews urls={previewUrls} labels={previewLabels} />
+                <div className="se-actions">
+                  <button type="button" className="se-btn" onClick={retake}>{t('selfenroll.retake')}</button>
+                  <button type="button" className="se-btn se-btn--primary" onClick={() => { stopCamera(); setStep('consent') }}>
                     {t('selfenroll.continue')}
                   </button>
                 </div>
               </>
+            ) : (
+              <p className="se-caption">{t('selfenroll.auto_capture_hint')}</p>
             )}
           </>
         )}
@@ -341,28 +288,20 @@ export function SelfEnrollPage() {
         {/* ── Step 3: Consent ── */}
         {step === 'consent' && !done && (
           <>
-            <div className="selfenroll-previews selfenroll-previews--sm">
-              {previewUrls.map((url, i) => (
-                <div key={i} className="selfenroll-preview-thumb">
-                  <img src={url} alt={t('selfenroll.angle', { num: i + 1 })} />
-                  <span>{i === 0 ? t('selfenroll.front') : i === 1 ? t('selfenroll.left') : t('selfenroll.right')}</span>
-                </div>
-              ))}
-            </div>
-            <div className="selfenroll-consent">
-              <p className="selfenroll-consent-text">
-                {t('selfenroll.consent_text')}
-              </p>
-              <label className="selfenroll-consent-check">
+            <EnrollPreviews urls={previewUrls} labels={previewLabels} />
+            <div className="se-card se-consent">
+              <p className="se-muted">{t('selfenroll.consent_text')}</p>
+              <label className="se-check">
                 <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
-                {t('selfenroll.consent_check')}
+                <span>{t('selfenroll.consent_check')}</span>
               </label>
             </div>
-            <div className="kiosk-actions">
-              <button className="kiosk-btn kiosk-btn-checkout" disabled={busy} onClick={() => { setStep('capture'); void startCamera() }}>
+            <div className="se-actions">
+              <button type="button" className="se-btn" disabled={busy} onClick={() => { setStep('capture'); void startCamera() }}>
                 {t('selfenroll.back')}
               </button>
-              <button className="kiosk-btn kiosk-btn-checkin" disabled={busy || !consentChecked} onClick={handleSubmit}>
+              <button type="button" className="se-btn se-btn--primary" disabled={busy || !consentChecked} onClick={handleSubmit}>
+                {busy && <Loader2 size={16} className="se-spin" aria-hidden="true" />}
                 {busy ? t('selfenroll.registering') : t('selfenroll.register')}
               </button>
             </div>
@@ -371,15 +310,22 @@ export function SelfEnrollPage() {
 
         {/* ── Success ── */}
         {done && (
-          <div className="kiosk-camera-wrapper">
-            <div className="kiosk-result-overlay success" role="alert" aria-live="assertive">
-              <span className="kiosk-result-icon">✅</span>
-              <div className="kiosk-result-name">{session?.name}</div>
-              <div className="kiosk-result-status">{t('selfenroll.success')}</div>
-            </div>
-          </div>
+          <>
+            <EnrollResult
+              tone="ok"
+              icon={<Check size={38} strokeWidth={3} />}
+              title={t('selfenroll.done_title')}
+              text={t('selfenroll.done_text', { count: capturedBlobs.length })}
+            />
+            <button type="button" className="se-btn se-btn--primary se-btn--block" onClick={() => {
+              if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+              resetAll()
+            }}>
+              {t('selfenroll.finish')}
+            </button>
+          </>
         )}
-      </div>
+      </main>
     </div>
   )
 }

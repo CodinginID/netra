@@ -3,8 +3,8 @@ import { Search, TrendingDown, TrendingUp } from 'lucide-react'
 import { useI18n } from '@/store/i18nStore'
 import { useUsageByTenant } from '@/hooks/useApiQueries'
 import { type TenantUsageRow } from '@/api/adminApi'
-import { BillingTabs } from './BillingTabs'
-import '@/styles/layout.css'
+import { Chip, PageHead, formatNumber } from './saShared'
+import { currentMonth } from './billingShared'
 
 /** A snapshot older than this means collection has probably stopped. */
 const STALE_AFTER_DAYS = 2
@@ -27,21 +27,43 @@ function daysSince(iso: string): number {
  * has not been measured as flat; it has not been measured at all.
  */
 function Delta({ value }: { value: number | null }) {
-  if (value === null) return <span style={{ color: 'var(--color-text-secondary)' }}>-</span>
-  if (value === 0) return <span style={{ color: 'var(--color-text-secondary)' }}>0</span>
+  if (value === null) return <span className="sa-muted">-</span>
+  if (value === 0) return <span className="sa-muted">0</span>
   const up = value > 0
   const Icon = up ? TrendingUp : TrendingDown
-  const color = up ? '#16a34a' : '#dc2626'
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color }}>
+    <span className={`bl-delta ${up ? 'sa-tone-g' : 'sa-tone-r'}`}>
       <Icon size={14} />
       {up ? `+${value}` : value}
     </span>
   )
 }
 
-export function UsagePage() {
+/** Active users against the plan tier cap; a plain number when there is no cap. */
+function Meter({ row }: { row: TenantUsageRow }) {
+  const max = row.tier_max_users
+  if (!max) return <span className="bl-meter-text">{formatNumber(row.active_users)}</span>
+  const pct = Math.min(100, Math.round((row.active_users / max) * 100))
+  return (
+    <div className={`bl-meter ${row.over_tier ? 'sa-tone-r' : 'sa-tone-b'}`}>
+      <div className="bl-meter-track" aria-hidden="true">
+        <div className="bl-meter-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="bl-meter-text">{formatNumber(row.active_users)}/{formatNumber(max)}</span>
+    </div>
+  )
+}
+
+function Flag({ row }: { row: TenantUsageRow }) {
   const { t } = useI18n()
+  if (row.over_tier) return <Chip tone="r">{t('billing.usage.over_tier', { max: row.tier_max_users ?? 0 })}</Chip>
+  if (!row.plan_name) return <Chip tone="m">{t('billing.usage.no_plan')}</Chip>
+  return null
+}
+
+/** Billing → Pemakaian (mockup dd07def6). */
+export function UsagePage() {
+  const { t, locale } = useI18n()
   const [search, setSearch] = useState('')
   const { data, isLoading } = useUsageByTenant()
 
@@ -64,109 +86,91 @@ export function UsagePage() {
     : null
   const isStale = newestSnapshot !== null && newestSnapshot > STALE_AFTER_DAYS
 
+  const latest = rows.length
+    ? rows.reduce((newest, r) => (daysSince(r.snapshot_date) < daysSince(newest.snapshot_date) ? r : newest))
+    : null
+
+  const message = (text: string) => <div className="sa-empty">{text}</div>
+  const emptyBody = isLoading ? null : !rows.length ? message(t('billing.usage.never_collected'))
+    : !filtered.length ? message(t('billing.usage.no_match')) : null
+
   return (
-    <div>
-      <div className="page-toolbar">
-        <div>
-          <h2 className="page-title">{t('billing.usage.title')}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14, marginTop: 4 }}>
-            {t('billing.usage.desc')}
-          </p>
-        </div>
-      </div>
+    <div className="sa-page">
+      <PageHead
+        title={t('billing.usage.title')}
+        sub={latest ? `${currentMonth(locale)} · ${t('usage.snapshot_date')}: ${formatDate(latest.snapshot_date)}` : t('billing.usage.desc')}
+        actions={
+          <label className="sa-search">
+            <Search size={15} aria-hidden="true" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('tenants.search_placeholder')}
+              aria-label={t('tenants.search_placeholder')}
+            />
+          </label>
+        }
+      />
 
-      <BillingTabs />
-
-      {isStale && (
-        <div className="data-card" style={{ padding: 16, marginBottom: 16 }}>
-          <span className="badge badge-orange">{t('billing.usage.stale_badge')}</span>
-          <span style={{ marginLeft: 10, color: 'var(--color-text-secondary)' }}>
-            {t('billing.usage.stale_desc', {
-              days: newestSnapshot as number,
-              date: formatDate(
-                rows.reduce((newest, r) =>
-                  daysSince(r.snapshot_date) < daysSince(newest.snapshot_date) ? r : newest,
-                ).snapshot_date,
-              ),
-            })}
+      {isStale && latest && (
+        <div className="sa-card sa-card-pad" role="status">
+          <Chip tone="w">{t('billing.usage.stale_badge')}</Chip>
+          <span className="sa-muted" style={{ marginLeft: 10, fontSize: 13 }}>
+            {t('billing.usage.stale_desc', { days: newestSnapshot as number, date: formatDate(latest.snapshot_date) })}
           </span>
         </div>
       )}
 
-      <div className="filter-row">
-        <div className="search-input-wrap" style={{ flex: '1 1 240px', minWidth: 200 }}>
-          <Search size={16} />
-          <input
-            className="search-input"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('search.placeholder')}
-            aria-label={t('search.placeholder')}
-          />
-        </div>
-      </div>
-
-      <div className="data-card">
-        <table className="data-table">
+      <div className="sa-card sa-table-card bl-table">
+        <table className="sa-table">
           <thead>
             <tr>
               <th>{t('billing.usage.tenant')}</th>
-              <th>{t('usage.snapshot_date')}</th>
+              <th>{t('billing.usage.plan')}</th>
               <th>{t('usage.active_users')}</th>
               <th>{t('billing.usage.trend_7d')}</th>
               <th>{t('usage.devices')}</th>
               <th>{t('usage.punches')}</th>
-              <th>{t('billing.usage.plan')}</th>
+              <th><span className="sa-sr-only">{t('subscription.status')}</span></th>
             </tr>
           </thead>
           <tbody>
-            {isLoading &&
-              [0, 1, 2].map((i) => (
-                <tr key={`sk-${i}`}>
-                  <td colSpan={7}>
-                    <div className="skeleton skeleton-text sm" />
-                  </td>
-                </tr>
-              ))}
-
-            {!isLoading && !rows.length && (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">{t('billing.usage.never_collected')}</div>
-                </td>
-              </tr>
+            {isLoading && (
+              <tr><td colSpan={7}><div className="skeleton skeleton-text sm" /></td></tr>
             )}
-
-            {!isLoading && rows.length > 0 && !filtered.length && (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">{t('billing.usage.no_match')}</div>
-                </td>
-              </tr>
-            )}
-
+            {emptyBody && <tr><td colSpan={7}>{emptyBody}</td></tr>}
             {filtered.map((r) => (
               <tr key={r.tenant_id}>
-                <td>{r.tenant_name}</td>
-                <td>{formatDate(r.snapshot_date)}</td>
-                <td>
-                  {r.active_users}
-                  {r.over_tier && (
-                    <span className="badge badge-red" style={{ marginLeft: 8 }}>
-                      {t('billing.usage.over_tier', { max: r.tier_max_users ?? 0 })}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  <Delta value={r.active_users_delta_7d} />
-                </td>
-                <td>{r.devices}</td>
-                <td>{r.punches}</td>
-                <td>{r.plan_name ?? <span className="badge badge-gray">{t('billing.usage.no_plan')}</span>}</td>
+                <td style={{ fontWeight: 600 }}>{r.tenant_name}</td>
+                <td className="sa-muted">{r.plan_name ?? '—'}</td>
+                <td><Meter row={r} /></td>
+                <td><Delta value={r.active_users_delta_7d} /></td>
+                <td className="sa-num">{formatNumber(r.devices)}</td>
+                <td className="sa-num">{formatNumber(r.punches)}</td>
+                <td className="sa-right"><Flag row={r} /></td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="bl-cards">
+        {emptyBody && <div className="sa-card">{emptyBody}</div>}
+        {filtered.map((r) => (
+          <div key={r.tenant_id} className="sa-card bl-card">
+            <div className="bl-card-top">
+              <span className="sa-who-name">{r.tenant_name}</span>
+              <Flag row={r} />
+            </div>
+            <Meter row={r} />
+            <div className="bl-card-meta">
+              <span>{r.plan_name ?? t('billing.usage.no_plan')}</span>
+              <span>{t('billing.usage.trend_7d')}: <Delta value={r.active_users_delta_7d} /></span>
+              <span>{t('usage.devices')}: {formatNumber(r.devices)}</span>
+              <span>{t('usage.punches')}: {formatNumber(r.punches)}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

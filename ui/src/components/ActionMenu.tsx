@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { MoreVertical } from 'lucide-react'
+import { MoreHorizontal, MoreVertical } from 'lucide-react'
 
 export interface ActionMenuItem {
   key: string
@@ -19,8 +19,19 @@ export interface ActionMenuItem {
 // Rough max height of the list, to decide whether it opens upwards.
 const MENU_HEIGHT = 240
 
-/** A ⋮ button that opens a small action list (keyboard + outside-click aware). */
-export function ActionMenu({ label, items, disabled }: { label: string; items: ActionMenuItem[]; disabled?: boolean }) {
+interface ActionMenuProps {
+  label: string
+  items: ActionMenuItem[]
+  disabled?: boolean
+  /** Small muted caption at the top of the list (e.g. the row's name). */
+  header?: string
+  /** ⋮ (default) or ⋯ trigger. */
+  variant?: 'vertical' | 'horizontal'
+}
+
+/** A ⋮ / ⋯ button that opens a small action list (keyboard + outside-click aware). */
+export function ActionMenu({ label, items, disabled, header, variant = 'vertical' }: ActionMenuProps) {
+  const TriggerIcon = variant === 'horizontal' ? MoreHorizontal : MoreVertical
   const [open, setOpen] = useState(false)
   // Portalled + fixed-position so a swipe card's overflow/transform can't clip it.
   const [pos, setPos] = useState<CSSProperties>({})
@@ -75,10 +86,27 @@ export function ActionMenu({ label, items, disabled }: { label: string; items: A
         disabled={disabled}
         onClick={toggle}
       >
-        <MoreVertical size={16} />
+        <TriggerIcon size={16} />
       </button>
       {open && createPortal(
-        <div className="action-menu-list" role="menu" ref={listRef} style={pos}>
+        <div className="action-menu-list" role="menu" aria-label={header ?? label} ref={listRef} style={pos}>
+          {header && (
+            <div
+              aria-hidden="true"
+              style={{
+                padding: '6px 12px 4px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: 'var(--color-text-muted)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: 240,
+              }}
+            >
+              {header}
+            </div>
+          )}
           {items.map((item) => (
             <div key={item.key} style={{ display: 'contents' }}>
               {item.separatorBefore && <div className="action-menu-divider" role="separator" />}
